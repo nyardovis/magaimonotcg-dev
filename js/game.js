@@ -86,7 +86,7 @@ function setupRoomLobby(){
 function connectGameServer(){
   if(!currentRoom)return;
   try{
-    const key="originalCardGamePlayerToken";
+    const key="originalCardGamePlayerTokenDev";
     let playerToken=localStorage.getItem(key);
     if(!playerToken){
       playerToken=crypto.randomUUID();
