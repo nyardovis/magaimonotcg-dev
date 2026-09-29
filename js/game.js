@@ -1,4 +1,4 @@
-const SERVER_WS_BASE="wss://card-game-server-dev.original-card-game-dev.workers.dev";
+const SERVER_WS_BASE="wss://card-game-server-test.original-card-game-dev.workers.dev";
 let currentRoom="";
 let gameSocket=null;
 let onlinePlayerId=null;
