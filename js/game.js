@@ -155,12 +155,12 @@ function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random
 function newCard(name,id){return{id,name,faceUp:true,revealed:false,tapped:false,counters:0,damage:0,modification:0};}
 function saveLocalGameState(){
   try{
-    localStorage.setItem("originalCardGameLocalState",JSON.stringify({player:state.players[1],turnPlayer:state.turnPlayer,pendingDiscardPlayer:state.pendingDiscardPlayer,gameOver:state.gameOver}));
+    localStorage.setItem("originalCardGameLocalStateDev",JSON.stringify({player:state.players[1],turnPlayer:state.turnPlayer,pendingDiscardPlayer:state.pendingDiscardPlayer,gameOver:state.gameOver}));
   }catch(e){}
 }
 function loadLocalGameState(){
   try{
-    const raw=localStorage.getItem("originalCardGameLocalState");
+    const raw=localStorage.getItem("originalCardGameLocalStateDev");
     if(!raw)return false;
     const saved=JSON.parse(raw);
     if(!saved||!saved.player||!Array.isArray(saved.player.hand)||!Array.isArray(saved.player.deck))return false;
