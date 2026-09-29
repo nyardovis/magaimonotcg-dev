@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ankr TCG</title>
+<link rel="stylesheet" href="css/style.css?v=discard-fix1">
+</head>
+<body>
+<main class="game">
+<header><h1>Ankr TCG</h1><span id="roomStatus">ルーム: -</span><span>ターン: <b id="turnPlayer">プレイヤー1</b></span></header>
+<section class="board">
+<aside class="side left"><div class="title">カードプレビュー</div><div id="preview" class="preview">カードを選択</div><div class="title">操作</div><div id="ops">カードを選択してください</div><div id="revealedStatus" class="revealed-status">公開中の手札はありません</div><div id="lifeModal" class="life-modal" hidden><div class="life-modal-panel"><div class="life-modal-title">ライフを入力</div><input id="lifeInput" type="text" inputmode="numeric" autocomplete="off" placeholder="例: 500 / +500 / -500"><div class="life-modal-actions"><button data-life-action="damage">ダメージ</button><button data-life-action="heal">回復</button><button data-life-action="change">変更</button><button data-life-action="cancel">キャンセル</button></div></div></div><div id="monsterAdjustModal" class="life-modal" hidden><div class="life-modal-panel"><div class="life-modal-title">ダメージ／回復</div><input id="monsterAdjustInput" type="text" inputmode="numeric" autocomplete="off" placeholder="例: 100 / +100 / -100"><div class="life-modal-actions"><button data-monster-action="damage">ダメージ</button><button data-monster-action="heal">回復</button><button data-monster-action="change">変更</button><button data-monster-action="cancel">キャンセル</button></div></div></div><div id="monsterStatusModal" class="life-modal" hidden><div class="life-modal-panel"><div class="life-modal-title">ステータスを修正</div><input id="monsterStatusInput" type="text" inputmode="numeric" autocomplete="off" placeholder="例: 100 / +100 / -100"><div class="life-modal-actions"><button data-monster-status-action="increase">上昇</button><button data-monster-status-action="decrease">下降</button><button data-monster-status-action="change">変更</button><button data-monster-status-action="cancel">キャンセル</button></div></div></div></aside>
+<section class="table">
+<div class="player opponent">
+<div class="row hand"><label>手札</label><div id="p2-hand" class="cards"></div></div>
+<div class="other" style="margin-top:20px !important;"><div class="zone"><span>フィールド</span><div id="p2-field"></div></div><div class="zone discard-zone"><span>捨て札 <b id="p2-discard-count">0枚</b></span><div id="p2-discard"></div></div><div class="zone deck-zone"><span>山札 <b id="p2-deck-count">0枚</b></span><div id="p2-deck" class="back"><b id="p2-deck-counter">0</b></div></div><div class="info"><b id="p2-name">プレイヤー2</b><span>ライフ <b id="p2-life">4000</b></span></div><div class="zone facedown">罠<div id="p2-facedown"></div></div><button data-end>ターン終了</button></div>
+<div class="row"><label>エネルギー</label><div id="p2-energy" class="cards"></div></div>
+<div class="row monsters"><label>モンスター</label><div id="p2-monsters" class="cards"></div></div>
+</div>
+<div class="divider"><span id="turnAreaLabel">プレイヤー1のターン</span></div>
+<div class="player self">
+<div class="row monsters"><label>モンスター</label><div id="p1-monsters" class="cards"></div></div>
+<div class="row"><label>エネルギー</label><div id="p1-energy" class="cards"></div></div>
+<div class="other"><div class="zone"><span>フィールド</span><div id="p1-field"></div></div><div class="zone discard-zone"><span>捨て札 <b id="p1-discard-count">0枚</b></span><div id="p1-discard"></div></div><div class="zone deck-zone"><span>山札 <b id="p1-deck-count">0枚</b></span><div id="p1-deck" class="back"><b id="p1-deck-counter">0</b></div></div><div class="info"><b id="p1-name">プレイヤー1</b><span class="editable-life" title="クリックして変更">ライフ <b id="p1-life">4000</b></span></div><div class="zone facedown">罠<div id="p1-facedown"></div></div><button data-end>ターン終了</button></div>
+<div class="row hand"><label>手札</label><div id="p1-hand" class="cards"></div></div>
+</div>
+</section>
+<aside class="side right"><div class="title">プレイヤー設定</div><input id="name" maxlength="16" value="プレイヤー1"><button id="rename">名前を変更</button><div class="title">先攻・後攻</div><button data-first="random">ランダム</button><button data-first="self">自分が先攻</button><button data-first="opponent">相手が先攻</button><div class="deck-separator"></div><div class="deck-controls"><div class="title">デッキ</div><button id="deckEdit">デッキ編集</button></div><div class="board-separator"></div><div class="board-controls"><div class="title">盤面</div><button id="reset">自分の盤面をリセット</button></div><div class="title logtitle">ログ</div><div id="log" class="log"></div></aside>
+</section>
+<section id="deckEditor" class="deck-editor" hidden><header><h2>デッキ編集</h2><div><button id="deckSave">デッキを保存</button><button id="deckEditBack">対戦画面へ戻る</button></div></header><div class="deck-codebar"><button id="deckCodeCreate">デッキコードを発行</button><input id="deckCodeInput" type="text" placeholder="デッキコードを入力"><button id="deckCodeLoad">コードから複製</button></div><div class="deck-editor-body"><aside class="deck-current"><div class="deck-panel-title deck-current-title"><span>現在のデッキ</span><div class="deck-current-title-actions"><b id="deckCurrentCount">0枚</b><button id="deckClearAll" type="button">全て除く</button></div></div><div id="deckCurrentList" class="deck-card-list"></div></aside><section class="deck-candidates"><div class="deck-panel-title deck-candidates-title"><span>カード候補</span><input id="deckCardSearch" type="search" placeholder="カード名を検索"></div><div id="deckCandidateList" class="deck-card-grid"></div></section><aside id="deckEditorPreview" class="deck-editor-preview"><div>カードを選択</div></aside></div></section>
+<section id="discardViewer" class="discard-viewer" hidden><div class="discard-viewer-panel"><header><h2>捨て札を確認</h2></header><div id="discardViewerList" class="deck-viewer-list"></div><div id="discardViewerPreview" class="deck-viewer-preview">カードを選択</div><div id="discardViewerActions" class="deck-viewer-actions"></div></div></section><section id="deckViewer" class="deck-viewer" hidden><header><h2>山札を確認</h2><button id="deckViewerClose">閉じる</button></header><div class="deck-viewer-body"><div id="deckViewerList" class="deck-viewer-list"></div><aside class="deck-viewer-side"><div id="deckViewerPreview" class="deck-viewer-preview">カードを選択</div><div id="deckViewerActions" class="deck-viewer-actions"></div><div class="deck-viewer-log-title">ログ</div><div id="deckViewerLog" class="deck-viewer-log"></div></aside></div></section><section id="roomLobby" class="room-lobby" hidden>
+<div class="room-lobby-panel">
+<h2>オンライン対戦</h2>
+<button id="roomCreate" type="button">ルームを作る</button>
+<div class="room-or">または</div>
+<input id="roomInput" type="text" maxlength="6" autocomplete="off" placeholder="ルームID（6文字）">
+<button id="roomJoin" type="button">ルームに参加</button>
+<div id="roomMessage" class="room-message">ルームを作るか、相手から受け取ったルームIDを入力してください</div>
+</div>
+</section>
+</main>
+<script src="js/game.js?v=online-cardlist1"></script>
+</body>
+</html>
