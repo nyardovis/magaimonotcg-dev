@@ -179,7 +179,7 @@ function log(s,sendOnline=true){const e=document.querySelector("#log"),d=new Dat
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 
 function closeDiscardViewer(){const v=document.querySelector("#discardViewer");if(v)v.hidden=true;state.discardInspectId=null}
-function openDiscardViewer(p=1){state.discardInspectPlayer=p;const cards=state.players[p]?.discard||[];state.discardInspectId=cards.length?cards[cards.length-1].id:null;renderDiscardViewer();const v=document.querySelector("#discardViewer");if(v)v.hidden=false}
+function openDiscardViewer(p=1){state.discardInspectPlayer=p;const cards=state.players[p]?.discard||[];const top=cards.length?cards[cards.length-1]:null;state.discardInspectId=top?top.id:null;state.selected=top?{p,z:"discard",id:top.id}:null;renderDiscardViewer();const v=document.querySelector("#discardViewer");if(v)v.hidden=false;render()}
 function renderDiscardViewer(){
   const list=document.querySelector("#discardViewerList"),actions=document.querySelector("#discardViewerActions");if(!list||!actions)return;
   const p=state.discardInspectPlayer||1,x=state.players[p],cards=x.discard||[];list.innerHTML="";actions.innerHTML="";
