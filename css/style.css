@@ -51,14 +51,12 @@
 
 .discard-viewer[hidden]{display:none}
 .discard-viewer{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(760px,70vw);max-height:70vh;z-index:120}
-.discard-viewer-panel{background:#202329;color:#eee;border:1px solid #555;border-radius:6px;box-shadow:0 10px 35px rgba(0,0,0,.65);padding:10px;display:grid;grid-template-columns:minmax(0,1fr) 250px;grid-template-rows:34px minmax(0,1fr) auto;gap:8px;max-height:70vh}
-.discard-viewer-panel>header{grid-column:1 / -1;height:34px;display:flex;justify-content:space-between;align-items:center}
+.discard-viewer-panel{background:#202329;color:#eee;border:1px solid #555;border-radius:6px;box-shadow:0 10px 35px rgba(0,0,0,.65);padding:10px;display:flex;flex-direction:column;max-height:70vh}
+.discard-viewer-panel>header{height:34px;display:flex;justify-content:space-between;align-items:center;flex:0 0 34px}
 .discard-viewer-panel h2{font-size:15px;margin:0}
 .discard-viewer-panel header button{padding:5px 10px;border:1px solid #555;border-radius:4px;background:#292d34;color:#fff}
-.discard-viewer .deck-viewer-list{grid-column:1;grid-row:2 / 4;width:auto;min-width:0;height:420px;max-height:none;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,70px));gap:7px;padding:7px;align-content:start;align-items:start;justify-content:start}
-.discard-viewer-preview{grid-column:2;grid-row:2;min-height:170px;text-align:center;color:#aaa;overflow:auto}
-.discard-viewer-preview img{width:120px;max-height:165px;object-fit:contain;display:block;margin:5px auto}
-.discard-viewer-actions{grid-column:2;grid-row:3;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px}
+.discard-viewer .deck-viewer-list{order:0;width:100%;min-width:0;height:420px;max-height:none;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,70px));gap:7px;padding:7px;align-content:start;align-items:start;justify-content:start}
+.discard-viewer-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px}
 
 .player .other .zone:nth-child(2){cursor:pointer}.player .other .zone:nth-child(2):hover{border-color:#777;color:#ccc}
 .counter-actions{display:flex!important;gap:4px;width:100%;}.counter-actions button{flex:1;min-width:0;}#p1-deck,#p2-deck{position:relative;}#p1-deck-counter,#p2-deck-counter{position:absolute;left:3px;top:3px;right:auto;min-width:24px;padding:2px 5px;border-radius:10px;background:#222;color:#fff;font-size:14px;line-height:1.1;font-weight:700;text-align:center;z-index:4;}
