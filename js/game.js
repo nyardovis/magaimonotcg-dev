@@ -321,7 +321,7 @@ function renderDeckViewer(){
 }
 function moveInspectedDeckCard(dest,reveal=false){
   if(state.pendingDiscardPlayer!==null)return log("強制捨て中は山札からカードを移動できません");
-  const x=state.players[1],i=x.deck.findIndex(c=>c.id===state.deckInspectId);if(i<0)return;if(MAX[dest]!==undefined&&x[dest].length>=MAX[dest])return log(dest+" の上限のため移動をキャンセル");const c=x.deck.splice(i,1)[0];c.faceUp=dest==="facedown"?false:true;c.revealed=dest==="hand"&&reveal;if(dest==="discard"){c.damage=0;c.modification=0}x[dest].push(c);log("山札からカードを "+(reveal?"公開して ":"")+" "+({"hand":"手札","monsters":"モンスター","energy":"エネルギー","field":"フィールド","facedown":"罠","discard":"捨て札"}[dest])+" へ移動しました");state.deckInspectId=null;render();renderDeckViewer();
+  const x=state.players[1],i=x.deck.findIndex(c=>c.id===state.deckInspectId);if(i<0)return;if(MAX[dest]!==undefined&&x[dest].length>=MAX[dest])return log(dest+" の上限のため移動をキャンセル");const c=x.deck.splice(i,1)[0];c.faceUp=dest==="facedown"?false:true;c.revealed=dest==="hand"&&reveal;if(dest==="discard"){c.damage=0;c.modification=0;c.counters=0}x[dest].push(c);log("山札からカードを "+(reveal?"公開して ":"")+" "+({"hand":"手札","monsters":"モンスター","energy":"エネルギー","field":"フィールド","facedown":"罠","discard":"捨て札"}[dest])+" へ移動しました");state.deckInspectId=null;render();renderDeckViewer();
 }
 function applyRemoteMove(playerId,zone,dest,cardId){
   const p=playerId===onlinePlayerId?1:2;
@@ -334,7 +334,7 @@ function applyRemoteMove(playerId,zone,dest,cardId){
   c.tapped=false;
   c.faceUp=dest==="facedown"?false:true;
   c.revealed=dest==="hand"?!!c.revealed:false;
-  if(dest==="discard"){c.damage=0;c.modification=0}
+  if(dest==="discard"){c.damage=0;c.modification=0;c.counters=0}
   x[dest].push(c);
   if(p===1)state.selected=null;
   render();
@@ -352,7 +352,7 @@ function move(dest){
   c.tapped=false;
   c.faceUp=dest==="facedown"?false:true;
   c.revealed=dest==="hand"?!!c.revealed:false;
-  if(dest==="discard"){c.damage=0;c.modification=0}
+  if(dest==="discard"){c.damage=0;c.modification=0;c.counters=0}
   x[dest].push(c);
   state.selected=null;
   render();
