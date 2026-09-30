@@ -189,7 +189,7 @@ function renderDiscardViewer(){
   state.discardInspectId=selected.id;
   const img=document.createElement("img");img.src=imageUrl(selected.name);img.alt=selected.name;img.onerror=()=>{img.replaceWith(document.createTextNode(selected.name))};preview.appendChild(img);
   const name=document.createElement("div");name.className="deck-viewer-name";name.textContent=selected.name;preview.appendChild(name);
-
+}
 function moveInspectedDiscardCard(dest){if(state.pendingDiscardPlayer!==null)return log("強制捨て中は捨て札からカードを移動できません");const x=state.players[state.discardInspectPlayer||1],i=x.discard.findIndex(c=>c.id===state.discardInspectId);if(i<0)return;if(MAX[dest]!==undefined&&x[dest].length>=MAX[dest])return log(dest+" の上限のため移動をキャンセル");const c=x.discard.splice(i,1)[0];c.faceUp=dest==="facedown"?false:true;x[dest].push(c);log("捨て札から "+c.name+" を "+({"deck":"山札","hand":"手札","monsters":"モンスター","energy":"エネルギー","field":"フィールド","facedown":"罠"}[dest])+" へ移動しました");state.discardInspectId=null;render();renderDiscardViewer()}
 function render(){
   const localPlayer=1;
