@@ -179,13 +179,17 @@ function log(s,sendOnline=true){const e=document.querySelector("#log"),d=new Dat
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 
 function closeDiscardViewer(){const v=document.querySelector("#discardViewer");if(v)v.hidden=true;state.discardInspectId=null}
-function openDiscardViewer(p=1){state.discardInspectPlayer=p;state.discardInspectId=null;renderDiscardViewer();const v=document.querySelector("#discardViewer");if(v)v.hidden=false}
+function openDiscardViewer(p=1){state.discardInspectPlayer=p;const cards=state.players[p]?.discard||[];state.discardInspectId=cards.length?cards[cards.length-1].id:null;renderDiscardViewer();const v=document.querySelector("#discardViewer");if(v)v.hidden=false}
 function renderDiscardViewer(){
   const list=document.querySelector("#discardViewerList"),preview=document.querySelector("#discardViewerPreview"),actions=document.querySelector("#discardViewerActions");if(!list||!preview||!actions)return;
   const p=state.discardInspectPlayer||1,x=state.players[p],cards=x.discard||[];list.innerHTML="";preview.innerHTML="";actions.innerHTML="";
-  if(!cards.length){list.innerHTML='<div class="deck-viewer-empty">捨て札がありません</div>';return}
-  cards.forEach(c=>{const e=document.createElement("div");e.className="discard-viewer-card"+(state.selected?.id===c.id?" selected":"");const img=document.createElement("img");img.src=imageUrl(c.name);img.alt=c.name;img.loading="lazy";img.onerror=()=>{img.replaceWith(document.createTextNode(c.name))};e.appendChild(img);e.onclick=ev=>{ev.stopPropagation();state.selected={p,z:"discard",id:c.id};render()};list.appendChild(e)});
-}
+  if(!cards.length){list.innerHTML='<div class="deck-viewer-empty">捨て札がありません</div>';preview.textContent="カードを選択";return}
+  cards.forEach(c=>{const e=document.createElement("div");e.className="discard-viewer-card"+(state.discardInspectId===c.id?" selected":"");const img=document.createElement("img");img.src=imageUrl(c.name);img.alt=c.name;img.loading="lazy";img.onerror=()=>{img.replaceWith(document.createTextNode(c.name))};e.appendChild(img);e.onclick=ev=>{ev.stopPropagation();state.discardInspectId=c.id;state.selected={p,z:"discard",id:c.id};renderDiscardViewer();render()};list.appendChild(e)});
+  const selected=cards.find(c=>c.id===state.discardInspectId)||cards[cards.length-1];
+  state.discardInspectId=selected.id;
+  const img=document.createElement("img");img.src=imageUrl(selected.name);img.alt=selected.name;img.onerror=()=>{img.replaceWith(document.createTextNode(selected.name))};preview.appendChild(img);
+  const name=document.createElement("div");name.className="deck-viewer-name";name.textContent=selected.name;preview.appendChild(name);
+
 function moveInspectedDiscardCard(dest){if(state.pendingDiscardPlayer!==null)return log("強制捨て中は捨て札からカードを移動できません");const x=state.players[state.discardInspectPlayer||1],i=x.discard.findIndex(c=>c.id===state.discardInspectId);if(i<0)return;if(MAX[dest]!==undefined&&x[dest].length>=MAX[dest])return log(dest+" の上限のため移動をキャンセル");const c=x.discard.splice(i,1)[0];c.faceUp=dest==="facedown"?false:true;x[dest].push(c);log("捨て札から "+c.name+" を "+({"deck":"山札","hand":"手札","monsters":"モンスター","energy":"エネルギー","field":"フィールド","facedown":"罠"}[dest])+" へ移動しました");state.discardInspectId=null;render();renderDiscardViewer()}
 function render(){
   const localPlayer=1;
@@ -276,7 +280,7 @@ function selection(){
   const pr=document.querySelector("#preview"),op=document.querySelector("#ops");
   if(!state.selected){pr.innerHTML="カードを選択";op.textContent="カードを選択してください";return}
   const s=state.selected;
-  if(s.z==="deck"){pr.textContent="山札";op.innerHTML="";if(s.p!==1){op.innerHTML="";return}add("山札を確認",()=>openDeckViewer());if(state.pendingDiscardPlayer!==null)return;add("1枚引く",()=>drawCards(1));add("好きな枚数を引く",()=>{const n=Number(prompt("引く枚数を入力してください"));if(Number.isInteger(n)&&n>0)drawCards(n)});add("山札を0枚にする",()=>{state.players[1].deck=[];state.selected=null;render();log("山札を0枚にしました")});const deckSpacer=document.createElement("div");deckSpacer.style.height="12px";op.appendChild(deckSpacer);addCounterControls(op,state.players[1],"deckCounters");add("山札を横向きにする",()=>{state.players[1].deckHorizontal=!state.players[1].deckHorizontal;state.selected=null;render()});add("山札をシャッフルする",()=>{shuffle(state.players[1].deck);state.selected=null;render();log("山札をシャッフルしました")});return}
+  if(s.z==="deck"){pr.textContent="山札";op.innerHTML="";if(s.p!==1){op.innerHTML="";return}add("山札を確認",()=>openDeckViewer());if(state.pendingDiscardPlayer!==null)return;add("1枚引く",()=>drawCards(1));add("好きな枚数を引く",()=>{const n=Number(prompt("引く枚数を入力してください"));if(Number.isInteger(n)&&n>0)drawCards(n)});const deckSpacer=document.createElement("div");deckSpacer.style.height="12px";op.appendChild(deckSpacer);addCounterControls(op,state.players[1],"deckCounters");add("山札を横向きにする",()=>{state.players[1].deckHorizontal=!state.players[1].deckHorizontal;state.selected=null;render()});add("山札をシャッフルする",()=>{shuffle(state.players[1].deck);state.selected=null;render();log("山札をシャッフルしました")});return}
   const c=find(s.p,s.z,s.id);if(!c){state.selected=null;return render()}
   const pendingLocked=state.pendingDiscardPlayer!==null;
   pr.innerHTML="";
@@ -313,11 +317,11 @@ function renderDeckViewer(){
   displayDeck.forEach(c=>{const e=document.createElement("div");e.className="deck-viewer-card"+(state.deckInspectId===c.id?" selected":"");const img=document.createElement("img");img.src=imageUrl(c.name);img.alt=c.name;img.loading="lazy";img.onerror=()=>{img.replaceWith(document.createTextNode(c.name))};e.appendChild(img);e.onclick=()=>{state.deckInspectId=c.id;renderDeckViewer()};list.appendChild(e)});
   const c=displayDeck.find(v=>v.id===state.deckInspectId);if(!c){preview.textContent="カードを選択";return}
   const img=document.createElement("img");img.src=imageUrl(c.name);img.alt=c.name;img.onerror=()=>{img.replaceWith(document.createTextNode(c.name))};preview.appendChild(img);const name=document.createElement("div");name.className="deck-viewer-name";name.textContent=c.name;preview.appendChild(name);
-  for(const[z,label]of[["hand","手札へ"],["monsters","モンスターへ"],["energy","エネルギーへ"],["field","フィールドへ"],["facedown","罠へ"],["discard","捨て札へ"]]){const b=document.createElement("button");b.textContent=label;b.onclick=()=>moveInspectedDeckCard(z);actions.appendChild(b)}
+  for(const[z,label]of[["hand","手札へ"],["hand","公開して手札へ"],["monsters","モンスターへ"],["energy","エネルギーへ"],["field","フィールドへ"],["facedown","罠へ"],["discard","捨て札へ"]]){const b=document.createElement("button");b.textContent=label;b.onclick=()=>moveInspectedDeckCard(z,label==="公開して手札へ");actions.appendChild(b)}
 }
-function moveInspectedDeckCard(dest){
+function moveInspectedDeckCard(dest,reveal=false){
   if(state.pendingDiscardPlayer!==null)return log("強制捨て中は山札からカードを移動できません");
-  const x=state.players[1],i=x.deck.findIndex(c=>c.id===state.deckInspectId);if(i<0)return;if(MAX[dest]!==undefined&&x[dest].length>=MAX[dest])return log(dest+" の上限のため移動をキャンセル");const c=x.deck.splice(i,1)[0];c.faceUp=dest==="facedown"?false:true;x[dest].push(c);log("山札から "+c.name+" を "+({"hand":"手札","monsters":"モンスター","energy":"エネルギー","field":"フィールド","facedown":"罠","discard":"捨て札"}[dest])+" へ移動しました");state.deckInspectId=null;render();renderDeckViewer();
+  const x=state.players[1],i=x.deck.findIndex(c=>c.id===state.deckInspectId);if(i<0)return;if(MAX[dest]!==undefined&&x[dest].length>=MAX[dest])return log(dest+" の上限のため移動をキャンセル");const c=x.deck.splice(i,1)[0];c.faceUp=dest==="facedown"?false:true;c.revealed=dest==="hand"&&reveal;if(dest==="discard"){c.damage=0;c.modification=0}x[dest].push(c);log("山札からカードを "+(reveal?"公開して ":"")+" "+({"hand":"手札","monsters":"モンスター","energy":"エネルギー","field":"フィールド","facedown":"罠","discard":"捨て札"}[dest])+" へ移動しました");state.deckInspectId=null;render();renderDeckViewer();
 }
 function applyRemoteMove(playerId,zone,dest,cardId){
   const p=playerId===onlinePlayerId?1:2;
@@ -329,7 +333,8 @@ function applyRemoteMove(playerId,zone,dest,cardId){
   const c=x[zone].splice(i,1)[0];
   c.tapped=false;
   c.faceUp=dest==="facedown"?false:true;
-  if(dest==="facedown")c.revealed=false;
+  c.revealed=dest==="hand"?!!c.revealed:false;
+  if(dest==="discard"){c.damage=0;c.modification=0}
   x[dest].push(c);
   if(p===1)state.selected=null;
   render();
@@ -346,7 +351,8 @@ function move(dest){
   const c=src.splice(i,1)[0];
   c.tapped=false;
   c.faceUp=dest==="facedown"?false:true;
-  if(dest==="facedown")c.revealed=false;
+  c.revealed=dest==="hand"?!!c.revealed:false;
+  if(dest==="discard"){c.damage=0;c.modification=0}
   x[dest].push(c);
   state.selected=null;
   render();
@@ -396,7 +402,7 @@ function setup(){
     render();
     log("先攻: "+state.players[state.turnPlayer].name);
   });
-  document.addEventListener("contextmenu",ev=>{const card=ev.target.closest(".card");if(!card)return;const p=Number(card.dataset.player),z=card.dataset.zone,id=card.dataset.cardId;if(p!==1||(z!=="monsters"&&z!=="energy")||!id)return;ev.preventDefault();ev.stopPropagation();const target=find(p,z,id);if(!target)return;target.tapped=!target.tapped;state.selected={p,z,id};render()});
+  document.addEventListener("contextmenu",ev=>{const card=ev.target.closest(".card");if(!card)return;const p=Number(card.dataset.player),z=card.dataset.zone,id=card.dataset.cardId;if(p!==1||(z!=="monsters"&&z!=="energy"&&z!=="facedown")||!id)return;ev.preventDefault();ev.stopPropagation();const target=find(p,z,id);if(!target)return;if(z==="facedown"){target.faceUp=target.faceUp===false;target.revealed=false}else target.tapped=!target.tapped;state.selected={p,z,id};render()});
   document.querySelector("#p1-life").parentElement.onclick=()=>{if(state.pendingDiscardPlayer!==null)return log("カードを捨てるまでライフを変更できません");const modal=document.querySelector("#lifeModal"),input=document.querySelector("#lifeInput");modal.hidden=false;input.value="";input.focus();const close=()=>{modal.hidden=true};const apply=(action)=>{const x=state.players[1],raw=input.value.trim();if(!raw){close();return}const n=Number(raw);if(!Number.isInteger(n)){log("ライフの変更をキャンセルしました");close();return}const amount=Math.abs(n);if(action==="cancel"){close();return}let next=x.life;if(action==="damage")next=x.life-amount;if(action==="heal")next=x.life+amount;if(action==="change")next=amount;x.life=next;render();log(action==="damage"?"自分のライフに "+amount+" ダメージを与えました":"自分のライフを "+(action==="heal"?amount+" 回復しました":amount+" に変更しました"));if(x.life<=0){state.gameOver={winner:2,reason:"life_zero"};log(x.name+"のライフが0以下になったため、"+state.players[2].name+"の勝利です");}close()};modal.querySelectorAll("[data-life-action]").forEach(b=>b.onclick=()=>apply(b.dataset.lifeAction));input.onkeydown=ev=>{if(ev.key!=="Enter")return;ev.preventDefault();const raw=input.value.trim();if(!raw)return;const n=Number(raw);if(!Number.isInteger(n)){log("ライフの変更をキャンセルしました");close();return}apply(n>0&&raw.startsWith("+")?"heal":"damage")}};
   document.querySelector("#rename").onclick=()=>{
     const n=document.querySelector("#name").value.trim();if(!n)return;
