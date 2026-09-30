@@ -55,7 +55,7 @@
 .discard-viewer-panel>header{height:34px;display:flex;justify-content:space-between;align-items:center;flex:0 0 34px}
 .discard-viewer-panel h2{font-size:15px;margin:0}
 .discard-viewer-panel header button{padding:5px 10px;border:1px solid #555;border-radius:4px;background:#292d34;color:#fff}
-.discard-viewer .deck-viewer-list{order:0;max-height:330px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,70px));gap:7px;padding:7px;align-content:start;align-items:start;justify-content:start}
+.discard-viewer .deck-viewer-list{order:0;width:100%;min-width:0;max-height:330px;min-height:120px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,70px));gap:7px;padding:7px;align-content:start;align-items:start;justify-content:start}
 .discard-viewer-preview{min-height:170px;text-align:center;color:#aaa;overflow:auto}
 .discard-viewer-preview img{width:120px;max-height:165px;object-fit:contain;display:block;margin:5px auto}
 .discard-viewer-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px}
