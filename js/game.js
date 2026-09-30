@@ -298,7 +298,7 @@ function selection(){
   const destinations=[["hand","手札へ"],["monsters","モンスターへ"],["energy","エネルギーへ"],["discard","捨て札へ"],["field","フィールドへ"],["facedown","罠へ"],["deck","山札へ"]];
   if(s.z==="field")for(let i=destinations.length-1;i>=0;i--)if(["monsters","energy","facedown"].includes(destinations[i][0]))destinations.splice(i,1);
   if(s.z==="facedown"){const keep=new Set(["hand","discard","deck"]);for(let i=destinations.length-1;i>=0;i--)if(!keep.has(destinations[i][0]))destinations.splice(i,1)}
-  if(s.z==="energy")destinations.splice(2,4);
+  if(s.z==="energy"){for(let i=destinations.length-1;i>=0;i--)if(!["hand","discard","deck"].includes(destinations[i][0]))destinations.splice(i,1);}
   if(s.z==="monsters"){destinations.splice(2,1);destinations.splice(3,1)}
   for(const[z,label]of destinations)if(z!==s.z&&!(s.z==="monsters"&&z==="facedown"))add(label,()=>move(z));
   if(s.z==="facedown"){const spacer=document.createElement("div");spacer.style.height="12px";op.appendChild(spacer);add(c.faceUp===false?"表向きにする":"裏向きにする",()=>{c.faceUp=c.faceUp===false;c.revealed=false;state.selected={p:s.p,z:s.z,id:c.id};render()})}
