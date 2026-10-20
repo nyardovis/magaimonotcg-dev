@@ -36,7 +36,7 @@ function applyPublicState(playerId,publicState){
   x.deckHorizontal=!!publicState.deckHorizontal;
   const oldOpponentMonsterIds=new Set((x.monsters||[]).map(c=>c.id));
   x.monsters=Array.isArray(publicState.monsters)?publicState.monsters:[];
-  if(hadOpponentPublicState&&state.phase==="playing"){const entered=x.monsters.find(c=>!oldOpponentMonsterIds.has(c.id));if(entered)resolveTrapTriggers(1,"opponentEnter",entered);}
+  if(hadOpponentPublicState&&state.phase==="playing"){const entered=x.monsters.find(c=>!oldOpponentMonsterIds.has(c.id));if(entered)resolveTrapTriggers(1,"opponentEnter",entered);for(const oldCard of (state._previousOpponentMonsters||[])){const updated=x.monsters.find(c=>c.id===oldCard.id);if(updated&&(Number(updated.damage)||0)<(Number(oldCard.damage)||0))resolveTrapTriggers(1,"opponentHeal",updated)}state._previousOpponentMonsters=x.monsters.map(c=>({...c}))}else state._previousOpponentMonsters=x.monsters.map(c=>({...c}));
   hasReceivedOpponentPublicState=true;
   x.energy=Array.isArray(publicState.energy)?publicState.energy:[];
   x.field=Array.isArray(publicState.field)?publicState.field:[];
@@ -514,7 +514,7 @@ function resolveEffectText(text,p,sourceCard,eventCard=null){
   for(const z of ["monsters","energy","field","facedown","hand","discard"]){const index=(targetState[z]||[]).findIndex(c=>c.id===eventCard.id);if(index>=0){targetState[z].splice(index,1);zone=z;break}}
   if(zone){moveToDiscard(eventOwner,eventCard,"効果を打ち消された");if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentCardCounter",cardId:eventCard.id,zone});handled=true;log("「"+eventCard.name+"」を打ち消しました")}
  }
- if(/それを破壊する/.test(s)&&eventCard&&eventOwner&&state.players[eventOwner].monsters.some(c=>c.id===eventCard.id)){const target=state.players[eventOwner].monsters.find(c=>c.id===eventCard.id);state.players[eventOwner].monsters=state.players[eventOwner].monsters.filter(c=>c.id!==target.id);moveToDiscard(eventOwner,target,"罠の効果による破壊");if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});if(!onlinePlayerId||eventOwner===1){resolveCardTrigger(target,eventOwner,"destroy");resolveTrapTriggers(eventOwner,"ownDestroy")}if(eventOwner!==p)resolveTrapTriggers(p,"opponentDestroy");handled=true}
+ if(/(?:それ|そのモンスター)を破壊する/.test(s)&&eventCard&&eventOwner&&state.players[eventOwner].monsters.some(c=>c.id===eventCard.id)){const target=state.players[eventOwner].monsters.find(c=>c.id===eventCard.id);state.players[eventOwner].monsters=state.players[eventOwner].monsters.filter(c=>c.id!==target.id);moveToDiscard(eventOwner,target,"罠の効果による破壊");if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});if(!onlinePlayerId||eventOwner===1){resolveCardTrigger(target,eventOwner,"destroy");resolveTrapTriggers(eventOwner,"ownDestroy")}if(eventOwner!==p)resolveTrapTriggers(p,"opponentDestroy");handled=true}
  if(/自分のモンスター全てを全回復/.test(s)){own.monsters.forEach(c=>c.damage=0);handled=true}
  const selfDamage=s.match(/自分に\s*(\d+)ダメージ/);
  if(selfDamage){const amount=Number(selfDamage[1]);own.life-=amount;broadcastEffectDelta({target:"ownLife",delta:-amount});checkLifeWinner(p);handled=true;log(own.name+"に"+amount+"ダメージ")}
