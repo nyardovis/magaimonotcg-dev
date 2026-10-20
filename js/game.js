@@ -118,6 +118,9 @@ function connectGameServer(){
         else if(message.type==="operation"&&message.action==="effect_delta"){
           if(message.playerId!==onlinePlayerId)applyEffectDelta(message);
         }
+        else if(message.type==="operation"&&message.action==="attack_declared"){
+          if(message.playerId!==onlinePlayerId){resolveTrapTriggers(1,"opponentAttack");render();}
+        }
         else if(message.type==="public_state"){
           applyPublicState(message.playerId,message.state);
           applyingPublicState=true;
@@ -334,6 +337,7 @@ function selection(){
   for(const[z,label]of destinations)if(z!==s.z&&!(s.z==="monsters"&&z==="facedown"))add(label,()=>move(z));
   if(s.z==="facedown"){const spacer=document.createElement("div");spacer.style.height="12px";op.appendChild(spacer);add(c.faceUp===false?"表向きにする":"裏向きにする",()=>{c.faceUp=c.faceUp===false;c.revealed=false;state.selected={p:s.p,z:s.z,id:c.id};render()})}
   if(["monsters","energy","field"].includes(s.z)&&state.phase==="playing"){CardEffectEngine.activatedAbilities(cardDefinition(c)?.effect_text||"").forEach((ability,index)=>add("能力を使用（コスト"+ability.cost+"）",()=>activateCardAbility(c.id,index)))}
+   if(s.z==="monsters"&&state.phase==="playing")add("攻撃を宣言",()=>declareAttack(c.id));
    if(s.z==="hand"){const spacer=document.createElement("div");spacer.style.height="12px";op.appendChild(spacer);if(state.phase==="playing"&&s.p===1)add("このカードを使用 / セット",()=>playCardFromHand(c.id));if(c.revealed)add("公開をやめる",()=>{c.revealed=false;state.selected={p:s.p,z:s.z,id:c.id};render()});else add("相手に公開する",()=>{c.revealed=true;c.faceUp=true;state.selected={p:s.p,z:s.z,id:c.id};render()});add("手札を全て公開",()=>{state.players[1].hand.forEach(card=>{card.revealed=true;card.faceUp=true});state.selected={p:s.p,z:s.z,id:c.id};render();log("手札を全て公開しました")})}
 }
 function openMonsterAdjust(c){const modal=document.querySelector("#monsterAdjustModal"),input=document.querySelector("#monsterAdjustInput");modal.hidden=false;input.value="";input.focus();const close=()=>{modal.hidden=true};const apply=(action)=>{const raw=input.value.trim();if(!raw){close();return}const n=Number(raw);if(!Number.isInteger(n)){log("ダメージ／回復の変更をキャンセルしました");close();return}const amount=Math.abs(n);if(action==="cancel"){close();return}if(action==="damage")c.damage+=amount;if(action==="heal")c.damage=Math.max(0,c.damage-amount);if(action==="change")c.modification=amount+c.damage;checkMonsterDestruction(1);state.selected={p:1,z:"monsters",id:c.id};render();close()};modal.querySelectorAll("[data-monster-action]").forEach(b=>b.onclick=()=>apply(b.dataset.monsterAction));input.onkeydown=ev=>{if(ev.key!=="Enter")return;ev.preventDefault();const raw=input.value.trim();if(!raw)return;const n=Number(raw);if(!Number.isInteger(n)){log("ダメージ／回復の変更をキャンセルしました");close();return}apply(n>0&&raw.startsWith("+")?"heal":"damage")}}
@@ -508,6 +512,15 @@ function resolveEffectText(text,p,sourceCard){
  if(/自分のフィールドカードを破壊|自分のフィールドを破壊/.test(s)&&own.field.length){moveToDiscard(p,own.field.shift(),"効果");handled=true}
  if(!handled)log("未対応の効果（手動で処理してください）: "+s.slice(0,90));
 }
+function declareAttack(cardId){
+  if(state.phase!=="playing"||state.pendingDiscardPlayer!==null)return;
+  const card=state.players[1].monsters.find(c=>c.id===cardId);if(!card)return;
+  log("「"+card.name+"」の攻撃を宣言しました");
+  resolveCardTrigger(card,1,"attack");
+  if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"attack_declared",cardId}));
+  else if(!onlinePlayerId)resolveTrapTriggers(2,"opponentAttack");
+  render();
+}
 function resolveTrapTriggers(owner,trigger){
  const x=state.players[owner];if(!x||!Array.isArray(x.facedown))return;
  const remaining=[];
@@ -516,6 +529,7 @@ function resolveTrapTriggers(owner,trigger){
   if(["start","end","opponentStart","opponentEnd"].includes(trigger))abilities=CardEffectEngine.forTrigger(text,trigger);
   else if(trigger==="opponentEnter")abilities=CardEffectEngine.splitAbilities(text).filter(a=>a.cost===null&&a.body.includes("相手")&&/(場に出た時|場に出たとき|場に出した時|場に出したとき)/.test(a.body));
   else if(trigger==="opponentDestroy")abilities=CardEffectEngine.splitAbilities(text).filter(a=>a.cost===null&&a.body.includes("相手")&&/(破壊された時|破壊されたとき|破壊時)/.test(a.body));
+  else if(trigger==="opponentAttack")abilities=CardEffectEngine.splitAbilities(text).filter(a=>a.cost===null&&a.body.includes("相手")&&/(攻撃時|攻撃した時|攻撃したとき)/.test(a.body));
   if(!abilities.length){remaining.push(trap);continue}
   trap.faceUp=true;trap.revealed=false;moveToDiscard(owner,trap,"罠の自動発動");
   log("罠「"+trap.name+"」が条件を満たしたため自動発動しました");
