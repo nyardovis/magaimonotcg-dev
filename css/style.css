@@ -70,3 +70,14 @@
 
 .room-lobby[hidden]{display:none}
 .room-lobby{position:fixed;inset:0;background:rgba(0,0,0,.72);display:grid;place-items:center;z-index:300}.room-lobby-panel{width:min(360px,90vw);box-sizing:border-box;background:#202329;color:#eee;border:1px solid #555;border-radius:8px;padding:24px;box-shadow:0 12px 40px rgba(0,0,0,.7);text-align:center}.room-lobby-panel h2{margin:0 0 18px;font-size:20px}.room-lobby-panel button{width:100%;padding:9px;margin-top:8px;border:1px solid #555;border-radius:4px;background:#292d34;color:#fff;cursor:pointer}.room-lobby-panel input{width:100%;box-sizing:border-box;padding:9px;margin-top:8px;border:1px solid #555;border-radius:4px;background:#111;color:#fff;text-align:center;text-transform:uppercase}.room-or{margin:14px 0 2px;color:#aaa;font-size:12px}.room-message{margin-top:12px;color:#aaa;font-size:12px;line-height:1.5}#roomStatus{margin-left:auto;margin-right:16px;color:#aaa;font-size:12px}
+
+
+/* Initial automation UI: mulligan */
+.mulligan-overlay{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.78);padding:20px}
+.mulligan-overlay[hidden]{display:none}
+.mulligan-panel{width:min(560px,95vw);background:#202329;border:1px solid #59616d;border-radius:10px;padding:24px;box-shadow:0 12px 48px rgba(0,0,0,.55)}
+.mulligan-panel h2{margin:0 0 14px;font-size:22px}
+.mulligan-panel p{line-height:1.6;color:#d5d9df}
+.mulligan-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.mulligan-actions button{flex:1;min-width:180px;padding:10px 14px}
+.mulligan-actions button:disabled{opacity:.45;cursor:not-allowed}
