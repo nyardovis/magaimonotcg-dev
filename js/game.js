@@ -168,7 +168,7 @@ function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random
 function newCard(name,id){const data=cardDataByName.get(name)||null;return{id,name,faceUp:true,revealed:false,tapped:false,counters:0,damage:0,modification:0,power:Number.isFinite(data?.power)?data.power:0,cardDataId:data?.id||null};}
 function saveLocalGameState(){
   try{
-    localStorage.setItem("originalCardGameLocalStateDev",JSON.stringify({player:state.players[1],turnPlayer:state.turnPlayer,pendingDiscardPlayer:state.pendingDiscardPlayer,gameOver:state.gameOver,phase:state.phase,mulligan:state.mulligan}));
+    localStorage.setItem("originalCardGameLocalStateDev",JSON.stringify({room:currentRoom||new URLSearchParams(location.search).get("room")||"",player:state.players[1],turnPlayer:state.turnPlayer,pendingDiscardPlayer:state.pendingDiscardPlayer,gameOver:state.gameOver,phase:state.phase,mulligan:state.mulligan}));
   }catch(e){}
 }
 function loadLocalGameState(){
@@ -177,6 +177,8 @@ function loadLocalGameState(){
     if(!raw)return false;
     const saved=JSON.parse(raw);
     if(!saved||!saved.player||!Array.isArray(saved.player.hand)||!Array.isArray(saved.player.deck))return false;
+    const requestedRoom=new URLSearchParams(location.search).get("room")||"";
+    if((saved.room||"")!==requestedRoom)return false;
     state.players[1]=saved.player;
     if(saved.turnPlayer===1||saved.turnPlayer===2)state.turnPlayer=saved.turnPlayer;
     state.phase=saved.phase==="playing"?"playing":"mulligan";
