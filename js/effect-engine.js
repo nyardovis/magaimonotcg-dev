@@ -19,7 +19,7 @@
       .map((part, index, all) => (part.trim() ? part.trim() + (index < all.length - 1 ? "。" : "") : ""))
       .filter(Boolean)
       .map((raw, index) => {
-        const costMatch = raw.match(/^\s*\((\d+)\)\s*/);
+        const costMatch = raw.match(/^\s*[（(]\s*(\d+)\s*[）)]\s*/);
         const cost = costMatch ? Number(costMatch[1]) : null;
         const body = costMatch ? raw.slice(costMatch[0].length).trim() : raw.trim();
         let trigger = null;
