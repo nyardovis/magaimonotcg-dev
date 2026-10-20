@@ -585,8 +585,9 @@ function forceEndTurnForTrap(owner){
 }
 function resolveTrapTriggers(owner,trigger,eventCard=null){
  const x=state.players[owner];if(!x||!Array.isArray(x.facedown))return;
- const remaining=[];
- for(const trap of x.facedown){
+ const source=[...x.facedown];
+ for(const trap of source){
+  const currentIndex=x.facedown.findIndex(c=>c.id===trap.id);if(currentIndex<0)continue;
   const text=String(cardDefinition(trap)?.effect_text||""),parts=CardEffectEngine.splitAbilities(text);let matches=part=>false;
   if(["start","end","opponentStart","opponentEnd"].includes(trigger))matches=part=>part.trigger===trigger&&part.cost===null;
   else if(trigger==="opponentEnter")matches=part=>part.cost===null&&/^\s*\[\s*相手/.test(part.body)&&/(場に出た時|場に出たとき|場に出した時|場に出したとき)/.test(part.body);
@@ -599,15 +600,15 @@ function resolveTrapTriggers(owner,trigger,eventCard=null){
   else if(trigger==="opponentDamagedMe")matches=part=>part.cost===null&&/^\s*\[\s*相手が自分にダメージを与えた時/.test(part.body);
   else if(trigger==="opponentOricaUse")matches=part=>part.cost===null&&/^\s*\[\s*相手のオリカの使用時/.test(part.body);
   else if(trigger==="ownLifeZero")matches=part=>part.cost===null&&/^\s*\[\s*自分のライフが0になった時/.test(part.body);
-  const start=parts.findIndex(matches);if(start<0){remaining.push(trap);continue}
-  const first=parts[start];if(!trapConditionMet(owner,trigger,first.body,eventCard)){remaining.push(trap);continue}
-  const group=[first];for(let i=start+1;i<parts.length;i++){if(/^\s*\[/.test(parts[i].body))break;group.push(parts[i])}
-  trap.faceUp=true;trap.revealed=false;moveToDiscard(owner,trap,"罠の自動発動");
+  const startIndex=parts.findIndex(matches);if(startIndex<0)continue;
+  const first=parts[startIndex];if(!trapConditionMet(owner,trigger,first.body,eventCard))continue;
+  const group=[first];for(let k=startIndex+1;k<parts.length;k++){if(/^\s*\[/.test(parts[k].body))break;group.push(parts[k])}
+  const liveIndex=x.facedown.findIndex(c=>c.id===trap.id);if(liveIndex<0)continue;
+  x.facedown.splice(liveIndex,1);trap.faceUp=true;trap.revealed=false;moveToDiscard(owner,trap,"罠の自動発動");
   log("罠「"+trap.name+"」が条件を満たしたため自動発動しました");
   group.forEach(part=>{const effectText=part.body.replace(/^\s*\[[^\]]+\]\s*/,"").replace(/^\s*\([^)]*\)\s*/,"").trim();if(effectText)resolveEffectText(effectText,owner,trap,eventCard)});
   if(state.forceEndTurnAfterEffect){state.forceEndTurnAfterEffect=false;forceEndTurnForTrap(owner)}
  }
- x.facedown=remaining;
 }
 function resolveTurnTriggers(p,when){
  const x=state.players[p];
