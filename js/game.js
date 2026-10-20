@@ -34,7 +34,7 @@ function applyPublicState(playerId,publicState){
   x.deckHorizontal=!!publicState.deckHorizontal;
   const oldOpponentMonsterIds=new Set((x.monsters||[]).map(c=>c.id));
   x.monsters=Array.isArray(publicState.monsters)?publicState.monsters:[];
-  if(hasReceivedOpponentPublicState&&state.phase==="playing"&&x.monsters.some(c=>!oldOpponentMonsterIds.has(c.id)))resolveTrapTriggers(1,"opponentEnter");
+  if(hasReceivedOpponentPublicState&&state.phase==="playing"){const entered=x.monsters.find(c=>!oldOpponentMonsterIds.has(c.id));if(entered)resolveTrapTriggers(1,"opponentEnter",entered);}
   hasReceivedOpponentPublicState=true;
   x.energy=Array.isArray(publicState.energy)?publicState.energy:[];
   x.field=Array.isArray(publicState.field)?publicState.field:[];
@@ -119,7 +119,7 @@ function connectGameServer(){
           if(message.playerId!==onlinePlayerId)applyEffectDelta(message);
         }
         else if(message.type==="operation"&&message.action==="attack_declared"){
-          if(message.playerId!==onlinePlayerId){resolveTrapTriggers(1,"opponentAttack");render();}
+          if(message.playerId!==onlinePlayerId){const attacker=state.players[2].monsters.find(c=>c.id===message.cardId);resolveTrapTriggers(1,"opponentAttack",attacker||null);render();}
         }
         else if(message.type==="public_state"){
           applyPublicState(message.playerId,message.state);
@@ -449,7 +449,7 @@ function checkMonsterDestruction(p,triggerEffects=true){const x=state.players[p]
 function drawEffectCards(p,n){const x=state.players[p],total=Math.max(0,Math.floor(n));for(let i=0;i<total;i++){if(!x.deck.length){const winner=p===1?2:1;state.gameOver={winner,reason:"deck_empty"};log(x.name+"は山札が0枚の状態でドローしようとしたため、"+state.players[winner].name+"の勝利です");break}if(x.hand.length>=MAX.hand){if(p===1){state.pendingDiscardPlayer=1;state.pendingDiscardReason="effect_draw";state.pendingDrawCount=total-i;state.selected=null;render();log(x.name+"は効果のドロー前に手札を1枚捨てる必要があります");return}const discarded=x.hand.shift();moveToDiscard(p,discarded,"手札上限による自動破棄")}x.hand.push(x.deck.shift())}}
 function resolveCardTrigger(card,p,trigger){
   const data=cardDefinition(card);
-  if(!data||!data.effect_text||!window.CardEffectEngine)return;
+  if(!data||!data.effect_text||card.effectsDisabled||!window.CardEffectEngine)return;
   const text=String(data.effect_text);
   const abilities=trigger==="spell"?CardEffectEngine.immediateAbilities(text):CardEffectEngine.forTrigger(text,trigger);
   abilities.forEach(ability=>resolveEffectText(ability.body,p,card));
@@ -467,7 +467,7 @@ function activateCardAbility(cardId,abilityIndex){
   checkMonsterDestruction(1);
   state.selected={p:1,z:selected.z,id:card.id};render();
 }
-function resolveEffectText(text,p,sourceCard){
+function resolveEffectText(text,p,sourceCard,eventCard=null){
  const own=state.players[p],opp=state.players[p===1?2:1],s=String(text||"");let handled=false,revealedCardForEffect=null;
  if(s.includes("なら")){
   let known=false,met=true;
@@ -521,23 +521,39 @@ function declareAttack(cardId){
   const card=state.players[1].monsters.find(c=>c.id===cardId);if(!card)return;
   log("「"+card.name+"」の攻撃を宣言しました");
   resolveCardTrigger(card,1,"attack");
+  resolveTrapTriggers(1,"ownAttack",card);
   if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"attack_declared",cardId}));
   else if(!onlinePlayerId)resolveTrapTriggers(2,"opponentAttack");
   render();
 }
-function resolveTrapTriggers(owner,trigger){
+function trapConditionMet(owner,trigger,abilityText,eventCard){
+ const match=String(abilityText||"").match(/^\s*\[([^\]]+)\]/);if(!match)return true;
+ const condition=match[1],x=state.players[owner];
+ if(condition.includes("2コスト以下なら")&&(!eventCard||cardCost(eventCard)>2))return false;
+ if(condition.includes("[ザコ]なら")&&(!eventCard||!String(cardDefinition(eventCard)?.types||"").includes("ザコ")))return false;
+ if(condition.includes("場に出たターンでも攻撃できる。を持つなら")&&(!eventCard||!String(cardDefinition(eventCard)?.effect_text||"").includes("場に出たターンでも攻撃できる。")))return false;
+ if(condition.includes("[海]")&&condition.includes("フィールド")&&!x.field.some(c=>String(cardDefinition(c)?.types||"").includes("海")))return false;
+ if(condition.includes("マナが3以上なら")&&(Number(x.energyPool)||0)<3)return false;
+ if(condition.includes("なら")&&!/(2コスト以下なら|\[ザコ\]なら|場に出たターンでも攻撃できる。を持つなら|\[海\].*フィールド.*あるなら|マナが3以上なら)/.test(condition)){log("未対応の罠条件（罠は発動せず待機）: "+condition.slice(0,70));return false}
+ return true;
+}
+function resolveTrapTriggers(owner,trigger,eventCard=null){
  const x=state.players[owner];if(!x||!Array.isArray(x.facedown))return;
  const remaining=[];
  for(const trap of x.facedown){
-  const text=String(cardDefinition(trap)?.effect_text||"");let abilities=[];
-  if(["start","end","opponentStart","opponentEnd"].includes(trigger))abilities=CardEffectEngine.forTrigger(text,trigger);
-  else if(trigger==="opponentEnter")abilities=CardEffectEngine.splitAbilities(text).filter(a=>a.cost===null&&a.body.includes("相手")&&/(場に出た時|場に出たとき|場に出した時|場に出したとき)/.test(a.body));
-  else if(trigger==="opponentDestroy")abilities=CardEffectEngine.splitAbilities(text).filter(a=>a.cost===null&&a.body.includes("相手")&&/(破壊された時|破壊されたとき|破壊時)/.test(a.body));
-  else if(trigger==="opponentAttack")abilities=CardEffectEngine.splitAbilities(text).filter(a=>a.cost===null&&a.body.includes("相手")&&/(攻撃時|攻撃した時|攻撃したとき)/.test(a.body));
-  if(!abilities.length){remaining.push(trap);continue}
+  const text=String(cardDefinition(trap)?.effect_text||""),parts=CardEffectEngine.splitAbilities(text);let matches=part=>false;
+  if(["start","end","opponentStart","opponentEnd"].includes(trigger))matches=part=>part.trigger===trigger&&part.cost===null;
+  else if(trigger==="opponentEnter")matches=part=>part.cost===null&&part.body.includes("相手")&&/(場に出た時|場に出たとき|場に出した時|場に出したとき)/.test(part.body);
+  else if(trigger==="ownEnter")matches=part=>part.cost===null&&part.body.includes("自分")&&/(場に出た時|場に出たとき|場に出した時|場に出したとき)/.test(part.body);
+  else if(trigger==="opponentDestroy")matches=part=>part.cost===null&&part.body.includes("相手")&&/(破壊された時|破壊されたとき|破壊時)/.test(part.body);
+  else if(trigger==="ownDestroy")matches=part=>part.cost===null&&part.body.includes("自分")&&/(破壊された時|破壊されたとき|破壊時)/.test(part.body);
+  else if(trigger==="opponentAttack")matches=part=>part.cost===null&&part.body.includes("相手")&&/(攻撃時|攻撃した時|攻撃したとき)/.test(part.body);
+  const start=parts.findIndex(matches);if(start<0){remaining.push(trap);continue}
+  const first=parts[start];if(!trapConditionMet(owner,trigger,first.body,eventCard)){remaining.push(trap);continue}
+  const group=[first];for(let i=start+1;i<parts.length;i++){if(/^\s*\[/.test(parts[i].body))break;group.push(parts[i])}
   trap.faceUp=true;trap.revealed=false;moveToDiscard(owner,trap,"罠の自動発動");
   log("罠「"+trap.name+"」が条件を満たしたため自動発動しました");
-  abilities.forEach(a=>resolveEffectText(a.body,owner,trap));
+  group.forEach(part=>{const effectText=part.body.replace(/^\s*\[[^\]]+\]\s*/,"").replace(/^\s*\([^)]*\)\s*/,"").trim();if(effectText)resolveEffectText(effectText,owner,trap,eventCard)});
  }
  x.facedown=remaining;
 }
@@ -559,7 +575,7 @@ function playCardFromHand(cardId){
  if(kind==="trap"&&x.facedown.length>=MAX.facedown)return log("罠ゾーンが満杯です");
  if(["monster","spell","trap","field"].includes(kind)&&!useEnergyCost(1,cost))return;
  x.hand.splice(idx,1);card.faceUp=true;card.revealed=false;
- if(kind==="monster"){card.power=Number(cardDefinition(card)?.power)||card.power||0;card.damage=0;card.modification=0;card.tapped=false;x.monsters.push(card);log(x.name+"は「"+card.name+"」を使用しました（コスト"+cost+"）");resolveCardTrigger(card,1,"enter");if(!onlinePlayerId)resolveTrapTriggers(2,"opponentEnter")}
+ if(kind==="monster"){card.power=Number(cardDefinition(card)?.power)||card.power||0;card.damage=0;card.modification=0;card.tapped=false;x.monsters.push(card);log(x.name+"は「"+card.name+"」を使用しました（コスト"+cost+"）");resolveCardTrigger(card,1,"enter");resolveTrapTriggers(1,"ownEnter",card);if(!onlinePlayerId)resolveTrapTriggers(2,"opponentEnter",card)}
  else if(kind==="energy"){card.tapped=String(cardDefinition(card)?.effect_text||"").includes("タップして場に出る");x.energy.push(card);log(x.name+"は「"+card.name+"」をエネルギーに置きました");resolveCardTrigger(card,1,"enter")}
  else if(kind==="spell"){moveToDiscard(1,card,"魔法を使用");log(x.name+"は魔法「"+card.name+"」を使用しました（コスト"+cost+"）");resolveCardTrigger(card,1,"spell")}
  else if(kind==="trap"){card.faceUp=false;card.tapped=false;x.facedown.push(card);log(x.name+"は罠「"+card.name+"」をセットしました")}
