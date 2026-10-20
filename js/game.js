@@ -8,7 +8,7 @@ let applyingPublicState=false;
 
 function getPublicState(){
   const x=state.players[1];
-  return {life:x.life,handCount:x.hand.length,deckCount:x.deck.length,deckCounters:x.deckCounters||0,deckHorizontal:!!x.deckHorizontal,facedownCount:x.facedown.length,revealedHand:x.hand.filter(c=>c.revealed).map(c=>({id:c.id,name:c.name,faceUp:true,revealed:true})),facedownPublic:x.facedown.filter(c=>c.faceUp!==false),monsters:x.monsters,energy:x.energy,field:x.field,discard:x.discard,pendingDiscard:state.pendingDiscardPlayer===1,gameOver:state.gameOver||null};
+  return {life:x.life,handCount:x.hand.length,handIds:x.hand.map(c=>c.id),deckCount:x.deck.length,deckCounters:x.deckCounters||0,deckHorizontal:!!x.deckHorizontal,facedownCount:x.facedown.length,revealedHand:x.hand.filter(c=>c.revealed).map(c=>({id:c.id,name:c.name,faceUp:true,revealed:true})),facedownPublic:x.facedown.filter(c=>c.faceUp!==false),monsters:x.monsters,energy:x.energy,field:x.field,discard:x.discard,pendingDiscard:state.pendingDiscardPlayer===1,gameOver:state.gameOver||null,energyPool:x.energyPool||0,mulliganCount:state.mulligan[1].count,mulliganDone:state.mulligan[1].done,phase:state.phase};
 }
 function sendPublicState(){
   if(applyingPublicState||!onlinePlayerId||!gameSocket||gameSocket.readyState!==WebSocket.OPEN)return;
@@ -24,9 +24,14 @@ function applyPublicState(playerId,publicState){
   const x=state.players[2];
   state.gameOver=publicState.gameOver&&typeof publicState.gameOver==="object"?publicState.gameOver:null;
   x.life=Number.isFinite(publicState.life)?publicState.life:x.life;
+  x.energyPool=Number.isFinite(publicState.energyPool)?publicState.energyPool:0;
+  state.mulligan[2].count=Number.isInteger(publicState.mulliganCount)?publicState.mulliganCount:0;
+  state.mulligan[2].done=publicState.mulliganDone===true;
+  if(state.mulligan[1].done&&state.mulligan[2].done)state.phase="playing";
   if(state.pendingDiscardPlayer!==1)state.pendingDiscardPlayer=publicState.pendingDiscard===true?2:null;
   const handCount=Number.isInteger(publicState.handCount)&&publicState.handCount>=0?publicState.handCount:0;
-  x.hand=Array.from({length:handCount},(_,i)=>{const card=newCard("",playerId+"h"+i);card.faceUp=false;return card});
+  const handIds=Array.isArray(publicState.handIds)?publicState.handIds:[];
+  x.hand=Array.from({length:handCount},(_,i)=>{const card=newCard("",typeof handIds[i]==="string"?handIds[i]:playerId+"h"+i);card.faceUp=false;return card});
   if(Array.isArray(publicState.revealedHand))publicState.revealedHand.forEach((card,i)=>{if(!card||typeof card.id!=="string")return;const target=x.hand.find(c=>c.id===card.id)||x.hand[i];if(!target)return;target.id=card.id;target.name=typeof card.name==="string"?card.name:"";target.faceUp=true;target.revealed=true});
   x.deckCounters=Number.isFinite(publicState.deckCounters)?publicState.deckCounters:0;
   x.deckHorizontal=!!publicState.deckHorizontal;
@@ -103,6 +108,9 @@ function connectGameServer(){
           if(message.turnPlayer==="player1"||message.turnPlayer==="player2")state.turnPlayer=message.turnPlayer===onlinePlayerId?1:2;
           render();
           log("オンラインルームに参加しました（"+message.playerId+"）");
+        }
+        else if(message.type==="operation"&&message.action==="mulligan_update"){
+          if(message.playerId!==onlinePlayerId){state.mulligan[2].count=Number.isInteger(message.count)?message.count:0;state.mulligan[2].done=message.done===true;if(state.mulligan[1].done&&state.mulligan[2].done)state.phase="playing";render();}
         }
         else if(message.type==="operation"&&message.action==="mulligan_update"){
           if(message.playerId!==onlinePlayerId){state.mulligan[2].count=Number.isInteger(message.count)?message.count:0;state.mulligan[2].done=message.done===true;if(state.mulligan[1].done&&state.mulligan[2].done)state.phase="playing";render();}
@@ -249,6 +257,7 @@ function render(){
   document.querySelector("#turnPlayer").textContent=turnName;
   const turnAreaLabel=document.querySelector("#turnAreaLabel");
   if(turnAreaLabel)turnAreaLabel.textContent=turnName+"のターン";
+  for(const p of [1,2]){const pool=document.querySelector("#p"+p+"-energy-pool");if(pool)pool.textContent=String(state.players[p].energyPool||0)}
   const discardWarning=document.querySelector("#discardWarning");
   if(discardWarning){
     const pending=state.pendingDiscardPlayer;
@@ -457,6 +466,8 @@ function setup(){
   document.querySelector("#deckViewerClose").onclick=closeDeckViewer;
   const mulliganButton=document.querySelector("#mulliganAgain");if(mulliganButton)mulliganButton.onclick=doMulligan;
   const mulliganKeep=document.querySelector("#mulliganKeep");if(mulliganKeep)mulliganKeep.onclick=finishMulligan;
+  const mulliganButton=document.querySelector("#mulliganAgain");if(mulliganButton)mulliganButton.onclick=doMulligan;
+  const mulliganKeep=document.querySelector("#mulliganKeep");if(mulliganKeep)mulliganKeep.onclick=finishMulligan;
   document.addEventListener("click",e=>{const v=document.querySelector("#discardViewer");if(v&&!v.hidden&&!e.target.closest("#discardViewer .discard-viewer-panel")&&!e.target.closest(".player .other .zone:nth-child(2)"))closeDiscardViewer()});
   document.querySelector("#discardViewer").onclick=e=>{if(e.target===document.querySelector("#discardViewer"))closeDiscardViewer()};
   document.querySelector("#deckEdit").onclick=()=>{state.players[1].deckList=state.savedDeck.slice();document.querySelector("#deckEditor").hidden=false;const search=document.querySelector("#deckCardSearch");if(search)search.value="";renderDeckEditor()};
@@ -492,7 +503,7 @@ function setup(){
       log("名前を変更しました");
     }
   };
-  document.querySelector("#reset").onclick=()=>{if(confirm("自分の盤面をリセットしますか？")){const n=state.players[1].name;const deckList=(state.savedDeck||[]).slice();const p=newPlayer(n,"p1");const pool=shuffle((deckList.length?deckList:p.deckList).slice());p.deckList=pool.slice();p.hand=pool.slice(0,7).map((name,i)=>newCard(name,"p1h"+i));p.deck=pool.slice(7).map((name,i)=>newCard(name,"p1d"+i));state.players[1]=p;state.selected=null;state.pendingDiscardPlayer=null;state.gameOver=null;lastPublicState=null;render();log("自分の盤面をリセットし、デッキをシャッフルして7枚ドローしました")}};
+  document.querySelector("#reset").onclick=()=>{if(confirm("自分の盤面をリセットしますか？")){const n=state.players[1].name;const deckList=(state.savedDeck||[]).slice();const p=newPlayer(n,"p1");const pool=shuffle((deckList.length?deckList:p.deckList).slice());p.deckList=pool.slice();p.hand=pool.slice(0,7).map((name,i)=>newCard(name,"p1h"+i));p.deck=pool.slice(7).map((name,i)=>newCard(name,"p1d"+i));state.players[1]=p;state.selected=null;state.pendingDiscardPlayer=null;state.gameOver=null;state.phase="mulligan";state.mulligan={1:{count:0,done:false},2:{count:0,done:false}};lastPublicState=null;render();log("自分の盤面をリセットし、シャッフルしてマリガンを開始しました")}};
 }
 async function start(){
   ensureDiscardWarning();
