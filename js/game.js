@@ -167,7 +167,7 @@ function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random
 function newCard(name,id){const data=cardDataByName.get(name)||null;return{id,name,faceUp:true,revealed:false,tapped:false,counters:0,damage:0,modification:0,power:Number.isFinite(data?.power)?data.power:0,cardDataId:data?.id||null};}
 function saveLocalGameState(){
   try{
-    localStorage.setItem("originalCardGameLocalStateDev",JSON.stringify({player:state.players[1],turnPlayer:state.turnPlayer,pendingDiscardPlayer:state.pendingDiscardPlayer,gameOver:state.gameOver}));
+    localStorage.setItem("originalCardGameLocalStateDev",JSON.stringify({player:state.players[1],turnPlayer:state.turnPlayer,pendingDiscardPlayer:state.pendingDiscardPlayer,gameOver:state.gameOver,phase:state.phase,mulligan:state.mulligan}));
   }catch(e){}
 }
 function loadLocalGameState(){
@@ -178,6 +178,9 @@ function loadLocalGameState(){
     if(!saved||!saved.player||!Array.isArray(saved.player.hand)||!Array.isArray(saved.player.deck))return false;
     state.players[1]=saved.player;
     if(saved.turnPlayer===1||saved.turnPlayer===2)state.turnPlayer=saved.turnPlayer;
+    state.phase=saved.phase==="playing"?"playing":"mulligan";
+    if(saved.mulligan&&saved.mulligan[1]&&saved.mulligan[2])state.mulligan=saved.mulligan;
+    else if(state.phase==="playing")state.mulligan={1:{count:0,done:true},2:{count:0,done:true}};
     state.pendingDiscardPlayer=saved.pendingDiscardPlayer===1?1:null;
     state.gameOver=saved.gameOver&&typeof saved.gameOver==="object"?saved.gameOver:null;
     return true;
@@ -389,13 +392,13 @@ function applyEffectDelta(message){
 function checkLifeWinner(p){if(state.players[p].life<=0){const winner=p===1?2:1;state.gameOver={winner,reason:"life_zero"};log(state.players[p].name+"のライフが0以下になったため、"+state.players[winner].name+"の勝利です")}}
 function toggleCardTap(p,z,c){if(z==="energy"){const x=state.players[p],value=cardCost(c);if(!c.tapped)x.energyPool=(x.energyPool||0)+value;else x.energyPool=Math.max(0,(x.energyPool||0)-value);if(p===1)broadcastEnergyPool()}c.tapped=!c.tapped}
 function renderMulliganOverlay(){
- const overlay=document.querySelector("#mulliganOverlay");if(!overlay)return;overlay.hidden=state.phase!=="mulligan";
+ const overlay=document.querySelector("#mulliganOverlay");if(!overlay)return;const lobby=document.querySelector("#roomLobby");overlay.hidden=state.phase!=="mulligan"||!currentRoom||!!(lobby&&!lobby.hidden);
  const own=state.mulligan[1],other=state.mulligan[2],status=document.querySelector("#mulliganStatus");
  if(status)status.textContent="自分："+(own.done?"確定":(7-own.count)+"枚で引き直し可能")+" ／ 相手："+(other.done?"確定":"選択中");
  const again=document.querySelector("#mulliganAgain"),keep=document.querySelector("#mulliganKeep");
- if(again){again.disabled=own.done||7-own.count<=0;again.textContent="引き直す（"+Math.max(0,7-own.count)+"枚）"}
+ if(again){again.disabled=own.done||8-own.count<=0;again.textContent="引き直す（"+Math.max(0,7-own.count)+"枚）"}
  if(keep)keep.disabled=own.done;
- const note=document.querySelector("#mulliganNote");if(note)note.textContent=own.done?(other.done?"両プレイヤー確定。ゲーム開始":"確定済み。相手の選択を待っています"):"引き直し回数："+own.count+"回。次に引き直すと"+Math.max(0,7-own.count-1)+"枚になります。";
+ const note=document.querySelector("#mulliganNote");if(note)note.textContent=own.done?(other.done?"両プレイヤー確定。ゲーム開始":"確定済み。相手の選択を待っています"):"引き直し回数："+own.count+"回。次に引き直すと"+Math.max(0,7-own.count)+"枚になります。";
 }
 function doMulligan(){
  if(state.phase!=="mulligan"||state.mulligan[1].done)return;
@@ -448,7 +451,7 @@ function playCardFromHand(cardId){
  if(["monster","spell","field"].includes(kind)&&!useEnergyCost(1,cost))return;
  x.hand.splice(idx,1);card.faceUp=true;card.revealed=false;
  if(kind==="monster"){card.power=Number(cardDefinition(card)?.power)||card.power||0;card.damage=0;card.modification=0;card.tapped=false;x.monsters.push(card);log(x.name+"は「"+card.name+"」を使用しました（コスト"+cost+"）");resolveCardTrigger(card,1,"enter")}
- else if(kind==="energy"){card.tapped=String(cardDefinition(card)?.effect_text||"").includes("タップして場に出る");x.energy.push(card);if(card.tapped)x.energyPool=(x.energyPool||0)+cost;log(x.name+"は「"+card.name+"」をエネルギーに置きました");resolveCardTrigger(card,1,"enter")}
+ else if(kind==="energy"){card.tapped=String(cardDefinition(card)?.effect_text||"").includes("タップして場に出る");x.energy.push(card);log(x.name+"は「"+card.name+"」をエネルギーに置きました");resolveCardTrigger(card,1,"enter")}
  else if(kind==="spell"){moveToDiscard(1,card,"魔法を使用");log(x.name+"は魔法「"+card.name+"」を使用しました（コスト"+cost+"）");resolveCardTrigger(card,1,"spell")}
  else if(kind==="trap"){card.faceUp=false;card.tapped=false;x.facedown.push(card);log(x.name+"は罠「"+card.name+"」をセットしました")}
  else if(kind==="field"){if(x.field.length)moveToDiscard(1,x.field.shift(),"新しいフィールドカードに置換");card.faceUp=true;x.field.push(card);log(x.name+"はフィールド「"+card.name+"」を使用しました（コスト"+cost+"）");resolveCardTrigger(card,1,"enter")}
