@@ -407,11 +407,11 @@ function toggleCardTap(p,z,c){if(z==="energy"){const x=state.players[p],value=ca
 function renderMulliganOverlay(){
  const overlay=document.querySelector("#mulliganOverlay");if(!overlay)return;const lobby=document.querySelector("#roomLobby");overlay.hidden=state.phase!=="mulligan"||!currentRoom||!!(lobby&&!lobby.hidden);
  const own=state.mulligan[1],other=state.mulligan[2],status=document.querySelector("#mulliganStatus");
- if(status)status.textContent="自分："+(own.done?"確定":(7-own.count)+"枚で引き直し可能")+" ／ 相手："+(other.done?"確定":"選択中");
+ if(status)status.textContent="自分："+(own.done?"確定":(7-own.count)+"枚で引き直し可能")+" ／ 相手："+(other.done?"確定":"選択中")+(onlinePlayerId&&roomPlayerCount<2?" ／ 対戦相手の参加待ち":"");
  const again=document.querySelector("#mulliganAgain"),keep=document.querySelector("#mulliganKeep");
- if(again){again.disabled=own.done||8-own.count<=0;again.textContent="引き直す（"+Math.max(0,7-own.count)+"枚）"}
- if(keep)keep.disabled=own.done;
- const note=document.querySelector("#mulliganNote");if(note)note.textContent=own.done?(other.done?"両プレイヤー確定。ゲーム開始":"確定済み。相手の選択を待っています"):"引き直し回数："+own.count+"回。次に引き直すと"+Math.max(0,7-own.count)+"枚になります。";
+ if(again){again.disabled=own.done||8-own.count<=0||!!onlinePlayerId&&roomPlayerCount<2;again.textContent="引き直す（"+Math.max(0,7-own.count)+"枚）"}
+ if(keep)keep.disabled=own.done||!!onlinePlayerId&&roomPlayerCount<2;
+ const note=document.querySelector("#mulliganNote");if(note)note.textContent=onlinePlayerId&&roomPlayerCount<2?"対戦相手が参加するとマリガンを開始できます。":own.done?(other.done?"両プレイヤー確定。ゲーム開始":"確定済み。相手の選択を待っています"):"引き直し回数："+own.count+"回。次に引き直すと"+Math.max(0,7-own.count)+"枚になります。";
 }
 function doMulligan(){
  if(state.phase!=="mulligan"||state.mulligan[1].done)return;
