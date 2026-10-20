@@ -400,7 +400,7 @@ function startTurn(p,showLog=true){if(state.phase!=="playing")return;const x=sta
 function completePendingDiscard(p,id){if(p!==1)return false;if(state.pendingDiscardPlayer!==p)return false;const x=state.players[p],i=x.hand.findIndex(c=>c.id===id);if(i<0)return true;const discarded=x.hand.splice(i,1)[0];x.discard.push(discarded);state.pendingDiscardPlayer=null;state.selected=null;log(x.name+"はドロー前に「"+discarded.name+"」を捨てました");if(x.deck.length&&x.hand.length<MAX.hand)drawCards(1,p);resolveTurnTriggers(p,"start");render();log(x.name+" のターン開始");return true}
 function endTurn(){const localPlayer=1;if(state.turnPlayer!==localPlayer||state.pendingDiscardPlayer!==null||state.phase!=="playing")return;if(onlinePlayerId!==null){if(!gameSocket||gameSocket.readyState!==WebSocket.OPEN)return log("オンラインサーバーに接続されていません");resolveTurnTriggers(1,"end");state.players[1].monsters.forEach(m=>{m.damage=0});state.players[1].energyPool=0;broadcastEnergyPool();render();gameSocket.send(JSON.stringify({type:"operation",action:"end_turn"}));return}const p=state.turnPlayer,x=state.players[p];resolveTurnTriggers(p,"end");x.monsters.forEach(m=>{m.damage=0});x.energyPool=0;state.turnPlayer=p===1?2:1;startTurn(state.turnPlayer)}
 
-function cardDefinition(cardOrName){return typeof cardOrName==="string"?cardDataByName.get(cardOrName)||null:cardDataByName.get(cardOrName?.name)||null}
+function cardDefinition(cardOrName){if(typeof cardOrName==="string")return cardDataByName.get(cardOrName)||null;const id=cardOrName?.cardDataId;if(id){const exact=cardDatabase.find(c=>c.id===id);if(exact)return exact}return cardDataByName.get(cardOrName?.name)||null}
 function cardKind(card){const tag=String(cardDefinition(card)?.tags||"");if(tag.includes("#エネルギーカード"))return "energy";if(tag.includes("#フィールドカード"))return "field";if(tag.includes("#モンスターカード"))return "monster";if(tag.includes("#魔法カード"))return "spell";if(tag.includes("#罠カード"))return "trap";return "unknown"}
 function cardCost(card){const value=cardDefinition(card)?.cost;if(typeof value==="number"&&Number.isFinite(value))return Math.max(0,value);if(typeof value==="string"&&/^\+?\d+$/.test(value))return Math.max(0,Number(value.replace("+","")));return 0}
 function broadcastEnergyPool(){if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"energy_pool",value:state.players[1].energyPool||0}))}
@@ -466,7 +466,7 @@ function activateCardAbility(cardId,abilityIndex){
   state.selected={p:1,z:selected.z,id:card.id};render();
 }
 function resolveEffectText(text,p,sourceCard){
- const own=state.players[p],opp=state.players[p===1?2:1],s=String(text||"");let handled=false;
+ const own=state.players[p],opp=state.players[p===1?2:1],s=String(text||"");let handled=false,revealedCardForEffect=null;
  if(s.includes("なら")){
   let known=false,met=true;
   if(s.includes("自分のモンスターが1体場にいるなら")){known=true;met=met&&own.monsters.length>0}
@@ -480,7 +480,7 @@ function resolveEffectText(text,p,sourceCard){
  const discardHand=s.match(/自分の手札から(?:(魔法|モンスター|罠|フィールド|エネルギー)\s*)?(\d+)枚(?:まで)?(?:を)?捨てる/);
  if(discardHand){const type=discardHand[1]||null,count=Number(discardHand[2]||1);for(let i=0;i<count;i++){const index=own.hand.findIndex(c=>!type||cardKind(c)===effectTypeMap[type]);if(index<0)break;const discarded=own.hand.splice(index,1)[0];moveToDiscard(p,discarded,"効果による手札の破棄");handled=true}}
  const revealHand=s.match(/自分の手札から(?:(魔法|モンスター|罠|フィールド|エネルギー)\s*)?1枚を公開する/);
- if(revealHand){const type=revealHand[1]||null,card=own.hand.find(c=>!type||cardKind(c)===effectTypeMap[type]);if(card){card.revealed=true;card.faceUp=true;handled=true;log(own.name+"は「"+card.name+"」を公開しました")}}
+ if(revealHand){const type=revealHand[1]||null,card=own.hand.find(c=>!type||cardKind(c)===effectTypeMap[type]);if(card){card.revealed=true;card.faceUp=true;revealedCardForEffect=card;handled=true;log(own.name+"は「"+card.name+"」を公開しました")}}
  const healMonster=s.match(/自分のモンスター(?:全て|1体|1体まで)を\s*(\d+)回復/);
  if(healMonster){const targets=/全て/.test(s)?own.monsters:[own.monsters.find(c=>(Number(c.damage)||0)>0)].filter(Boolean);targets.forEach(c=>c.damage=Math.max(0,(Number(c.damage)||0)-Number(healMonster[1])));if(targets.length)handled=true}
  const healSource=s.match(/これを\s*(\d+)回復/);
@@ -501,12 +501,14 @@ function resolveEffectText(text,p,sourceCard){
  const singleDamage=s.match(/(相手のモンスター|自分のモンスター|モンスター)(?:1体|1体まで)に\s*(\d+)ダメージ/);
  if(singleDamage){const targetPlayer=singleDamage[1].startsWith("相手")?(p===1?2:1):singleDamage[1].startsWith("自分")?p:(opp.monsters.length?(p===1?2:1):p);const target=state.players[targetPlayer].monsters[0];if(target){target.damage=(target.damage||0)+Number(singleDamage[2]);if(targetPlayer!==p)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:Number(singleDamage[2])});checkMonsterDestruction(targetPlayer,targetPlayer===p);handled=true}}
  if(/相手のモンスター1体を破壊|相手のモンスター1体までを破壊/.test(s)){const target=opp.monsters[0];if(target){opp.monsters=opp.monsters.filter(m=>m.id!==target.id);moveToDiscard(p===1?2:1,target,"効果による破壊");broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});resolveTrapTriggers(p,"opponentDestroy");handled=true}}
- const search=s.match(/自分のデッキから(?:(\d+)コスト以下の)?(?:\[([^\]]+)\]の)?(モンスター|魔法|罠|フィールド|エネルギー)?(\d+)枚までを手札に加える/);
- if(search){const max=Number(search[4]),costLimit=search[1]===undefined?Infinity:Number(search[1]),type=search[3],element=search[2];for(let i=0;i<max;i++){const idx=own.deck.findIndex(c=>{const d=cardDefinition(c);if(!d||cardCost(c)>costLimit)return false;if(type&&!String(d.tags||"").includes(({モンスター:"#モンスターカード",魔法:"#魔法カード",罠:"#罠カード",フィールド:"#フィールドカード",エネルギー:"#エネルギーカード"})[type]))return false;if(element&&!String(d.types||"").includes(element))return false;return true});if(idx<0||own.hand.length>=MAX.hand)break;own.hand.push(own.deck.splice(idx,1)[0]);handled=true}if(handled)log(own.name+"は効果で山札からカードを手札に加えました")}
+ const search=s.match(/自分の(デッキ|捨て札)から(?:(\d+)コスト以下の)?(?:\[([^\]]+)\]の)?(モンスター|魔法|罠|フィールド|エネルギー)?(\d+)枚までを手札に加える/);
+ if(search){const source=search[1]==="デッキ"?own.deck:own.discard,max=Number(search[5]),costLimit=search[2]===undefined?Infinity:Number(search[2]),type=search[4],element=search[3];for(let i=0;i<max;i++){const idx=source.findIndex(c=>{const d=cardDefinition(c);if(!d||cardCost(c)>costLimit)return false;if(type&&!String(d.tags||"").includes(({モンスター:"#モンスターカード",魔法:"#魔法カード",罠:"#罠カード",フィールド:"#フィールドカード",エネルギー:"#エネルギーカード"})[type]))return false;if(element&&!String(d.types||"").includes(element))return false;return true});if(idx<0||own.hand.length>=MAX.hand)break;own.hand.push(source.splice(idx,1)[0]);handled=true}if(handled)log(own.name+"は効果で"+(search[1]==="デッキ"?"山札":"捨て札")+"からカードを手札に加えました")}
+ const sameNameSearch=s.match(/自分のデッキか捨て札からそれと同名のカード(\d+)枚までを手札に加える/);
+ if(sameNameSearch&&revealedCardForEffect){for(let i=0;i<Number(sameNameSearch[1]);i++){let source=own.deck,idx=source.findIndex(c=>c.name===revealedCardForEffect.name);if(idx<0){source=own.discard;idx=source.findIndex(c=>c.name===revealedCardForEffect.name)}if(idx<0||own.hand.length>=MAX.hand)break;own.hand.push(source.splice(idx,1)[0]);handled=true}}
  const namedSearch=s.match(/自分の(デッキ|捨て札)から「([^」]+)」(\d+)枚までを手札に加える/);
  if(namedSearch){const source=namedSearch[1]==="デッキ"?own.deck:own.discard;for(let i=0;i<Number(namedSearch[3]);i++){const idx=source.findIndex(c=>c.name===namedSearch[2]);if(idx<0||own.hand.length>=MAX.hand)break;own.hand.push(source.splice(idx,1)[0]);handled=true}}
  const opponentMill=s.match(/相手のデッキの上(\d+)枚を捨てる/);
- if(opponentMill){const count=Number(opponentMill[1]);for(let i=0;i<count&&opp.deck.length;i++){opp.discard.push(opp.deck.shift())}broadcastEffectDelta({target:"opponentMill",count});handled=true}
+ if(opponentMill){const count=Number(opponentMill[1]);if(!onlinePlayerId){for(let i=0;i<count&&opp.deck.length;i++)opp.discard.push(opp.deck.shift())}broadcastEffectDelta({target:"opponentMill",count});handled=true}
  const ownMill=s.match(/自分のデッキの上(\d+)枚を捨てる/);
  if(ownMill){for(let i=0;i<Number(ownMill[1])&&own.deck.length;i++)own.discard.push(own.deck.shift());handled=true}
  if(/自分のフィールドカードを破壊|自分のフィールドを破壊/.test(s)&&own.field.length){moveToDiscard(p,own.field.shift(),"効果");handled=true}
