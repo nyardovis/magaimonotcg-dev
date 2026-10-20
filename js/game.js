@@ -399,6 +399,7 @@ function applyEffectDelta(message){
  if(message.target==="ownLife"||message.target==="opponentLife"){state.players[targetPlayer].life+=Number(message.delta)||0;checkLifeWinner(targetPlayer);render();return}
  if(message.target==="opponentMonsterDamage"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.damage=(c.damage||0)+(Number(message.delta)||0);checkMonsterDestruction(targetPlayer);render();return}}
  if(message.target==="opponentMonsterTap"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.tapped=true;render();return}}
+ if(message.target==="opponentMill"){const x=state.players[targetPlayer];for(let i=0;i<Math.max(0,Number(message.count)||0)&&x.deck.length;i++)x.discard.push(x.deck.shift());render();return}
  if(message.target==="opponentMonsterDestroy"){const x=state.players[targetPlayer],c=x.monsters.find(m=>m.id===message.cardId);if(c){x.monsters=x.monsters.filter(m=>m.id!==c.id);moveToDiscard(targetPlayer,c,"効果による破壊");resolveCardTrigger(c,targetPlayer,"destroy");render()}}
 }
 function checkLifeWinner(p){if(state.players[p].life<=0){const winner=p===1?2:1;state.gameOver={winner,reason:"life_zero"};log(state.players[p].name+"のライフが0以下になったため、"+state.players[winner].name+"の勝利です")}}
@@ -441,6 +442,15 @@ function resolveCardTrigger(card,p,trigger){
 }
 function resolveEffectText(text,p,sourceCard){
  const own=state.players[p],opp=state.players[p===1?2:1],s=String(text||"");let handled=false;
+ if(s.includes("なら")){
+  let known=false,met=true;
+  if(s.includes("自分のモンスターが1体場にいるなら")){known=true;met=met&&own.monsters.length>0}
+  for(const m of s.matchAll(/自分の(\d+)コスト以上の\[([^\]]+)\]が場にいるなら/g)){known=true;met=met&&own.monsters.some(c=>cardCost(c)>=Number(m[1])&&String(cardDefinition(c)?.types||"").includes(m[2]))}
+  for(const m of s.matchAll(/自分のエネルギーが(\d+)枚以上場にあるなら/g)){known=true;met=met&&own.energy.length>=Number(m[1])}
+  for(const m of s.matchAll(/相手の捨て札が(\d+)枚以上あるなら/g)){known=true;met=met&&opp.discard.length>=Number(m[1])}
+  if(!known){log("未対応の条件付き効果（手動で処理してください）: "+s.slice(0,90));return}
+  if(!met){log("効果の条件を満たしていません");return}
+ }
  for(const m of s.matchAll(/自分は\s*(\d+)枚引く/g)){drawEffectCards(p,Number(m[1]));handled=true}
  for(const m of s.matchAll(/相手に\s*(\d+)ダメージ/g)){opp.life-=Number(m[1]);broadcastEffectDelta({target:"opponentLife",delta:-Number(m[1])});checkLifeWinner(p===1?2:1);handled=true;log(opp.name+"に"+m[1]+"ダメージ")}
  for(const m of s.matchAll(/自分を\s*(\d+)回復/g)){own.life+=Number(m[1]);broadcastEffectDelta({target:"ownLife",delta:Number(m[1])});handled=true;log(own.name+"は"+m[1]+"回復")}
@@ -452,6 +462,12 @@ function resolveEffectText(text,p,sourceCard){
  if(/相手のモンスター1体を破壊|相手のモンスター1体までを破壊/.test(s)){const target=opp.monsters[0];if(target){opp.monsters=opp.monsters.filter(m=>m.id!==target.id);moveToDiscard(p===1?2:1,target,"効果による破壊");broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});handled=true}}
  const search=s.match(/自分のデッキから(?:(\d+)コスト以下の)?(?:\[([^\]]+)\]の)?(モンスター|魔法|罠|フィールド|エネルギー)?(\d+)枚までを手札に加える/);
  if(search){const max=Number(search[4]),costLimit=search[1]===undefined?Infinity:Number(search[1]),type=search[3],element=search[2];for(let i=0;i<max;i++){const idx=own.deck.findIndex(c=>{const d=cardDefinition(c);if(!d||cardCost(c)>costLimit)return false;if(type&&!String(d.tags||"").includes(({モンスター:"#モンスターカード",魔法:"#魔法カード",罠:"#罠カード",フィールド:"#フィールドカード",エネルギー:"#エネルギーカード"})[type]))return false;if(element&&!String(d.types||"").includes(element))return false;return true});if(idx<0||own.hand.length>=MAX.hand)break;own.hand.push(own.deck.splice(idx,1)[0]);handled=true}if(handled)log(own.name+"は効果で山札からカードを手札に加えました")}
+ const namedSearch=s.match(/自分の(デッキ|捨て札)から「([^」]+)」(\d+)枚までを手札に加える/);
+ if(namedSearch){const source=namedSearch[1]==="デッキ"?own.deck:own.discard;for(let i=0;i<Number(namedSearch[3]);i++){const idx=source.findIndex(c=>c.name===namedSearch[2]);if(idx<0||own.hand.length>=MAX.hand)break;own.hand.push(source.splice(idx,1)[0]);handled=true}}
+ const opponentMill=s.match(/相手のデッキの上(\d+)枚を捨てる/);
+ if(opponentMill){const count=Number(opponentMill[1]);for(let i=0;i<count&&opp.deck.length;i++){opp.discard.push(opp.deck.shift())}broadcastEffectDelta({target:"opponentMill",count});handled=true}
+ const ownMill=s.match(/自分のデッキの上(\d+)枚を捨てる/);
+ if(ownMill){for(let i=0;i<Number(ownMill[1])&&own.deck.length;i++)own.discard.push(own.deck.shift());handled=true}
  if(/自分のフィールドカードを破壊|自分のフィールドを破壊/.test(s)&&own.field.length){moveToDiscard(p,own.field.shift(),"効果");handled=true}
  if(!handled)log("未対応の効果（手動で処理してください）: "+s.slice(0,90));
 }
@@ -463,7 +479,9 @@ function resolveTurnTriggers(p,when){
 }
 function playCardFromHand(cardId){
  if(state.phase!=="playing"||state.pendingDiscardPlayer!==null)return;const x=state.players[1],idx=x.hand.findIndex(c=>c.id===cardId);if(idx<0)return;
- const card=x.hand[idx],kind=cardKind(card),cost=cardCost(card);
+ const card=x.hand[idx],kind=cardKind(card),cost=cardCost(card),effect=String(cardDefinition(card)?.effect_text||"");
+ const requiredElement=effect.match(/自分の\[([^\]]+)\]のエネルギーが場に無い時使用できず場に出せない/);
+ if(requiredElement&&!x.energy.some(e=>String(cardDefinition(e)?.types||"").includes(requiredElement[1])))return log("条件を満たしていないため「"+card.name+"」は使用できません");
  if(kind==="unknown")return log("カード種別を判定できないため使用できません: "+card.name);
  if(kind==="monster"&&x.monsters.length>=MAX.monsters)return log("モンスターゾーンが満杯です");
  if(kind==="energy"&&x.energy.length>=MAX.energy)return log("エネルギーゾーンが満杯です");
