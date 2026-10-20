@@ -328,7 +328,8 @@ function selection(){
   if(s.z==="monsters"){destinations.splice(2,1);destinations.splice(3,1)}
   for(const[z,label]of destinations)if(z!==s.z&&!(s.z==="monsters"&&z==="facedown"))add(label,()=>move(z));
   if(s.z==="facedown"){const spacer=document.createElement("div");spacer.style.height="12px";op.appendChild(spacer);add(c.faceUp===false?"表向きにする":"裏向きにする",()=>{c.faceUp=c.faceUp===false;c.revealed=false;state.selected={p:s.p,z:s.z,id:c.id};render()})}
-  if(s.z==="hand"){const spacer=document.createElement("div");spacer.style.height="12px";op.appendChild(spacer);if(state.phase==="playing"&&s.p===1)add("このカードを使用 / セット",()=>playCardFromHand(c.id));if(c.revealed)add("公開をやめる",()=>{c.revealed=false;state.selected={p:s.p,z:s.z,id:c.id};render()});else add("相手に公開する",()=>{c.revealed=true;c.faceUp=true;state.selected={p:s.p,z:s.z,id:c.id};render()});add("手札を全て公開",()=>{state.players[1].hand.forEach(card=>{card.revealed=true;card.faceUp=true});state.selected={p:s.p,z:s.z,id:c.id};render();log("手札を全て公開しました")})}
+  if(["monsters","energy","field"].includes(s.z)&&state.phase==="playing"){CardEffectEngine.activatedAbilities(cardDefinition(c)?.effect_text||"").forEach((ability,index)=>add("能力を使用（コスト"+ability.cost+"）",()=>activateCardAbility(c.id,index)))}
+   if(s.z==="hand"){const spacer=document.createElement("div");spacer.style.height="12px";op.appendChild(spacer);if(state.phase==="playing"&&s.p===1)add("このカードを使用 / セット",()=>playCardFromHand(c.id));if(c.revealed)add("公開をやめる",()=>{c.revealed=false;state.selected={p:s.p,z:s.z,id:c.id};render()});else add("相手に公開する",()=>{c.revealed=true;c.faceUp=true;state.selected={p:s.p,z:s.z,id:c.id};render()});add("手札を全て公開",()=>{state.players[1].hand.forEach(card=>{card.revealed=true;card.faceUp=true});state.selected={p:s.p,z:s.z,id:c.id};render();log("手札を全て公開しました")})}
 }
 function openMonsterAdjust(c){const modal=document.querySelector("#monsterAdjustModal"),input=document.querySelector("#monsterAdjustInput");modal.hidden=false;input.value="";input.focus();const close=()=>{modal.hidden=true};const apply=(action)=>{const raw=input.value.trim();if(!raw){close();return}const n=Number(raw);if(!Number.isInteger(n)){log("ダメージ／回復の変更をキャンセルしました");close();return}const amount=Math.abs(n);if(action==="cancel"){close();return}if(action==="damage")c.damage+=amount;if(action==="heal")c.damage=Math.max(0,c.damage-amount);if(action==="change")c.modification=amount+c.damage;checkMonsterDestruction(1);state.selected={p:1,z:"monsters",id:c.id};render();close()};modal.querySelectorAll("[data-monster-action]").forEach(b=>b.onclick=()=>apply(b.dataset.monsterAction));input.onkeydown=ev=>{if(ev.key!=="Enter")return;ev.preventDefault();const raw=input.value.trim();if(!raw)return;const n=Number(raw);if(!Number.isInteger(n)){log("ダメージ／回復の変更をキャンセルしました");close();return}apply(n>0&&raw.startsWith("+")?"heal":"damage")}}
 function openMonsterStatusAdjust(c){const modal=document.querySelector("#monsterStatusModal"),input=document.querySelector("#monsterStatusInput");modal.hidden=false;input.value="";input.focus();const close=()=>{modal.hidden=true};const apply=(action)=>{const raw=input.value.trim();if(!raw){close();return}const n=Number(raw);if(!Number.isInteger(n)){log("ステータス修正の変更をキャンセルしました");close();return}const amount=Math.abs(n);if(action==="cancel"){close();return}if(action==="increase")c.modification+=amount;if(action==="decrease")c.modification-=amount;if(action==="change")c.modification=amount+c.damage;checkMonsterDestruction(1);state.selected={p:1,z:"monsters",id:c.id};render();close()};modal.querySelectorAll("[data-monster-status-action]").forEach(b=>b.onclick=()=>apply(b.dataset.monsterStatusAction));input.onkeydown=ev=>{if(ev.key!=="Enter")return;ev.preventDefault();const raw=input.value.trim();if(!raw)return;const n=Number(raw);if(!Number.isInteger(n)){log("ステータス修正の変更をキャンセルしました");close();return}apply(n>0&&raw.startsWith("+")?"increase":"decrease")}}
@@ -433,16 +434,27 @@ function finishMulligan(){
 }
 function useEnergyCost(p,cost){const x=state.players[p],available=Number(x.energyPool)||0;if(cost>available){log("使用可能エネルギーが不足しています（必要："+cost+"、使用可能："+available+"）");return false}x.energyPool=available-cost;if(p===1)broadcastEnergyPool();return true}
 function moveToDiscard(p,c,reason=""){const x=state.players[p];c.tapped=false;c.faceUp=true;c.revealed=false;c.damage=0;c.modification=0;c.counters=0;x.discard.push(c);if(reason)log("「"+c.name+"」を捨て札に置きました（"+reason+"）")}
-function checkMonsterDestruction(p,triggerEffects=true){const x=state.players[p];for(const m of [...x.monsters]){const base=Number(m.power)||Number(cardDefinition(m)?.power)||0;if(base+(Number(m.modification)||0)-(Number(m.damage)||0)<=0){x.monsters=x.monsters.filter(v=>v.id!==m.id);moveToDiscard(p,m,"HPが0以下");if(triggerEffects)resolveCardTrigger(m,p,"destroy");log("「"+m.name+"」はHPが0以下になり破壊されました")}}}
+function checkMonsterDestruction(p,triggerEffects=true){const x=state.players[p];for(const m of [...x.monsters]){const base=Number(m.power)||Number(cardDefinition(m)?.power)||0;if(base+(Number(m.modification)||0)-(Number(m.damage)||0)<=0){x.monsters=x.monsters.filter(v=>v.id!==m.id);moveToDiscard(p,m,"HPが0以下");if(triggerEffects&&(!onlinePlayerId||p===1))resolveCardTrigger(m,p,"destroy");log("「"+m.name+"」はHPが0以下になり破壊されました")}}}
 function drawEffectCards(p,n){const x=state.players[p];for(let i=0;i<Math.max(0,Math.floor(n));i++){if(!x.deck.length){const winner=p===1?2:1;state.gameOver={winner,reason:"deck_empty"};log(x.name+"は山札が0枚の状態でドローしようとしたため、"+state.players[winner].name+"の勝利です");break}if(x.hand.length>=MAX.hand){log(x.name+"の手札上限のため、追加ドローを止めました");break}x.hand.push(x.deck.shift())}}
 function resolveCardTrigger(card,p,trigger){
- const data=cardDefinition(card);if(!data||!data.effect_text)return;const text=String(data.effect_text);
- const triggers={enter:"場に出た時",start:"自分のターン開始時",end:"自分のターン終了時",opponentStart:"相手のターン開始時",opponentEnd:"相手のターン終了時",destroy:"破壊時",attack:"攻撃時"};
- if(trigger!=="spell"&&trigger!=="trap"&&!text.includes(triggers[trigger]||"__never__"))return;
- const parts=text.split("。");
- const segment=trigger==="spell"?parts.filter(part=>!/^\s*\(\d+\)/.test(part)).join("。"):trigger==="trap"?parts.filter(part=>part.includes(triggers[trigger]||"__never__")).join("。"):parts.filter(part=>part.includes(triggers[trigger]||"__never__")).join("。");
- if(trigger==="spell"&&parts.some(part=>/^\s*\(\d+\)/.test(part)))log("追加エネルギーコスト付きの能力は、能力ごとの使用操作を追加するまで自動処理しません");
- if(segment)resolveEffectText(segment,p,card);
+  const data=cardDefinition(card);
+  if(!data||!data.effect_text||!window.CardEffectEngine)return;
+  const text=String(data.effect_text);
+  const abilities=trigger==="spell"?CardEffectEngine.immediateAbilities(text):CardEffectEngine.forTrigger(text,trigger);
+  abilities.forEach(ability=>resolveEffectText(ability.body,p,card));
+}
+function activateCardAbility(cardId,abilityIndex){
+  if(state.phase!=="playing"||state.pendingDiscardPlayer!==null)return;
+  const selected=state.selected;
+  if(!selected||selected.p!==1||!["monsters","energy","field"].includes(selected.z))return;
+  const card=find(1,selected.z,cardId);if(!card)return;
+  const abilities=CardEffectEngine.activatedAbilities(cardDefinition(card)?.effect_text||"");
+  const ability=abilities[abilityIndex];if(!ability)return;
+  if(!useEnergyCost(1,ability.cost))return;
+  log("「"+card.name+"」の能力を使用（コスト"+ability.cost+"）");
+  resolveEffectText(ability.body,1,card);
+  checkMonsterDestruction(1);
+  state.selected={p:1,z:selected.z,id:card.id};render();
 }
 function resolveEffectText(text,p,sourceCard){
  const own=state.players[p],opp=state.players[p===1?2:1],s=String(text||"");let handled=false;
@@ -497,7 +509,7 @@ function playCardFromHand(cardId){
  if(kind==="monster"&&x.monsters.length>=MAX.monsters)return log("モンスターゾーンが満杯です");
  if(kind==="energy"&&x.energy.length>=MAX.energy)return log("エネルギーゾーンが満杯です");
  if(kind==="trap"&&x.facedown.length>=MAX.facedown)return log("罠ゾーンが満杯です");
- if(["monster","spell","field"].includes(kind)&&!useEnergyCost(1,cost))return;
+ if(["monster","spell","trap","field"].includes(kind)&&!useEnergyCost(1,cost))return;
  x.hand.splice(idx,1);card.faceUp=true;card.revealed=false;
  if(kind==="monster"){card.power=Number(cardDefinition(card)?.power)||card.power||0;card.damage=0;card.modification=0;card.tapped=false;x.monsters.push(card);log(x.name+"は「"+card.name+"」を使用しました（コスト"+cost+"）");resolveCardTrigger(card,1,"enter")}
  else if(kind==="energy"){card.tapped=String(cardDefinition(card)?.effect_text||"").includes("タップして場に出る");x.energy.push(card);log(x.name+"は「"+card.name+"」をエネルギーに置きました");resolveCardTrigger(card,1,"enter")}
