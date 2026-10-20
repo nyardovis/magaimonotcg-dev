@@ -20,11 +20,11 @@ function sendPublicState(){
 }
 function applyPublicState(playerId,publicState){
   if(!onlinePlayerId||playerId===onlinePlayerId||!publicState)return;
-  const opponentId=onlinePlayerId==="player1"?"player2":"player1";
-  if(playerId!==opponentId)return;
-  const x=state.players[2];
-  const hadOpponentPublicState=hasReceivedOpponentPublicState;
+  const opponentId=onlinePlayerId==="player1"?"player2":"player1";if(playerId!==opponentId)return;
+  const x=state.players[2],hadOpponentPublicState=hasReceivedOpponentPublicState;
   const oldOpponentCardIds=new Set([...(x.monsters||[]),...(x.energy||[]),...(x.field||[]),...(x.discard||[])].map(c=>c.id));
+  const oldOpponentMonsterIds=new Set((x.monsters||[]).map(c=>c.id));
+  const previousOpponentMonsters=(state._previousOpponentMonsters||x.monsters||[]).map(c=>({...c}));
   state.gameOver=publicState.gameOver&&typeof publicState.gameOver==="object"?publicState.gameOver:null;
   x.life=Number.isFinite(publicState.life)?publicState.life:x.life;
   if(state.pendingDiscardPlayer!==1)state.pendingDiscardPlayer=publicState.pendingDiscard===true?2:null;
@@ -32,26 +32,24 @@ function applyPublicState(playerId,publicState){
   const handIds=Array.isArray(publicState.handIds)?publicState.handIds:[];
   x.hand=Array.from({length:handCount},(_,i)=>{const card=newCard("",typeof handIds[i]==="string"?handIds[i]:playerId+"h"+i);card.faceUp=false;return card});
   if(Array.isArray(publicState.revealedHand))publicState.revealedHand.forEach((card,i)=>{if(!card||typeof card.id!=="string")return;const target=x.hand.find(c=>c.id===card.id)||x.hand[i];if(!target)return;target.id=card.id;target.name=typeof card.name==="string"?card.name:"";target.faceUp=true;target.revealed=true});
-  x.deckCounters=Number.isFinite(publicState.deckCounters)?publicState.deckCounters:0;
-  x.deckHorizontal=!!publicState.deckHorizontal;
-  const oldOpponentMonsterIds=new Set((x.monsters||[]).map(c=>c.id));
+  x.deckCounters=Number.isFinite(publicState.deckCounters)?publicState.deckCounters:0;x.deckHorizontal=!!publicState.deckHorizontal;
   x.monsters=Array.isArray(publicState.monsters)?publicState.monsters:[];
-  if(hadOpponentPublicState&&state.phase==="playing"){const entered=x.monsters.find(c=>!oldOpponentMonsterIds.has(c.id));if(entered)resolveTrapTriggers(1,"opponentEnter",entered);for(const oldCard of (state._previousOpponentMonsters||[])){const updated=x.monsters.find(c=>c.id===oldCard.id);if(updated&&(Number(updated.damage)||0)<(Number(oldCard.damage)||0))resolveTrapTriggers(1,"opponentHeal",updated)}state._previousOpponentMonsters=x.monsters.map(c=>({...c}))}else state._previousOpponentMonsters=x.monsters.map(c=>({...c}));
-  hasReceivedOpponentPublicState=true;
   x.energy=Array.isArray(publicState.energy)?publicState.energy:[];
   x.field=Array.isArray(publicState.field)?publicState.field:[];
   x.discard=Array.isArray(publicState.discard)?publicState.discard:[];
-  if(hadOpponentPublicState&&state.phase==="playing"){
-    const newCards=[...x.monsters,...x.energy,...x.field,...x.discard].filter(c=>!oldOpponentCardIds.has(c.id));
-    const newSpell=newCards.find(c=>x.discard.some(d=>d.id===c.id)&&cardKind(c)==="spell");if(newSpell)resolveTrapTriggers(1,"opponentSpell",newSpell);
-    const newOrica=newCards.find(c=>String(cardDefinition(c)?.tags||"").includes("#オリカ"));if(newOrica)resolveTrapTriggers(1,"opponentOricaUse",newOrica);
-  }
   const deckCount=Number.isInteger(publicState.deckCount)&&publicState.deckCount>=0?publicState.deckCount:0;
   x.deck=Array.from({length:deckCount},(_,i)=>newCard("",playerId+"d"+i));
   x.facedown=Array.from({length:Math.max(0,Number(publicState.facedownCount)||0)},(_,i)=>{const card=newCard("",playerId+"f"+i);card.faceUp=false;return card});
   if(Array.isArray(publicState.facedownPublic))publicState.facedownPublic.forEach(card=>{if(!card||typeof card.id!=="string")return;const target=x.facedown.find(c=>c.id===card.id)||x.facedown.find(c=>c.faceUp===false);if(!target)return;target.id=card.id;target.name=typeof card.name==="string"?card.name:"";target.faceUp=true});
+  if(hadOpponentPublicState&&state.phase==="playing"){
+    const entered=x.monsters.find(c=>!oldOpponentMonsterIds.has(c.id));if(entered)resolveTrapTriggers(1,"opponentEnter",entered);
+    for(const oldCard of previousOpponentMonsters){const updated=x.monsters.find(c=>c.id===oldCard.id);if(updated&&(Number(updated.damage)||0)<(Number(oldCard.damage)||0))resolveTrapTriggers(1,"opponentHeal",updated)}
+    const newCards=[...x.monsters,...x.energy,...x.field,...x.discard].filter(c=>!oldOpponentCardIds.has(c.id));
+    const newSpell=newCards.find(c=>x.discard.some(d=>d.id===c.id)&&cardKind(c)==="spell");if(newSpell)resolveTrapTriggers(1,"opponentSpell",newSpell);
+    const newOrica=newCards.find(c=>String(cardDefinition(c)?.tags||"").includes("#オリカ"));if(newOrica)resolveTrapTriggers(1,"opponentOricaUse",newOrica);
+  }
+  state._previousOpponentMonsters=x.monsters.map(c=>({...c}));hasReceivedOpponentPublicState=true;
 }
-
 function applyOnlinePlayers(players){
   if(!onlinePlayerId)return;
   if(players){
