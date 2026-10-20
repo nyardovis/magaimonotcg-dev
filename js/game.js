@@ -123,6 +123,7 @@ function connectGameServer(){
           applyingPublicState=true;
           render();
           applyingPublicState=false;
+          sendPublicState();
         }
         else if(message.type==="card_move"){
           applyRemoteMove(message.playerId,message.zone,message.dest,message.cardId);
