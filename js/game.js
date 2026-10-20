@@ -106,7 +106,7 @@ function connectGameServer(){
           log("オンラインルームに参加しました（"+message.playerId+"）");
         }
         else if(message.type==="operation"&&message.action==="mulligan_update"){
-          if(message.playerId!==onlinePlayerId){state.mulligan[2].count=Number.isInteger(message.count)?message.count:0;state.mulligan[2].done=message.done===true;if(state.mulligan[1].done&&state.mulligan[2].done)state.phase="playing";render();}
+          if(message.playerId!==onlinePlayerId){state.mulligan[2].count=Number.isInteger(message.count)?message.count:0;state.mulligan[2].done=message.done===true;if(state.mulligan[1].done&&state.mulligan[2].done&&state.phase!=="playing"){state.phase="playing";if(state.turnPlayer===1)startTurn(1);else render()}else render();}
         }
         else if(message.type==="operation"&&message.action==="energy_pool"){
           if(message.playerId!==onlinePlayerId){state.players[2].energyPool=Number.isFinite(message.value)?message.value:0;render();}
@@ -413,7 +413,7 @@ function finishMulligan(){
  if(state.phase!=="mulligan"||state.mulligan[1].done)return;state.mulligan[1].done=true;
  if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"mulligan_update",count:state.mulligan[1].count,done:true}));
  if(!onlinePlayerId)state.mulligan[2].done=true;
- if(state.mulligan[2].done){state.phase="playing";log("両プレイヤーのマリガンが終了。ゲーム開始")}
+ if(state.mulligan[2].done){state.phase="playing";log("両プレイヤーのマリガンが終了。ゲーム開始");if(state.turnPlayer===1){startTurn(1);return}}
  render();
 }
 function useEnergyCost(p,cost){const x=state.players[p],available=Number(x.energyPool)||0;if(cost>available){log("使用可能エネルギーが不足しています（必要："+cost+"、使用可能："+available+"）");return false}x.energyPool=available-cost;if(p===1)broadcastEnergyPool();return true}
