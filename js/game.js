@@ -166,7 +166,7 @@ const CARD_NAMES_URL="all_card_names.txt";
 const CARD_IMAGE_BASE="https://raw.githubusercontent.com/Omezi42/AnokoroImageFolder/main/images/captured_cards/";
 const CROPPED_CARD_IMAGE_BASE="https://raw.githubusercontent.com/Omezi42/AnokoroImageFolder/main/images/cropped_cards/";
 
-const state={turnPlayer:1,selected:null,deckInspectId:null,discardInspectId:null,discardInspectPlayer:1,pendingDiscardPlayer:null,gameOver:null,players:{},savedDeck:[],deckSaveTimer:null,deckLoadTimer:null,phase:"mulligan",mulligan:{1:{count:0,done:false},2:{count:0,done:false}}};
+const state={turnPlayer:1,selected:null,deckInspectId:null,discardInspectId:null,discardInspectPlayer:1,pendingDiscardPlayer:null,pendingDiscardReason:null,pendingDrawCount:0,gameOver:null,players:{},savedDeck:[],deckSaveTimer:null,deckLoadTimer:null,phase:"mulligan",mulligan:{1:{count:0,done:false},2:{count:0,done:false}}};
 let cardNames=[];
 let cardDatabase=[];
 let cardDataByName=new Map();
@@ -176,7 +176,7 @@ function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random
 function newCard(name,id){const data=cardDataByName.get(name)||null;return{id,name,faceUp:true,revealed:false,tapped:false,counters:0,damage:0,modification:0,power:Number.isFinite(data?.power)?data.power:0,cardDataId:data?.id||null};}
 function saveLocalGameState(){
   try{
-    localStorage.setItem("originalCardGameLocalStateDev",JSON.stringify({room:currentRoom||new URLSearchParams(location.search).get("room")||"",player:state.players[1],turnPlayer:state.turnPlayer,pendingDiscardPlayer:state.pendingDiscardPlayer,gameOver:state.gameOver,phase:state.phase,mulligan:state.mulligan}));
+    localStorage.setItem("originalCardGameLocalStateDev",JSON.stringify({room:currentRoom||new URLSearchParams(location.search).get("room")||"",player:state.players[1],turnPlayer:state.turnPlayer,pendingDiscardPlayer:state.pendingDiscardPlayer,pendingDiscardReason:state.pendingDiscardReason,pendingDrawCount:state.pendingDrawCount,gameOver:state.gameOver,phase:state.phase,mulligan:state.mulligan}));
   }catch(e){}
 }
 function loadLocalGameState(){
@@ -193,6 +193,8 @@ function loadLocalGameState(){
     if(saved.mulligan&&saved.mulligan[1]&&saved.mulligan[2])state.mulligan=saved.mulligan;
     else if(state.phase==="playing")state.mulligan={1:{count:0,done:true},2:{count:0,done:true}};
     state.pendingDiscardPlayer=saved.pendingDiscardPlayer===1?1:null;
+     state.pendingDiscardReason=typeof saved.pendingDiscardReason==="string"?saved.pendingDiscardReason:null;
+     state.pendingDrawCount=Number.isInteger(saved.pendingDrawCount)&&saved.pendingDrawCount>0?saved.pendingDrawCount:0;
     state.gameOver=saved.gameOver&&typeof saved.gameOver==="object"?saved.gameOver:null;
     return true;
   }catch(e){return false}
@@ -394,10 +396,10 @@ function move(dest){
   render();
 }
 
-function drawCards(n,p=1){const x=state.players[p];if(x.hand.length+n>MAX.hand)return log("手札の上限のためドローをキャンセル");if(x.deck.length===0){const winner=p===1?2:1;state.gameOver={winner,reason:"deck_empty"};log(x.name+"は山札が0枚の状態でドローしようとしたため、"+state.players[winner].name+"の勝利です");return}if(x.deck.length<n)return log("山札が足りないためドローをキャンセル");for(let i=0;i<n;i++)x.hand.push(x.deck.shift());state.selected=null;render()}
+function drawCards(n,p=1){if(!Number.isInteger(n)||n<=0)return log("ドロー枚数は1以上の整数にしてください");drawEffectCards(p,n);state.selected=null;render()}
 function ensureDiscardWarning(){if(document.querySelector("#discardWarning"))return;const e=document.createElement("div");e.id="discardWarning";e.hidden=true;e.style.cssText="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9999;background:#8b0000;color:#fff;padding:10px 18px;border:2px solid #f33;border-radius:6px;font-weight:700;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.45);";document.body.appendChild(e)}
-function startTurn(p,showLog=true){if(state.phase!=="playing")return;const x=state.players[p];x.energyPool=0;if(p===1)broadcastEnergyPool();x.monsters.forEach(m=>m.tapped=false);x.energy.forEach(e=>e.tapped=false);if(x.deck.length===0){const winner=p===1?2:1;state.gameOver={winner,reason:"deck_empty"};render();log(x.name+"はターン開始時に山札が0枚だったため、"+state.players[winner].name+"の勝利です");return}if(x.deck.length&&x.hand.length>=MAX.hand){state.pendingDiscardPlayer=p;state.selected=null;render();log(x.name+"はドロー前に手札を1枚捨てる必要があります。手札のカードをクリックしてください");return}if(x.deck.length&&x.hand.length<MAX.hand)drawCards(1,p);resolveTurnTriggers(p,"start");render();if(showLog)log(x.name+" のターン開始")}
-function completePendingDiscard(p,id){if(p!==1)return false;if(state.pendingDiscardPlayer!==p)return false;const x=state.players[p],i=x.hand.findIndex(c=>c.id===id);if(i<0)return true;const discarded=x.hand.splice(i,1)[0];x.discard.push(discarded);state.pendingDiscardPlayer=null;state.selected=null;log(x.name+"はドロー前に「"+discarded.name+"」を捨てました");if(x.deck.length&&x.hand.length<MAX.hand)drawCards(1,p);resolveTurnTriggers(p,"start");render();log(x.name+" のターン開始");return true}
+function startTurn(p,showLog=true){if(state.phase!=="playing")return;const x=state.players[p];x.energyPool=0;if(p===1)broadcastEnergyPool();x.monsters.forEach(m=>m.tapped=false);x.energy.forEach(e=>e.tapped=false);if(x.deck.length===0){const winner=p===1?2:1;state.gameOver={winner,reason:"deck_empty"};render();log(x.name+"はターン開始時に山札が0枚だったため、"+state.players[winner].name+"の勝利です");return}if(x.deck.length&&x.hand.length>=MAX.hand){state.pendingDiscardPlayer=p;state.pendingDiscardReason="turn_start";state.pendingDrawCount=1;state.selected=null;render();log(x.name+"はドロー前に手札を1枚捨てる必要があります。手札のカードをクリックしてください");return}if(x.deck.length&&x.hand.length<MAX.hand)drawCards(1,p);resolveTurnTriggers(p,"start");render();if(showLog)log(x.name+" のターン開始")}
+function completePendingDiscard(p,id){if(p!==1)return false;if(state.pendingDiscardPlayer!==p)return false;const x=state.players[p],i=x.hand.findIndex(c=>c.id===id);if(i<0)return true;const discarded=x.hand.splice(i,1)[0],reason=state.pendingDiscardReason,remaining=state.pendingDrawCount;x.discard.push(discarded);state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.selected=null;log(x.name+"は「"+discarded.name+"」を捨てました");if(reason==="effect_draw"){if(remaining>0)drawEffectCards(p,remaining);render();return true}if(x.deck.length&&x.hand.length<MAX.hand)drawCards(1,p);resolveTurnTriggers(p,"start");render();log(x.name+" のターン開始");return true}
 function endTurn(){const localPlayer=1;if(state.turnPlayer!==localPlayer||state.pendingDiscardPlayer!==null||state.phase!=="playing")return;if(onlinePlayerId!==null){if(!gameSocket||gameSocket.readyState!==WebSocket.OPEN)return log("オンラインサーバーに接続されていません");resolveTurnTriggers(1,"end");state.players[1].monsters.forEach(m=>{m.damage=0});state.players[1].energyPool=0;broadcastEnergyPool();render();gameSocket.send(JSON.stringify({type:"operation",action:"end_turn"}));return}const p=state.turnPlayer,x=state.players[p];resolveTurnTriggers(p,"end");x.monsters.forEach(m=>{m.damage=0});x.energyPool=0;state.turnPlayer=p===1?2:1;startTurn(state.turnPlayer)}
 
 function cardDefinition(cardOrName){if(typeof cardOrName==="string")return cardDataByName.get(cardOrName)||null;const id=cardOrName?.cardDataId;if(id){const exact=cardDatabase.find(c=>c.id===id);if(exact)return exact}return cardDataByName.get(cardOrName?.name)||null}
@@ -444,7 +446,7 @@ function finishMulligan(){
 function useEnergyCost(p,cost){const x=state.players[p],available=Number(x.energyPool)||0;if(cost>available){log("使用可能エネルギーが不足しています（必要："+cost+"、使用可能："+available+"）");return false}x.energyPool=available-cost;if(p===1)broadcastEnergyPool();return true}
 function moveToDiscard(p,c,reason=""){const x=state.players[p];c.tapped=false;c.faceUp=true;c.revealed=false;c.damage=0;c.modification=0;c.counters=0;x.discard.push(c);if(reason)log("「"+c.name+"」を捨て札に置きました（"+reason+"）")}
 function checkMonsterDestruction(p,triggerEffects=true){const x=state.players[p];for(const m of [...x.monsters]){const base=Number(m.power)||Number(cardDefinition(m)?.power)||0;if(base+(Number(m.modification)||0)-(Number(m.damage)||0)<=0){x.monsters=x.monsters.filter(v=>v.id!==m.id);moveToDiscard(p,m,"HPが0以下");if(triggerEffects){if(!onlinePlayerId||p===1)resolveCardTrigger(m,p,"destroy");if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentDestroy");else if(p===2)resolveTrapTriggers(1,"opponentDestroy")}log("「"+m.name+"」はHPが0以下になり破壊されました")}}}
-function drawEffectCards(p,n){const x=state.players[p];for(let i=0;i<Math.max(0,Math.floor(n));i++){if(!x.deck.length){const winner=p===1?2:1;state.gameOver={winner,reason:"deck_empty"};log(x.name+"は山札が0枚の状態でドローしようとしたため、"+state.players[winner].name+"の勝利です");break}if(x.hand.length>=MAX.hand){log(x.name+"の手札上限のため、追加ドローを止めました");break}x.hand.push(x.deck.shift())}}
+function drawEffectCards(p,n){const x=state.players[p],total=Math.max(0,Math.floor(n));for(let i=0;i<total;i++){if(!x.deck.length){const winner=p===1?2:1;state.gameOver={winner,reason:"deck_empty"};log(x.name+"は山札が0枚の状態でドローしようとしたため、"+state.players[winner].name+"の勝利です");break}if(x.hand.length>=MAX.hand){if(p===1){state.pendingDiscardPlayer=1;state.pendingDiscardReason="effect_draw";state.pendingDrawCount=total-i;state.selected=null;render();log(x.name+"は効果のドロー前に手札を1枚捨てる必要があります");return}const discarded=x.hand.shift();moveToDiscard(p,discarded,"手札上限による自動破棄")}x.hand.push(x.deck.shift())}}
 function resolveCardTrigger(card,p,trigger){
   const data=cardDefinition(card);
   if(!data||!data.effect_text||!window.CardEffectEngine)return;
@@ -619,7 +621,7 @@ function setup(){
       log("名前を変更しました");
     }
   };
-  document.querySelector("#reset").onclick=()=>{if(confirm("自分の盤面をリセットしますか？")){const n=state.players[1].name;const deckList=(state.savedDeck||[]).slice();const p=newPlayer(n,"p1");const pool=shuffle((deckList.length?deckList:p.deckList).slice());p.deckList=pool.slice();p.hand=pool.slice(0,7).map((name,i)=>newCard(name,"p1h"+i));p.deck=pool.slice(7).map((name,i)=>newCard(name,"p1d"+i));state.players[1]=p;state.selected=null;state.pendingDiscardPlayer=null;state.gameOver=null;state.phase="mulligan";state.mulligan={1:{count:0,done:false},2:{count:0,done:false}};lastPublicState=null;render();log("自分の盤面をリセットし、シャッフルしてマリガンを開始しました")}};
+  document.querySelector("#reset").onclick=()=>{if(confirm("自分の盤面をリセットしますか？")){const n=state.players[1].name;const deckList=(state.savedDeck||[]).slice();const p=newPlayer(n,"p1");const pool=shuffle((deckList.length?deckList:p.deckList).slice());p.deckList=pool.slice();p.hand=pool.slice(0,7).map((name,i)=>newCard(name,"p1h"+i));p.deck=pool.slice(7).map((name,i)=>newCard(name,"p1d"+i));state.players[1]=p;state.selected=null;state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.gameOver=null;state.phase="mulligan";state.mulligan={1:{count:0,done:false},2:{count:0,done:false}};lastPublicState=null;render();log("自分の盤面をリセットし、シャッフルしてマリガンを開始しました")}};
 }
 async function start(){
   ensureDiscardWarning();
