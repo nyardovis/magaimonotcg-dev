@@ -521,7 +521,11 @@ function resolveSummonEffects(text,p,sourceCard){
     if(index>=0){selectedSource=source;selectedIndex=index;break}
    }
    if(!selectedSource)break;
-   const card=selectedSource.splice(selectedIndex,1)[0],kind=cardKind(card);
+   const candidate=selectedSource[selectedIndex],candidateKind=cardKind(candidate);
+   if(candidateKind==="monster"&&own.monsters.length>=MAX.monsters)break;
+   if(candidateKind==="energy"&&own.energy.length>=MAX.energy)break;
+   if(candidateKind==="trap"&&own.facedown.length>=MAX.facedown)break;
+   const card=selectedSource.splice(selectedIndex,1)[0],kind=candidateKind;
    card.faceUp=kind!=="trap";card.revealed=false;card.tapped=false;
    if(kind==="monster"){
     card.power=Number(cardDefinition(card)?.power)||card.power||0;card.damage=0;card.modification=0;own.monsters.push(card);
