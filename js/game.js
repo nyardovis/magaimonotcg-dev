@@ -417,7 +417,10 @@ function broadcastEnergyPool(){if(onlinePlayerId&&gameSocket?.readyState===WebSo
 function broadcastEffectDelta(delta){if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",...delta}))}
 function applyEffectDelta(message){
  const actorIsLocal=message.playerId===onlinePlayerId;
- const targetPlayer=message.target==="ownLife"?(actorIsLocal?1:2):(actorIsLocal?2:1);
+ const targetPlayer=message.target==="ownLife"||message.target==="ownEnergyPool"?(actorIsLocal?1:2):(actorIsLocal?2:1);
+ if(message.target==="ownEnergyPool"||message.target==="opponentEnergyPool"){
+  const delta=Number(message.delta)||0;state.players[targetPlayer].energyPool=Math.max(0,(Number(state.players[targetPlayer].energyPool)||0)+delta);render();return;
+ }
  if(message.target==="ownLife"||message.target==="opponentLife"){const delta=Number(message.delta)||0;state.players[targetPlayer].life+=delta;if(targetPlayer===1&&delta<0)resolveTrapTriggers(1,"opponentDamagedMe");if(targetPlayer===2&&delta>0)resolveTrapTriggers(1,"opponentHeal");checkLifeWinner(targetPlayer);render();return}
  if(message.target==="ownLifeSet"){const target=actorIsLocal?1:2;if(Number.isFinite(message.value))state.players[target].life=message.value;render();return}
  if(message.target==="opponentMonsterDamage"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.damage=(c.damage||0)+(Number(message.delta)||0);checkMonsterDestruction(targetPlayer);render();return}}
@@ -560,8 +563,23 @@ function resolveEffectText(text,p,sourceCard,eventCard=null){
   for(const m of s.matchAll(/自分の(\d+)コスト以上の\[([^\]]+)\]が場にいるなら/g)){known=true;met=met&&own.monsters.some(c=>cardCost(c)>=Number(m[1])&&String(cardDefinition(c)?.types||"").includes(m[2]))}
   for(const m of s.matchAll(/自分のエネルギーが(\d+)枚以上場にあるなら/g)){known=true;met=met&&own.energy.length>=Number(m[1])}
   for(const m of s.matchAll(/相手の捨て札が(\d+)枚以上あるなら/g)){known=true;met=met&&opp.discard.length>=Number(m[1])}
+  for(const m of s.matchAll(/自分の捨て札が(\d+)枚以上あるなら/g)){known=true;met=met&&own.discard.length>=Number(m[1])}
+  for(const m of s.matchAll(/自分のマナが(\d+)以上なら/g)){known=true;met=met&&(Number(own.energyPool)||0)>=Number(m[1])}
+  for(const m of s.matchAll(/自分のライフが相手より(\d+)以上低いなら/g)){known=true;met=met&&own.life<=opp.life-Number(m[1])}
+  for(const m of s.matchAll(/自分のモンスターが(\d+)体以上場にいるなら/g)){known=true;met=met&&own.monsters.length>=Number(m[1])}
+  for(const m of s.matchAll(/自分の名前に「([^」]+)」を含むモンスターが場にいるなら/g)){known=true;met=met&&own.monsters.some(c=>String(c.name||"").includes(m[1]))}
   if(!known){log("未対応の条件付き効果（手動で処理してください）: "+s.slice(0,90));return}
   if(!met){log("効果の条件を満たしていません");return}
+ }
+ const manaChanges=[...s.matchAll(/(?:(自分の|相手の|お互いの))?マナ\s*([+-])\s*(\d+)/g)];
+ for(const m of manaChanges){
+  const scope=m[1]||"自分の",delta=(m[2]==="+"?1:-1)*Number(m[3]);
+  const targets=scope==="お互いの"?[p,p===1?2:1]:[scope==="相手の"?(p===1?2:1):p];
+  for(const targetPlayer of targets){
+   const target=state.players[targetPlayer];target.energyPool=Math.max(0,(Number(target.energyPool)||0)+delta);
+   if(onlinePlayerId&&p===1)broadcastEffectDelta({target:targetPlayer===p?"ownEnergyPool":"opponentEnergyPool",delta});
+  }
+  handled=true;log(scope==="お互いの"?"お互いの使用可能エネルギーを"+(delta>=0?"+"+delta:delta)+"変更しました":(scope==="相手の"?opp.name:own.name)+"の使用可能エネルギーを"+(delta>=0?"+"+delta:delta)+"変更しました");
  }
  const effectTypeMap={モンスター:"monster",魔法:"spell",罠:"trap",フィールド:"field",エネルギー:"energy"};
  const discardHand=s.match(/自分の手札から(?:(魔法|モンスター|罠|フィールド|エネルギー)\s*)?(\d+)枚(?:まで)?(?:を)?捨てる/);
