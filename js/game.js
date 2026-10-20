@@ -521,6 +521,8 @@ function resolveEffectText(text,p,sourceCard,eventCard=null){
  for(const m of s.matchAll(/自分は\s*(\d+)枚引く/g)){drawEffectCards(p,Number(m[1]));handled=true}
  for(const m of s.matchAll(/相手に\s*(\d+)ダメージ/g)){opp.life-=Number(m[1]);broadcastEffectDelta({target:"opponentLife",delta:-Number(m[1])});checkLifeWinner(p===1?2:1);if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentDamagedMe");handled=true;log(opp.name+"に"+m[1]+"ダメージ")}
  for(const m of s.matchAll(/自分を\s*(\d+)回復/g)){own.life+=Number(m[1]);broadcastEffectDelta({target:"ownLife",delta:Number(m[1])});if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentHeal");handled=true;log(own.name+"は"+m[1]+"回復")}
+ const allMonstersDamage=s.match(/^モンスター全てに\s*(\d+)ダメージ/);
+ if(allMonstersDamage){const amount=Number(allMonstersDamage[1]);for(const targetPlayer of [1,2]){state.players[targetPlayer].monsters.forEach(mon=>{mon.damage=(mon.damage||0)+amount;if(targetPlayer!==p)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:mon.id,delta:amount})});checkMonsterDestruction(targetPlayer,true)}handled=true}
  for(const m of s.matchAll(/相手のモンスター全てに\s*(\d+)ダメージ/g)){opp.monsters.forEach(mon=>{mon.damage=(mon.damage||0)+Number(m[1]);broadcastEffectDelta({target:"opponentMonsterDamage",cardId:mon.id,delta:Number(m[1])})});checkMonsterDestruction(p===1?2:1,true);handled=true}
  for(const m of s.matchAll(/これを\s*\+(\d+)/g)){if(sourceCard)sourceCard.modification=(sourceCard.modification||0)+Number(m[1]);handled=true}
  const ownBuff=s.match(/自分のモンスター(?:全て|1体|1体まで)を\s*\+(\d+)/);
