@@ -437,7 +437,9 @@ function resolveCardTrigger(card,p,trigger){
  const data=cardDefinition(card);if(!data||!data.effect_text)return;const text=String(data.effect_text);
  const triggers={enter:"場に出た時",start:"自分のターン開始時",end:"自分のターン終了時",opponentStart:"相手のターン開始時",opponentEnd:"相手のターン終了時",destroy:"破壊時",attack:"攻撃時"};
  if(trigger!=="spell"&&trigger!=="trap"&&!text.includes(triggers[trigger]||"__never__"))return;
- const segment=trigger==="spell"||trigger==="trap"?text:text.split("。").filter(part=>part.includes(triggers[trigger]||"__never__")).join("。");
+ const parts=text.split("。");
+ const segment=trigger==="spell"?parts.filter(part=>!/^\s*\(\d+\)/.test(part)).join("。"):trigger==="trap"?parts.filter(part=>part.includes(triggers[trigger]||"__never__")).join("。"):parts.filter(part=>part.includes(triggers[trigger]||"__never__")).join("。");
+ if(trigger==="spell"&&parts.some(part=>/^\s*\(\d+\)/.test(part)))log("追加エネルギーコスト付きの能力は、能力ごとの使用操作を追加するまで自動処理しません");
  if(segment)resolveEffectText(segment,p,card);
 }
 function resolveEffectText(text,p,sourceCard){
@@ -456,6 +458,13 @@ function resolveEffectText(text,p,sourceCard){
  for(const m of s.matchAll(/自分を\s*(\d+)回復/g)){own.life+=Number(m[1]);broadcastEffectDelta({target:"ownLife",delta:Number(m[1])});handled=true;log(own.name+"は"+m[1]+"回復")}
  for(const m of s.matchAll(/相手のモンスター全てに\s*(\d+)ダメージ/g)){opp.monsters.forEach(mon=>{mon.damage=(mon.damage||0)+Number(m[1]);broadcastEffectDelta({target:"opponentMonsterDamage",cardId:mon.id,delta:Number(m[1])})});checkMonsterDestruction(p===1?2:1,false);handled=true}
  for(const m of s.matchAll(/これを\s*\+(\d+)/g)){if(sourceCard)sourceCard.modification=(sourceCard.modification||0)+Number(m[1]);handled=true}
+ const ownBuff=s.match(/自分のモンスター(?:1体|1体まで)を\s*\+(\d+)/);
+ if(ownBuff&&own.monsters[0]){own.monsters[0].modification=(own.monsters[0].modification||0)+Number(ownBuff[1]);handled=true}
+ const counterAdd=s.match(/これにカウンター(\d+)個を乗せる/);
+ if(counterAdd&&sourceCard){sourceCard.counters=(sourceCard.counters||0)+Number(counterAdd[1]);handled=true}
+ if(/これのカウンターを0個にする/.test(s)&&sourceCard){sourceCard.counters=0;handled=true}
+ if(/\(これをタップ\)/.test(s)&&sourceCard){sourceCard.tapped=true;handled=true}
+ if(/相手のモンスター全てをタップ/.test(s)){opp.monsters.forEach(mon=>{mon.tapped=true;broadcastEffectDelta({target:"opponentMonsterTap",cardId:mon.id})});handled=true}
  if(/相手のモンスター(?:1体|1体まで)をタップ/.test(s)){const target=opp.monsters.find(m=>!m.tapped);if(target){target.tapped=true;broadcastEffectDelta({target:"opponentMonsterTap",cardId:target.id});handled=true;log("「"+target.name+"」をタップしました")}}
  const singleDamage=s.match(/(相手のモンスター|自分のモンスター|モンスター)(?:1体|1体まで)に\s*(\d+)ダメージ/);
  if(singleDamage){const targetPlayer=singleDamage[1].startsWith("相手")?(p===1?2:1):singleDamage[1].startsWith("自分")?p:(opp.monsters.length?(p===1?2:1):p);const target=state.players[targetPlayer].monsters[0];if(target){target.damage=(target.damage||0)+Number(singleDamage[2]);if(targetPlayer!==p)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:Number(singleDamage[2])});checkMonsterDestruction(targetPlayer,targetPlayer===p);handled=true}}
