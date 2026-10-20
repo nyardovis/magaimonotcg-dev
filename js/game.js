@@ -293,7 +293,7 @@ function find(p,z,id){return state.players[p][z].find(c=>c.id===id)}
 function select(p,z,id){const c=find(p,z,id);if(!c)return;state.selected={p,z,id};render()}
 function renderCardInfo(card,visible){
  const box=document.querySelector("#cardInfo");if(!box)return;box.innerHTML="";
- if(!visible||card.faceUp===false){box.textContent="裏向きのカード";return}
+ if(!visible||(card.faceUp===false&&state.selected?.p!==1)){box.textContent="裏向きのカード";return}
  const d=cardDefinition(card);if(!d){box.textContent=card.name||"カード情報なし";return}
  const title=document.createElement("div");title.className="card-info-name";title.textContent=d.name||card.name;box.appendChild(title);
  const fields=[["種類",String(d.tags||"").replace(/#/g,"")],["コスト",d.cost===null||d.cost===undefined?"—":String(d.cost)],["タイプ",d.types||"—"],["HP",d.power===null||d.power===undefined?"—":String(d.power)],["効果",d.effect_text||"効果なし"],["フレーバー",d.lore||"—"]];
@@ -301,9 +301,9 @@ function renderCardInfo(card,visible){
 }
 function selection(){
   const pr=document.querySelector("#preview"),op=document.querySelector("#ops");
-  if(!state.selected){pr.innerHTML="カードを選択";op.textContent="カードを選択してください";return}
+  if(!state.selected){pr.innerHTML="カードを選択";op.textContent="カードを選択してください";const info=document.querySelector("#cardInfo");if(info)info.textContent="カードを選択してください";return}
   const s=state.selected;
-  if(s.z==="deck"){pr.textContent="山札";op.innerHTML="";if(s.p!==1){op.innerHTML="";return}add("山札を確認",()=>openDeckViewer());if(state.pendingDiscardPlayer!==null)return;add("1枚引く",()=>drawCards(1));add("好きな枚数を引く",()=>{const n=Number(prompt("引く枚数を入力してください"));if(Number.isInteger(n)&&n>0)drawCards(n)});const deckSpacer=document.createElement("div");deckSpacer.style.height="12px";op.appendChild(deckSpacer);addCounterControls(op,state.players[1],"deckCounters");add("山札を横向きにする",()=>{state.players[1].deckHorizontal=!state.players[1].deckHorizontal;state.selected=null;render()});add("山札をシャッフルする",()=>{shuffle(state.players[1].deck);state.selected=null;render();log("山札をシャッフルしました")});return}
+  if(s.z==="deck"){pr.textContent="山札";const info=document.querySelector("#cardInfo");if(info)info.textContent="山札の内容は「山札を確認」から確認できます";op.innerHTML="";if(s.p!==1){op.innerHTML="";return}add("山札を確認",()=>openDeckViewer());if(state.pendingDiscardPlayer!==null)return;add("1枚引く",()=>drawCards(1));add("好きな枚数を引く",()=>{const n=Number(prompt("引く枚数を入力してください"));if(Number.isInteger(n)&&n>0)drawCards(n)});const deckSpacer=document.createElement("div");deckSpacer.style.height="12px";op.appendChild(deckSpacer);addCounterControls(op,state.players[1],"deckCounters");add("山札を横向きにする",()=>{state.players[1].deckHorizontal=!state.players[1].deckHorizontal;state.selected=null;render()});add("山札をシャッフルする",()=>{shuffle(state.players[1].deck);state.selected=null;render();log("山札をシャッフルしました")});return}
   const c=find(s.p,s.z,s.id);if(!c){state.selected=null;return render()}
   renderCardInfo(c,s.p===1||c.faceUp!==false);
   const pendingLocked=state.pendingDiscardPlayer!==null;
