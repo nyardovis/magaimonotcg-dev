@@ -490,7 +490,7 @@ function resolveSummonEffects(text,p,sourceCard){
   const includeNameMatch=qualifier.match(/名前に「([^」]+)」を含む/);
   const quotedNames=[...qualifier.matchAll(/「([^」]+)」/g)].map(m=>m[1]);
   const excludedNameMatch=qualifier.match(/「([^」]+)」以外/);
-  const exactName=quotedNames.find(name=>!excludedNameMatch||name!==excludedNameMatch[1]&&(!includeNameMatch||name!==includeNameMatch[1]));
+  const exactName=quotedNames.find(name=>(!excludedNameMatch||name!==excludedNameMatch[1])&&(!includeNameMatch||name!==includeNameMatch[1]));
   const includeName=includeNameMatch?.[1]||null;
   const typeMatch=qualifier.match(/\\[([^\\]]+)\\]/);
   const requiredTypes=typeMatch?typeMatch[1].split(/[,、]/).map(v=>v.trim()).filter(Boolean):[];
