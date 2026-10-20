@@ -471,10 +471,19 @@ function resolveEffectText(text,p,sourceCard){
   if(!known){log("未対応の条件付き効果（手動で処理してください）: "+s.slice(0,90));return}
   if(!met){log("効果の条件を満たしていません");return}
  }
+ const effectTypeMap={モンスター:"monster",魔法:"spell",罠:"trap",フィールド:"field",エネルギー:"energy"};
+ const discardHand=s.match(/自分の手札から(?:(魔法|モンスター|罠|フィールド|エネルギー)\s*)?(\d+)枚(?:まで)?(?:を)?捨てる/);
+ if(discardHand){const type=discardHand[1]||null,count=Number(discardHand[2]||1);for(let i=0;i<count;i++){const index=own.hand.findIndex(c=>!type||cardKind(c)===effectTypeMap[type]);if(index<0)break;const discarded=own.hand.splice(index,1)[0];moveToDiscard(p,discarded,"効果による手札の破棄");handled=true}}
+ const revealHand=s.match(/自分の手札から(?:(魔法|モンスター|罠|フィールド|エネルギー)\s*)?1枚を公開する/);
+ if(revealHand){const type=revealHand[1]||null,card=own.hand.find(c=>!type||cardKind(c)===effectTypeMap[type]);if(card){card.revealed=true;card.faceUp=true;handled=true;log(own.name+"は「"+card.name+"」を公開しました")}}
+ const healMonster=s.match(/自分のモンスター(?:全て|1体|1体まで)を\s*(\d+)回復/);
+ if(healMonster){const targets=/全て/.test(s)?own.monsters:[own.monsters.find(c=>(Number(c.damage)||0)>0)].filter(Boolean);targets.forEach(c=>c.damage=Math.max(0,(Number(c.damage)||0)-Number(healMonster[1])));if(targets.length)handled=true}
+ const healSource=s.match(/これを\s*(\d+)回復/);
+ if(healSource&&sourceCard&&own.monsters.some(c=>c.id===sourceCard.id)){sourceCard.damage=Math.max(0,(Number(sourceCard.damage)||0)-Number(healSource[1]));handled=true}
  for(const m of s.matchAll(/自分は\s*(\d+)枚引く/g)){drawEffectCards(p,Number(m[1]));handled=true}
  for(const m of s.matchAll(/相手に\s*(\d+)ダメージ/g)){opp.life-=Number(m[1]);broadcastEffectDelta({target:"opponentLife",delta:-Number(m[1])});checkLifeWinner(p===1?2:1);handled=true;log(opp.name+"に"+m[1]+"ダメージ")}
  for(const m of s.matchAll(/自分を\s*(\d+)回復/g)){own.life+=Number(m[1]);broadcastEffectDelta({target:"ownLife",delta:Number(m[1])});handled=true;log(own.name+"は"+m[1]+"回復")}
- for(const m of s.matchAll(/相手のモンスター全てに\s*(\d+)ダメージ/g)){opp.monsters.forEach(mon=>{mon.damage=(mon.damage||0)+Number(m[1]);broadcastEffectDelta({target:"opponentMonsterDamage",cardId:mon.id,delta:Number(m[1])})});checkMonsterDestruction(p===1?2:1,false);handled=true}
+ for(const m of s.matchAll(/相手のモンスター全てに\s*(\d+)ダメージ/g)){opp.monsters.forEach(mon=>{mon.damage=(mon.damage||0)+Number(m[1]);broadcastEffectDelta({target:"opponentMonsterDamage",cardId:mon.id,delta:Number(m[1])})});checkMonsterDestruction(p===1?2:1,true);handled=true}
  for(const m of s.matchAll(/これを\s*\+(\d+)/g)){if(sourceCard)sourceCard.modification=(sourceCard.modification||0)+Number(m[1]);handled=true}
  const ownBuff=s.match(/自分のモンスター(?:1体|1体まで)を\s*\+(\d+)/);
  if(ownBuff&&own.monsters[0]){own.monsters[0].modification=(own.monsters[0].modification||0)+Number(ownBuff[1]);handled=true}
