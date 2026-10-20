@@ -480,6 +480,73 @@ function activateCardAbility(cardId,abilityIndex){
   checkMonsterDestruction(1);
   state.selected={p:1,z:selected.z,id:card.id};render();
 }
+function resolveSummonEffects(text,p,sourceCard){
+ const own=state.players[p],sourcePattern=/自分の(手札かデッキか捨て札|手札かデッキ|デッキか捨て札|手札か捨て札|手札|デッキ|捨て札)から([\\s\\S]*?)(\\d+)(体|枚)(?:まで)?(?:を場に|を)出す/g;
+ let matched=false;
+ for(const match of String(text||"").matchAll(sourcePattern)){
+  matched=true;
+  const sourceNames=match[1].split("か"),qualifier=match[2]||"",limit=Number(match[3]),unit=match[4];
+  const costMatch=qualifier.match(/(\\d+)コスト以下/),costLimit=costMatch?Number(costMatch[1]):Infinity;
+  const includeNameMatch=qualifier.match(/名前に「([^」]+)」を含む/);
+  const quotedNames=[...qualifier.matchAll(/「([^」]+)」/g)].map(m=>m[1]);
+  const excludedNameMatch=qualifier.match(/「([^」]+)」以外/);
+  const exactName=quotedNames.find(name=>!excludedNameMatch||name!==excludedNameMatch[1]&&(!includeNameMatch||name!==includeNameMatch[1]));
+  const includeName=includeNameMatch?.[1]||null;
+  const typeMatch=qualifier.match(/\\[([^\\]]+)\\]/);
+  const requiredTypes=typeMatch?typeMatch[1].split(/[,、]/).map(v=>v.trim()).filter(Boolean):[];
+  const kindWord=qualifier.match(/(モンスター|エネルギー|魔法|罠|フィールド)/)?.[1]||null;
+  const kindMap={モンスター:"monster",エネルギー:"energy",魔法:"spell",罠:"trap",フィールド:"field"};
+  const requiredKind=kindWord?kindMap[kindWord]:(unit==="体"?"monster":null);
+  const sources=sourceNames.map(name=>name==="手札"?own.hand:name==="デッキ"?own.deck:own.discard);
+  let summoned=0;
+  for(let i=0;i<limit;i++){
+   if(requiredKind==="monster"&&own.monsters.length>=MAX.monsters)break;
+   if(requiredKind==="energy"&&own.energy.length>=MAX.energy)break;
+   if(requiredKind==="trap"&&own.facedown.length>=MAX.facedown)break;
+   let selectedSource=null,selectedIndex=-1;
+   for(const source of sources){
+    const index=source.findIndex(card=>{
+     const data=cardDefinition(card),kind=cardKind(card);
+     if(!data||kind==="unknown"||kind==="spell"&&unit==="体")return false;
+     if(requiredKind&&kind!==requiredKind)return false;
+     if(cardCost(card)>costLimit)return false;
+     const types=String(data.types||"").split(/[,、]/).map(v=>v.trim()).filter(Boolean);
+     if(requiredTypes.some(type=>!types.includes(type)))return false;
+     if(exactName&&card.name!==exactName)return false;
+     if(includeName&&!String(card.name||"").includes(includeName))return false;
+     if(excludedNameMatch&&card.name===excludedNameMatch[1])return false;
+     if(/パワー-100の/.test(qualifier)&&Number(data.power)!==-100)return false;
+     return true;
+    });
+    if(index>=0){selectedSource=source;selectedIndex=index;break}
+   }
+   if(!selectedSource)break;
+   const card=selectedSource.splice(selectedIndex,1)[0],kind=cardKind(card);
+   card.faceUp=kind!=="trap";card.revealed=false;card.tapped=false;
+   if(kind==="monster"){
+    card.power=Number(cardDefinition(card)?.power)||card.power||0;card.damage=0;card.modification=0;own.monsters.push(card);
+    log(own.name+"は効果で「"+card.name+"」を場に出しました");
+    resolveCardTrigger(card,p,"enter");resolveTrapTriggers(p,"ownEnter",card);
+    if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentEnter",card);
+   }else if(kind==="energy"){
+    card.tapped=String(cardDefinition(card)?.effect_text||"").includes("タップして場に出る");own.energy.push(card);
+    log(own.name+"は効果で「"+card.name+"」をエネルギーに置きました");resolveCardTrigger(card,p,"enter");
+   }else if(kind==="field"){
+    if(own.field.length)moveToDiscard(p,own.field.shift(),"効果でフィールドカードを置換");
+    own.field.push(card);log(own.name+"は効果でフィールド「"+card.name+"」を場に出しました");resolveCardTrigger(card,p,"enter");
+   }else if(kind==="spell"){
+    moveToDiscard(p,card,"効果で魔法を使用");resolveCardTrigger(card,p,"spell");
+    if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentSpell",card);
+   }else if(kind==="trap"){
+    own.facedown.push(card);log(own.name+"は効果で罠「"+card.name+"」をセットしました");
+   }
+   summoned++;
+  }
+  if(summoned===0)log("効果で出せるカードがありませんでした");
+ }
+ return matched;
+}
+
 function resolveEffectText(text,p,sourceCard,eventCard=null){
  const own=state.players[p],opp=state.players[p===1?2:1],s=String(text||"");let handled=false,revealedCardForEffect=null;
  const eventOwner=eventCard?[1,2].find(owner=>["monsters","energy","field","facedown","discard","hand"].some(zone=>state.players[owner]?.[zone]?.some(c=>c.id===eventCard.id))):null;
@@ -549,6 +616,7 @@ function resolveEffectText(text,p,sourceCard,eventCard=null){
  const ownMill=s.match(/自分のデッキの上(\d+)枚を捨てる/);
  if(ownMill){for(let i=0;i<Number(ownMill[1])&&own.deck.length;i++)own.discard.push(own.deck.shift());handled=true}
  if(/自分のフィールドカードを破壊|自分のフィールドを破壊/.test(s)&&own.field.length){moveToDiscard(p,own.field.shift(),"効果");handled=true}
+ if(resolveSummonEffects(s,p,sourceCard))handled=true;
  if(!handled)log("未対応の効果（手動で処理してください）: "+s.slice(0,90));
 }
 function declareAttack(cardId){
@@ -613,6 +681,7 @@ function resolveTurnTriggers(p,when){
  for(const m of [...x.monsters])resolveCardTrigger(m,p,when);
  for(const e of [...x.energy])resolveCardTrigger(e,p,when);
  for(const f of [...x.field])resolveCardTrigger(f,p,when);
+ for(const c of [...x.discard])if(String(cardDefinition(c)?.effect_text||"").includes("捨て札にある時"))resolveCardTrigger(c,p,when);
  resolveTrapTriggers(p,when);
 }
 function playCardFromHand(cardId){
