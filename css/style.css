@@ -81,3 +81,9 @@
 .mulligan-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
 .mulligan-actions button{flex:1;min-width:180px;padding:10px 14px}
 .mulligan-actions button:disabled{opacity:.45;cursor:not-allowed}
+
+.card-info{font-size:12px;line-height:1.5;max-height:220px;overflow:auto;overflow-wrap:anywhere;padding:4px 2px 8px;color:#e5e7eb}
+.card-info-name{font-size:15px;font-weight:700;margin-bottom:6px;color:#fff}
+.card-info-row{display:flex;align-items:flex-start;gap:4px;margin:3px 0}
+.card-info-row b{flex:0 0 auto;color:#aeb7c4}
+.card-info-row span{white-space:pre-wrap;min-width:0}
