@@ -125,6 +125,9 @@ function connectGameServer(){
         else if(message.type==="operation"&&message.action==="effect_delta"){
           if(message.playerId!==onlinePlayerId)applyEffectDelta(message);
         }
+        else if(message.type==="operation"&&message.action==="force_end_turn"){
+          if(message.playerId!==onlinePlayerId&&state.turnPlayer===1)endTurn();
+        }
         else if(message.type==="operation"&&message.action==="attack_declared"){
           if(message.playerId!==onlinePlayerId){const attacker=state.players[2].monsters.find(c=>c.id===message.cardId);resolveTrapTriggers(1,"opponentAttack",attacker||null);render();}
         }
@@ -515,6 +518,7 @@ function resolveEffectText(text,p,sourceCard,eventCard=null){
  if(/自分のモンスター全てを全回復/.test(s)){own.monsters.forEach(c=>c.damage=0);handled=true}
  const selfDamage=s.match(/自分に\s*(\d+)ダメージ/);
  if(selfDamage){const amount=Number(selfDamage[1]);own.life-=amount;broadcastEffectDelta({target:"ownLife",delta:-amount});checkLifeWinner(p);handled=true;log(own.name+"に"+amount+"ダメージ")}
+ if(/このターンを終了する/.test(s)){state.forceEndTurnAfterEffect=true;handled=true}
  const lifeSet=s.match(/自分のライフ\s*=\s*(\d+)/);
  if(lifeSet){const value=Number(lifeSet[1]),delta=value-own.life;own.life=value;if(onlinePlayerId)broadcastEffectDelta({target:"ownLifeSet",value});else if(delta)broadcastEffectDelta({target:"ownLife",delta});handled=true;log(own.name+"のライフを"+value+"に設定しました")}
  if(/相手のモンスター全てを破壊/.test(s)){for(const target of [...opp.monsters]){opp.monsters=opp.monsters.filter(c=>c.id!==target.id);moveToDiscard(p===1?2:1,target,"効果による破壊");if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});else resolveCardTrigger(target,p===1?2:1,"destroy");handled=true}if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentDestroy")}
@@ -570,6 +574,15 @@ function trapConditionMet(owner,trigger,abilityText,eventCard){
  if(condition.includes("なら")&&!/(2コスト以下なら|\[ザコ\]なら|場に出たターンでも攻撃できる。.*持つなら|\[海\].*フィールド.*あるなら|マナが3以上なら)/.test(condition)){log("未対応の罠条件（罠は発動せず待機）: "+condition.slice(0,70));return false}
  return true;
 }
+function forceEndTurnForTrap(owner){
+ if(onlinePlayerId){
+  if(state.turnPlayer===1)endTurn();
+  else if(gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"force_end_turn"}));
+  else log("ターン終了をオンライン相手に通知できませんでした");
+  return;
+ }
+ const p=state.turnPlayer;resolveTurnTriggers(p,"end");state.players[p].monsters.forEach(m=>{m.damage=0});state.players[p].energyPool=0;state.turnPlayer=p===1?2:1;startTurn(state.turnPlayer);
+}
 function resolveTrapTriggers(owner,trigger,eventCard=null){
  const x=state.players[owner];if(!x||!Array.isArray(x.facedown))return;
  const remaining=[];
@@ -592,6 +605,7 @@ function resolveTrapTriggers(owner,trigger,eventCard=null){
   trap.faceUp=true;trap.revealed=false;moveToDiscard(owner,trap,"罠の自動発動");
   log("罠「"+trap.name+"」が条件を満たしたため自動発動しました");
   group.forEach(part=>{const effectText=part.body.replace(/^\s*\[[^\]]+\]\s*/,"").replace(/^\s*\([^)]*\)\s*/,"").trim();if(effectText)resolveEffectText(effectText,owner,trap,eventCard)});
+  if(state.forceEndTurnAfterEffect){state.forceEndTurnAfterEffect=false;forceEndTurnForTrap(owner)}
  }
  x.facedown=remaining;
 }
