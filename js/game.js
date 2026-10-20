@@ -469,6 +469,7 @@ function activateCardAbility(cardId,abilityIndex){
 }
 function resolveEffectText(text,p,sourceCard,eventCard=null){
  const own=state.players[p],opp=state.players[p===1?2:1],s=String(text||"");let handled=false,revealedCardForEffect=null;
+ const eventOwner=eventCard?[1,2].find(owner=>["monsters","energy","field","facedown","discard","hand"].some(zone=>state.players[owner]?.[zone]?.some(c=>c.id===eventCard.id))):null;
  if(s.includes("なら")){
   let known=false,met=true;
   if(s.includes("自分のモンスターが1体場にいるなら")){known=true;met=met&&own.monsters.length>0}
@@ -487,13 +488,26 @@ function resolveEffectText(text,p,sourceCard,eventCard=null){
  if(healMonster){const targets=/全て/.test(s)?own.monsters:[own.monsters.find(c=>(Number(c.damage)||0)>0)].filter(Boolean);targets.forEach(c=>c.damage=Math.max(0,(Number(c.damage)||0)-Number(healMonster[1])));if(targets.length)handled=true}
  const healSource=s.match(/これを\s*(\d+)回復/);
  if(healSource&&sourceCard&&own.monsters.some(c=>c.id===sourceCard.id)){sourceCard.damage=Math.max(0,(Number(sourceCard.damage)||0)-Number(healSource[1]));handled=true}
+ const eventDamage=s.match(/それに\s*(\d+)ダメージ/);
+ if(eventDamage&&eventCard&&eventOwner){const amount=Number(eventDamage[1]);eventCard.damage=(Number(eventCard.damage)||0)+amount;if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:eventCard.id,delta:amount});checkMonsterDestruction(eventOwner,true);handled=true}
+ const eventModifier=s.match(/それを\s*([+-]\d+)/);
+ if(eventModifier&&eventCard&&eventOwner){const delta=Number(eventModifier[1]);eventCard.modification=(Number(eventCard.modification)||0)+delta;if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentMonsterModifier",cardId:eventCard.id,delta});handled=true}
+ if(/それが与えるダメージを0にする/.test(s)&&eventCard&&eventOwner){eventCard.nextAttackDamage=0;if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentAttackDamageZero",cardId:eventCard.id});handled=true;log("「"+eventCard.name+"」が与えるダメージを0にしました（戦闘の処理は手動）")}
+ if(/それの効果を消す/.test(s)&&eventCard&&eventOwner){eventCard.effectsDisabled=true;if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentDisable",cardId:eventCard.id});handled=true}
+ if(/それを破壊する/.test(s)&&eventCard&&eventOwner&&state.players[eventOwner].monsters.some(c=>c.id===eventCard.id)){const target=state.players[eventOwner].monsters.find(c=>c.id===eventCard.id);state.players[eventOwner].monsters=state.players[eventOwner].monsters.filter(c=>c.id!==target.id);moveToDiscard(eventOwner,target,"罠の効果による破壊");if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});if(!onlinePlayerId||eventOwner===1)resolveCardTrigger(target,eventOwner,"destroy");if(eventOwner!==p)resolveTrapTriggers(p,"opponentDestroy");handled=true}
+ if(/自分のモンスター全てを全回復/.test(s)){own.monsters.forEach(c=>c.damage=0);handled=true}
+ const selfDamage=s.match(/自分に\s*(\d+)ダメージ/);
+ if(selfDamage){const amount=Number(selfDamage[1]);own.life-=amount;broadcastEffectDelta({target:"ownLife",delta:-amount});checkLifeWinner(p);if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentDamagedMe");handled=true;log(own.name+"に"+amount+"ダメージ")}
+ const lifeSet=s.match(/自分のライフ\s*=\s*(\d+)/);
+ if(lifeSet){const value=Number(lifeSet[1]),delta=value-own.life;own.life=value;if(onlinePlayerId)broadcastEffectDelta({target:"ownLifeSet",value});else if(delta)broadcastEffectDelta({target:"ownLife",delta});handled=true;log(own.name+"のライフを"+value+"に設定しました")}
+ if(/相手のモンスター全てを破壊/.test(s)){for(const target of [...opp.monsters]){opp.monsters=opp.monsters.filter(c=>c.id!==target.id);moveToDiscard(p===1?2:1,target,"効果による破壊");if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});else resolveCardTrigger(target,p===1?2:1,"destroy");handled=true}if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentDestroy")}
  for(const m of s.matchAll(/自分は\s*(\d+)枚引く/g)){drawEffectCards(p,Number(m[1]));handled=true}
  for(const m of s.matchAll(/相手に\s*(\d+)ダメージ/g)){opp.life-=Number(m[1]);broadcastEffectDelta({target:"opponentLife",delta:-Number(m[1])});checkLifeWinner(p===1?2:1);handled=true;log(opp.name+"に"+m[1]+"ダメージ")}
  for(const m of s.matchAll(/自分を\s*(\d+)回復/g)){own.life+=Number(m[1]);broadcastEffectDelta({target:"ownLife",delta:Number(m[1])});handled=true;log(own.name+"は"+m[1]+"回復")}
  for(const m of s.matchAll(/相手のモンスター全てに\s*(\d+)ダメージ/g)){opp.monsters.forEach(mon=>{mon.damage=(mon.damage||0)+Number(m[1]);broadcastEffectDelta({target:"opponentMonsterDamage",cardId:mon.id,delta:Number(m[1])})});checkMonsterDestruction(p===1?2:1,true);handled=true}
  for(const m of s.matchAll(/これを\s*\+(\d+)/g)){if(sourceCard)sourceCard.modification=(sourceCard.modification||0)+Number(m[1]);handled=true}
- const ownBuff=s.match(/自分のモンスター(?:1体|1体まで)を\s*\+(\d+)/);
- if(ownBuff&&own.monsters[0]){own.monsters[0].modification=(own.monsters[0].modification||0)+Number(ownBuff[1]);handled=true}
+ const ownBuff=s.match(/自分のモンスター(?:全て|1体|1体まで)を\s*\+(\d+)/);
+ if(ownBuff){const targets=/全て/.test(s)?own.monsters:[own.monsters[0]].filter(Boolean);targets.forEach(mon=>{mon.modification=(mon.modification||0)+Number(ownBuff[1])});if(targets.length)handled=true}
  const counterAdd=s.match(/これにカウンター(\d+)個を乗せる/);
  if(counterAdd&&sourceCard){sourceCard.counters=(sourceCard.counters||0)+Number(counterAdd[1]);handled=true}
  if(/これのカウンターを0個にする/.test(s)&&sourceCard){sourceCard.counters=0;handled=true}
@@ -531,10 +545,10 @@ function trapConditionMet(owner,trigger,abilityText,eventCard){
  const condition=match[1],x=state.players[owner];
  if(condition.includes("2コスト以下なら")&&(!eventCard||cardCost(eventCard)>2))return false;
  if(condition.includes("[ザコ]なら")&&(!eventCard||!String(cardDefinition(eventCard)?.types||"").includes("ザコ")))return false;
- if(condition.includes("場に出たターンでも攻撃できる。を持つなら")&&(!eventCard||!String(cardDefinition(eventCard)?.effect_text||"").includes("場に出たターンでも攻撃できる。")))return false;
+ if(condition.includes("場に出たターンでも攻撃できる。")&&condition.includes("持つなら")&&(!eventCard||!String(cardDefinition(eventCard)?.effect_text||"").includes("場に出たターンでも攻撃できる。")))return false;
  if(condition.includes("[海]")&&condition.includes("フィールド")&&!x.field.some(c=>String(cardDefinition(c)?.types||"").includes("海")))return false;
  if(condition.includes("マナが3以上なら")&&(Number(x.energyPool)||0)<3)return false;
- if(condition.includes("なら")&&!/(2コスト以下なら|\[ザコ\]なら|場に出たターンでも攻撃できる。を持つなら|\[海\].*フィールド.*あるなら|マナが3以上なら)/.test(condition)){log("未対応の罠条件（罠は発動せず待機）: "+condition.slice(0,70));return false}
+ if(condition.includes("なら")&&!/(2コスト以下なら|\[ザコ\]なら|場に出たターンでも攻撃できる。.*持つなら|\[海\].*フィールド.*あるなら|マナが3以上なら)/.test(condition)){log("未対応の罠条件（罠は発動せず待機）: "+condition.slice(0,70));return false}
  return true;
 }
 function resolveTrapTriggers(owner,trigger,eventCard=null){
@@ -547,7 +561,12 @@ function resolveTrapTriggers(owner,trigger,eventCard=null){
   else if(trigger==="ownEnter")matches=part=>part.cost===null&&part.body.includes("自分")&&/(場に出た時|場に出たとき|場に出した時|場に出したとき)/.test(part.body);
   else if(trigger==="opponentDestroy")matches=part=>part.cost===null&&part.body.includes("相手")&&/(破壊された時|破壊されたとき|破壊時)/.test(part.body);
   else if(trigger==="ownDestroy")matches=part=>part.cost===null&&part.body.includes("自分")&&/(破壊された時|破壊されたとき|破壊時)/.test(part.body);
-  else if(trigger==="opponentAttack")matches=part=>part.cost===null&&part.body.includes("相手")&&/(攻撃時|攻撃した時|攻撃したとき)/.test(part.body);
+  else if(trigger==="opponentAttack")matches=part=>part.cost===null&&/^\s*\[\s*相手/.test(part.body)&&/(攻撃時|攻撃した時|攻撃したとき)/.test(part.body);
+  else if(trigger==="opponentSpell")matches=part=>part.cost===null&&/^\s*\[\s*相手の魔法の使用時/.test(part.body);
+  else if(trigger==="opponentHeal")matches=part=>part.cost===null&&/^\s*\[\s*相手が回復した時/.test(part.body);
+  else if(trigger==="opponentDamagedMe")matches=part=>part.cost===null&&/^\s*\[\s*相手が自分にダメージを与えた時/.test(part.body);
+  else if(trigger==="opponentOricaUse")matches=part=>part.cost===null&&/^\s*\[\s*相手のオリカの使用時/.test(part.body);
+  else if(trigger==="ownLifeZero")matches=part=>part.cost===null&&/^\s*\[\s*自分のライフが0になった時/.test(part.body);
   const start=parts.findIndex(matches);if(start<0){remaining.push(trap);continue}
   const first=parts[start];if(!trapConditionMet(owner,trigger,first.body,eventCard)){remaining.push(trap);continue}
   const group=[first];for(let i=start+1;i<parts.length;i++){if(/^\s*\[/.test(parts[i].body))break;group.push(parts[i])}
