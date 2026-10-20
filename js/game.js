@@ -481,18 +481,18 @@ function activateCardAbility(cardId,abilityIndex){
   state.selected={p:1,z:selected.z,id:card.id};render();
 }
 function resolveSummonEffects(text,p,sourceCard){
- const own=state.players[p],sourcePattern=/自分の(手札かデッキか捨て札|手札かデッキ|デッキか捨て札|手札か捨て札|手札|デッキ|捨て札)から([\\s\\S]*?)(\\d+)(体|枚)(?:まで)?(?:を場に|を)出す/g;
+ const own=state.players[p],sourcePattern=/自分の(手札かデッキか捨て札|手札かデッキ|デッキか捨て札|手札か捨て札|手札|デッキ|捨て札)から([\s\S]*?)(\d+)(体|枚)(?:まで)?(?:を場に|を)出す/g;
  let matched=false;
  for(const match of String(text||"").matchAll(sourcePattern)){
   matched=true;
   const sourceNames=match[1].split("か"),qualifier=match[2]||"",limit=Number(match[3]),unit=match[4];
-  const costMatch=qualifier.match(/(\\d+)コスト以下/),costLimit=costMatch?Number(costMatch[1]):Infinity;
+  const costMatch=qualifier.match(/(\d+)コスト以下/),costLimit=costMatch?Number(costMatch[1]):Infinity;
   const includeNameMatch=qualifier.match(/名前に「([^」]+)」を含む/);
   const quotedNames=[...qualifier.matchAll(/「([^」]+)」/g)].map(m=>m[1]);
   const excludedNameMatch=qualifier.match(/「([^」]+)」以外/);
   const exactName=quotedNames.find(name=>(!excludedNameMatch||name!==excludedNameMatch[1])&&(!includeNameMatch||name!==includeNameMatch[1]));
   const includeName=includeNameMatch?.[1]||null;
-  const typeMatch=qualifier.match(/\\[([^\\]]+)\\]/);
+  const typeMatch=qualifier.match(/\[([^\]]+)\]/);
   const requiredTypes=typeMatch?typeMatch[1].split(/[,、]/).map(v=>v.trim()).filter(Boolean):[];
   const kindWord=qualifier.match(/(モンスター|エネルギー|魔法|罠|フィールド)/)?.[1]||null;
   const kindMap={モンスター:"monster",エネルギー:"energy",魔法:"spell",罠:"trap",フィールド:"field"};
