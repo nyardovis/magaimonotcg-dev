@@ -39,6 +39,17 @@
 <div id="roomMessage" class="room-message">ルームを作るか、相手から受け取ったルームIDを入力してください</div>
 </div>
 </section>
+<section id="prepScreen" class="prep-screen" hidden>
+ <div class="prep-panel">
+  <h2>対戦準備</h2>
+  <p class="prep-subtitle">対戦を始める前にプレイヤー名とデッキを設定してください。</p>
+  <label for="prepPlayerName">プレイヤー名</label>
+  <div class="prep-name-row"><input id="prepPlayerName" type="text" maxlength="16" autocomplete="off" placeholder="プレイヤー名"><button id="prepRename" type="button">名前を保存</button></div>
+  <div class="prep-deck-row"><div><b>使用するデッキ</b><p id="prepDeckSummary">保存済みデッキを使用します。</p></div><button id="prepDeckEdit" type="button">デッキを確認・編集</button></div>
+  <div id="prepMessage" class="prep-message">設定後、「対戦画面へ」を押してください。</div>
+  <button id="enterBattle" class="prep-start" type="button">対戦画面へ</button>
+ </div>
+</section>
 <section id="mulliganOverlay" class="mulligan-overlay" hidden>
  <div class="mulligan-panel">
   <h2>マリガン</h2>
