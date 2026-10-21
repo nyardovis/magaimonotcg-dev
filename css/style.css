@@ -87,3 +87,12 @@
 .card-info-row{display:flex;align-items:flex-start;gap:4px;margin:3px 0}
 .card-info-row b{flex:0 0 auto;color:#aeb7c4}
 .card-info-row span{white-space:pre-wrap;min-width:0}
+
+
+/* Pre-match preparation screen */
+.prep-screen[hidden]{display:none}
+.prep-screen{position:fixed;inset:0;z-index:500;display:grid;place-items:center;background:#15171b;color:#eee;padding:20px}
+.prep-panel{width:min(620px,94vw);background:#202329;border:1px solid #59616d;border-radius:10px;padding:26px;box-shadow:0 12px 48px rgba(0,0,0,.55)}
+.prep-panel h2{margin:0 0 8px;font-size:24px}.prep-subtitle{margin:0 0 24px;color:#b8c0ca;font-size:13px;line-height:1.6}
+.prep-panel label{display:block;font-size:13px;color:#c7cbd2;margin-bottom:6px}.prep-name-row{display:flex;gap:8px}.prep-name-row input{flex:1;min-width:0;padding:10px;border:1px solid #555;border-radius:5px;background:#111;color:#fff}.prep-panel button{padding:10px 14px;border:1px solid #59616d;border-radius:5px;background:#292d34;color:#fff;cursor:pointer}.prep-deck-row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:20px;padding:16px;background:#181a1f;border:1px solid #383d45;border-radius:6px}.prep-deck-row b{font-size:14px}.prep-deck-row p{margin:6px 0 0;color:#aeb7c4;font-size:12px}.prep-message{min-height:20px;margin:16px 0;color:#f3c85b;font-size:12px}.prep-start{width:100%;font-size:16px;font-weight:700;background:#315c40!important;border-color:#4f8c63!important;padding:13px!important}.prep-start:disabled{opacity:.45;cursor:not-allowed}
+.deck-editor{z-index:600}
