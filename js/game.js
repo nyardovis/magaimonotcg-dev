@@ -62,6 +62,46 @@ function applyOnlinePlayers(players){
   if(nameInput)nameInput.value=state.players[1].name;
 }
 
+function showPreparationScreen(){
+  const screen=document.querySelector("#prepScreen");
+  if(screen)screen.hidden=false;
+  const input=document.querySelector("#prepPlayerName");
+  if(input)input.value=state.players[1]?.name||"プレイヤー1";
+  updatePreparationDeckSummary();
+}
+function updatePreparationDeckSummary(){
+  const summary=document.querySelector("#prepDeckSummary");
+  if(!summary)return;
+  const deck=state.savedDeck||state.players[1]?.deckList||[];
+  summary.textContent="保存済みデッキ："+deck.length+"枚";
+}
+function setupPreparationScreen(){
+  const nameInput=document.querySelector("#prepPlayerName");
+  const saveName=document.querySelector("#prepRename");
+  const editDeck=document.querySelector("#prepDeckEdit");
+  const enter=document.querySelector("#enterBattle");
+  if(saveName)saveName.onclick=()=>{
+    const name=(nameInput?.value||"").trim();
+    if(!name){const m=document.querySelector("#prepMessage");if(m)m.textContent="プレイヤー名を入力してください。";return}
+    const oldInput=document.querySelector("#name");
+    if(oldInput)oldInput.value=name.slice(0,16);
+    document.querySelector("#rename")?.click();
+    const m=document.querySelector("#prepMessage");
+    if(m)m.textContent="プレイヤー名の保存をリクエストしました。";
+  };
+  if(editDeck)editDeck.onclick=()=>{
+    state.players[1].deckList=(state.savedDeck||state.players[1].deckList||[]).slice();
+    document.querySelector("#deckEditor").hidden=false;
+    const search=document.querySelector("#deckCardSearch");if(search)search.value="";
+    renderDeckEditor();
+  };
+  if(enter)enter.onclick=()=>{
+    const screen=document.querySelector("#prepScreen");
+    if(screen)screen.hidden=true;
+    renderMulliganOverlay();
+  };
+  if(nameInput)nameInput.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();saveName?.click()}};
+}
 function normalizeRoomCode(value){return String(value||"").trim().toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,6)}
 function createRoomCode(){const chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";let code="";for(let i=0;i<6;i++)code+=chars[Math.floor(Math.random()*chars.length)];return code}
 function enterRoom(room){
@@ -71,6 +111,7 @@ function enterRoom(room){
   const url=new URL(location.href);url.searchParams.set("room",code);history.replaceState(null,"",url);
   const lobby=document.querySelector("#roomLobby");if(lobby)lobby.hidden=true;
   const status=document.querySelector("#roomStatus");if(status)status.textContent="ルーム: "+code;
+  showPreparationScreen();
   connectGameServer();
   return true;
 }
@@ -88,6 +129,7 @@ function setupRoomLobby(){
     currentRoom=room;
     if(lobby)lobby.hidden=true;
     const status=document.querySelector("#roomStatus");if(status)status.textContent="ルーム: "+room;
+    showPreparationScreen();
     return true;
   }
   if(lobby)lobby.hidden=false;
@@ -435,7 +477,7 @@ function applyEffectDelta(message){
 function checkLifeWinner(p){if(state.players[p].life<=0){if(!onlinePlayerId||p===1)resolveTrapTriggers(p,"ownLifeZero");if(state.players[p].life>0)return;const winner=p===1?2:1;state.gameOver={winner,reason:"life_zero"};log(state.players[p].name+"のライフが0以下になったため、"+state.players[winner].name+"の勝利です")}}
 function toggleCardTap(p,z,c){if(z==="energy"){const x=state.players[p],value=cardCost(c);if(!c.tapped)x.energyPool=(x.energyPool||0)+value;else x.energyPool=Math.max(0,(x.energyPool||0)-value);if(p===1)broadcastEnergyPool()}c.tapped=!c.tapped}
 function renderMulliganOverlay(){
- const overlay=document.querySelector("#mulliganOverlay");if(!overlay)return;const lobby=document.querySelector("#roomLobby");overlay.hidden=state.phase!=="mulligan"||!currentRoom||!!(lobby&&!lobby.hidden);
+ const overlay=document.querySelector("#mulliganOverlay");if(!overlay)return;const lobby=document.querySelector("#roomLobby"),prep=document.querySelector("#prepScreen");overlay.hidden=state.phase!=="mulligan"||!currentRoom||!!(lobby&&!lobby.hidden)||!!(prep&&!prep.hidden);
  const own=state.mulligan[1],other=state.mulligan[2],status=document.querySelector("#mulliganStatus");
  if(status)status.textContent="自分："+(own.done?"確定":(7-own.count)+"枚で引き直し可能")+" ／ 相手："+(other.done?"確定":"選択中")+(onlinePlayerId&&roomPlayerCount<2?" ／ 対戦相手の参加待ち":"");
  const again=document.querySelector("#mulliganAgain"),keep=document.querySelector("#mulliganKeep");
@@ -743,6 +785,7 @@ function readDeckCode(code){
   if(!s.startsWith("D1-"))throw new Error("デッキコードの形式が正しくありません");const parts=s.slice(3).split("-").filter(Boolean),deck=[];for(const part of parts){const q=part.split(".");if(q.length!==2)throw new Error("デッキコードの形式が正しくありません");const i=parseInt(q[0],36),n=parseInt(q[1],36);if(!Number.isInteger(i)||!Number.isInteger(n)||i<0||i>=cardNames.length||n<1)throw new Error("デッキコードに不正なカードがあります");for(let k=0;k<n;k++)deck.push(cardNames[i])}return deck;
 }
 function setup(){
+  setupPreparationScreen();
   document.querySelector("#deckViewerClose").onclick=closeDeckViewer;
   const mulliganButton=document.querySelector("#mulliganAgain");if(mulliganButton)mulliganButton.onclick=doMulligan;
   const mulliganKeep=document.querySelector("#mulliganKeep");if(mulliganKeep)mulliganKeep.onclick=finishMulligan;
@@ -753,8 +796,8 @@ function setup(){
   document.querySelector("#deckCodeCreate").onclick=()=>{const input=document.querySelector("#deckCodeInput");input.value=makeDeckCode(state.players[1].deckList||[]);input.focus();input.select();log("デッキコードを発行しました")};
   document.querySelector("#deckCodeLoad").onclick=()=>{try{const deck=readDeckCode(document.querySelector("#deckCodeInput").value);state.players[1].deckList=deck;state.players[1].deckList.sort((a,b)=>cardNames.indexOf(a)-cardNames.indexOf(b));renderDeckEditor();const b=document.querySelector("#deckCodeLoad");b.textContent="複製しました";b.classList.add("loaded");clearTimeout(state.deckLoadTimer);state.deckLoadTimer=setTimeout(()=>{b.textContent="コードから複製";b.classList.remove("loaded")},1200);log("デッキコードからデッキを複製しました")}catch(e){alert(e.message)}};
   document.querySelector("#deckClearAll").onclick=()=>{const deck=state.players[1].deckList||[];if(!deck.length)return;if(!confirm("現在のデッキのカードをすべて除きますか？"))return;state.players[1].deckList=[];renderDeckEditor();log("デッキのカードをすべて除きました")};
-  document.querySelector("#deckSave").onclick=()=>{state.savedDeck=(state.players[1].deckList||[]).slice();const b=document.querySelector("#deckSave");b.textContent="保存しました";b.classList.add("saved");clearTimeout(state.deckSaveTimer);state.deckSaveTimer=setTimeout(()=>{b.textContent="デッキを保存";b.classList.remove("saved")},1200);log("デッキを保存しました")};
-  document.querySelector("#deckEditBack").onclick=()=>{const current=state.players[1].deckList||[],saved=state.savedDeck||[],same=current.length===saved.length&&current.every((name,i)=>name===saved[i]);if(!same&&!confirm("デッキの内容が保存されていません。保存せずに対戦画面へ戻りますか？"))return;document.querySelector("#deckEditor").hidden=true};
+  document.querySelector("#deckSave").onclick=()=>{state.savedDeck=(state.players[1].deckList||[]).slice();updatePreparationDeckSummary();const b=document.querySelector("#deckSave");b.textContent="保存しました";b.classList.add("saved");clearTimeout(state.deckSaveTimer);state.deckSaveTimer=setTimeout(()=>{b.textContent="デッキを保存";b.classList.remove("saved")},1200);log("デッキを保存しました")};
+  document.querySelector("#deckEditBack").onclick=()=>{const current=state.players[1].deckList||[],saved=state.savedDeck||[],same=current.length===saved.length&&current.every((name,i)=>name===saved[i]);if(!same&&!confirm("デッキの内容が保存されていません。保存せずに戻りますか？"))return;document.querySelector("#deckEditor").hidden=true;updatePreparationDeckSummary()};
   document.querySelectorAll("[data-end]").forEach(b=>b.onclick=endTurn);
   document.querySelectorAll("[data-first]").forEach(b=>b.onclick=()=>{
     const q=b.dataset.first;
