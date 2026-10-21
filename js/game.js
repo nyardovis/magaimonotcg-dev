@@ -105,11 +105,16 @@ function setupPreparationScreen(){
   if(enter)enter.onclick=()=>{
     const enteredRoom=normalizeRoomCode(roomInput?.value);
     preparationCompleted=true;
+    let entered=false;
     if(enteredRoom){
-      if(!enterRoom(enteredRoom)){preparationCompleted=false;return;}
+      entered=enterRoom(enteredRoom);
+      if(!entered){preparationCompleted=false;return;}
     }else{
-      enterRoom(createRoomCode());
+      entered=enterRoom(createRoomCode());
+      if(!entered){preparationCompleted=false;return;}
     }
+    const screen=document.querySelector("#prepScreen");
+    if(screen)screen.hidden=true;
   };
   if(nameInput)nameInput.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();saveName?.click()}};
 }
