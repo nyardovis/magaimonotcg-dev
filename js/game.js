@@ -1,5 +1,6 @@
 const SERVER_WS_BASE="wss://card-game-server-test.original-card-game-dev.workers.dev";
 let currentRoom="";
+let preparationCompleted=false;
 let gameSocket=null;
 let onlinePlayerId=null;
 let roomPlayerCount=0;
@@ -96,9 +97,11 @@ function setupPreparationScreen(){
     renderDeckEditor();
   };
   if(enter)enter.onclick=()=>{
+    preparationCompleted=true;
     const screen=document.querySelector("#prepScreen");
     if(screen)screen.hidden=true;
-    renderMulliganOverlay();
+    if(currentRoom){renderMulliganOverlay();}
+    else{const lobby=document.querySelector("#roomLobby");if(lobby)lobby.hidden=false;}
   };
   if(nameInput)nameInput.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();saveName?.click()}};
 }
@@ -111,8 +114,8 @@ function enterRoom(room){
   const url=new URL(location.href);url.searchParams.set("room",code);history.replaceState(null,"",url);
   const lobby=document.querySelector("#roomLobby");if(lobby)lobby.hidden=true;
   const status=document.querySelector("#roomStatus");if(status)status.textContent="ルーム: "+code;
-  showPreparationScreen();
-  connectGameServer();
+  if(preparationCompleted){connectGameServer();renderMulliganOverlay();}
+  else showPreparationScreen();
   return true;
 }
 function setupRoomLobby(){
@@ -837,6 +840,8 @@ async function start(){
   const p1=state.players[1];p1.deckList=defaultDeck.slice();const shuffledDeck=shuffle(defaultDeck.slice());p1.hand=shuffledDeck.slice(0,7).map((n,i)=>newCard(n,"p1h"+i));p1.deck=shuffledDeck.slice(7).map((n,i)=>newCard(n,"p1d"+i));state.savedDeck=defaultDeck.slice();
   loadLocalGameState();
   setup();render();log("カード画像を読み込みました（"+cardNames.length+"種類）");
-  if(setupRoomLobby())connectGameServer();
+  const hasRoom=setupRoomLobby();
+  if(hasRoom){showPreparationScreen();connectGameServer();}
+  else{const lobby=document.querySelector("#roomLobby");if(lobby)lobby.hidden=true;showPreparationScreen();}
 }
 start().catch(e=>{console.error(e);document.querySelector("#log").textContent="カード一覧の読み込みに失敗しました。";});
