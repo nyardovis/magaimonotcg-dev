@@ -849,7 +849,7 @@ async function start(){
   loadLocalGameState();
   setup();render();log("カード画像を読み込みました（"+cardNames.length+"種類）");
   const hasRoom=setupRoomLobby();
-  if(hasRoom){showPreparationScreen();connectGameServer();}
+  if(hasRoom){showPreparationScreen();}
   else{const lobby=document.querySelector("#roomLobby");if(lobby)lobby.hidden=true;showPreparationScreen();}
 }
 start().catch(e=>{console.error(e);document.querySelector("#log").textContent="カード一覧の読み込みに失敗しました。";});
