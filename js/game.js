@@ -96,12 +96,20 @@ function setupPreparationScreen(){
     const search=document.querySelector("#deckCardSearch");if(search)search.value="";
     renderDeckEditor();
   };
+  const roomInput=document.querySelector("#prepRoomId");
+  if(roomInput){
+    roomInput.value=currentRoom||normalizeRoomCode(new URLSearchParams(location.search).get("room"));
+    roomInput.oninput=()=>{roomInput.value=normalizeRoomCode(roomInput.value)};
+    roomInput.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();enter?.click()}};
+  }
   if(enter)enter.onclick=()=>{
+    const enteredRoom=normalizeRoomCode(roomInput?.value);
     preparationCompleted=true;
-    const screen=document.querySelector("#prepScreen");
-    if(screen)screen.hidden=true;
-    if(currentRoom){renderMulliganOverlay();}
-    else{const lobby=document.querySelector("#roomLobby");if(lobby)lobby.hidden=false;}
+    if(enteredRoom){
+      if(!enterRoom(enteredRoom)){preparationCompleted=false;return;}
+    }else{
+      enterRoom(createRoomCode());
+    }
   };
   if(nameInput)nameInput.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();saveName?.click()}};
 }
