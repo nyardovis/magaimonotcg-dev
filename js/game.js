@@ -806,6 +806,7 @@ function setup(){
   const mulliganButton=document.querySelector("#mulliganAgain");if(mulliganButton)mulliganButton.onclick=doMulligan;
   const mulliganKeep=document.querySelector("#mulliganKeep");if(mulliganKeep)mulliganKeep.onclick=finishMulligan;
   const mulliganSkip=document.querySelector("#mulliganSkip");if(mulliganSkip)mulliganSkip.onclick=()=>{if(state.phase!=="mulligan"||state.mulligan[1].done)return;log("マリガンをスキップしました");finishMulligan()};
+  const opponentMulliganSkip=document.querySelector("#opponentMulliganSkip");if(opponentMulliganSkip)opponentMulliganSkip.onclick=()=>{if(state.phase!=="mulligan"||state.mulligan[2].done)return;state.mulligan[2].done=true;log("開発用操作：対戦相手のマリガンをスキップしました");if(state.mulligan[1].done){state.phase="playing";log("両プレイヤーのマリガンが終了。ゲーム開始");if(state.turnPlayer===1){startTurn(1);return}}render()};
   document.addEventListener("click",e=>{const v=document.querySelector("#discardViewer");if(v&&!v.hidden&&!e.target.closest("#discardViewer .discard-viewer-panel")&&!e.target.closest(".player .other .zone:nth-child(2)"))closeDiscardViewer()});
   document.querySelector("#discardViewer").onclick=e=>{if(e.target===document.querySelector("#discardViewer"))closeDiscardViewer()};
   document.querySelector("#deckEdit").onclick=()=>{state.players[1].deckList=state.savedDeck.slice();document.querySelector("#deckEditor").hidden=false;const search=document.querySelector("#deckCardSearch");if(search)search.value="";renderDeckEditor()};
