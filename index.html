@@ -46,8 +46,10 @@
   <label for="prepPlayerName">プレイヤー名</label>
   <div class="prep-name-row"><input id="prepPlayerName" type="text" maxlength="16" autocomplete="off" placeholder="プレイヤー名"><button id="prepRename" type="button">名前を保存</button></div>
   <div class="prep-deck-row"><div><b>使用するデッキ</b><p id="prepDeckSummary">保存済みデッキを使用します。</p></div><button id="prepDeckEdit" type="button">デッキを確認・編集</button></div>
-  <div id="prepMessage" class="prep-message">設定後、「ルーム選択へ」を押し、ルームを作成するか参加してください。</div>
-  <button id="enterBattle" class="prep-start" type="button">ルーム選択へ</button>
+  <label for="prepRoomId">ルーム番号（参加する場合）</label>
+  <input id="prepRoomId" class="prep-room-input" type="text" maxlength="6" autocomplete="off" placeholder="6文字のルーム番号。空欄なら新規作成">
+  <div id="prepMessage" class="prep-message">ルーム番号を入力するとそのルームに参加します。空欄なら新しいルームを作成します。</div>
+  <button id="enterBattle" class="prep-start" type="button">対戦を開始</button>
  </div>
 </section>
 <section id="mulliganOverlay" class="mulligan-overlay" hidden>
