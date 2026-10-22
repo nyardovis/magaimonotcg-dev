@@ -385,7 +385,7 @@ function renderCardInfo(card,visible){
   for(const [label,value] of fields){const row=document.createElement("div");row.className="card-info-row";const key=document.createElement("b");key.textContent=label+"：";const val=document.createElement("span");val.textContent=value;row.append(key,val);box.appendChild(row)}
 }
 function selection(){
-  const op=document.querySelector("#ops");if(!op)return;op.innerHTML="";
+  const op=document.querySelector("#ops");const info=document.querySelector("#cardInfo");if(info&&!state.selected)info.textContent="カードを選択すると、効果などの情報が表示されます。";if(!op)return;op.innerHTML="";
   if(!state.selected){op.textContent="カードを選択してください";return}
   const s=state.selected,c=find(s.p,s.z,s.id);if(!c){state.selected=null;return}
   const visible=s.p===1||c.faceUp!==false;renderCardInfo(c,visible);
