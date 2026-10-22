@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Ankr TCG 開発版</title>
-<link rel="stylesheet" href="css/style.css?v=dev-textcards1">
+<link rel="stylesheet" href="css/style.css?v=dev-sidepanels1">
 </head>
 <body>
 <main class="game">
 <header><h1>Ankr TCG</h1><span id="roomStatus">ルーム: -</span><span>ターン: <b id="turnPlayer">プレイヤー1</b></span></header>
 <section class="board">
-
+<aside class="side left"><div class="title">選択中のカード</div><div id="cardInfo" class="card-info">カードを選択すると、効果などの情報が表示されます。</div><div class="title">カード操作</div><div id="ops" class="card-ops">カードを選択してください</div><div class="revealed-status" id="revealedStatus"></div></aside>
 <section class="table">
 <div class="player opponent">
 <div class="row hand"><label>手札</label><div id="p2-hand" class="cards"></div></div>
@@ -64,6 +64,6 @@
 <button id="devDuringMulligan" type="button">開発用コマンドを開く</button>
 </main>
 <script src="js/effect-engine.js?v=dev-effects3"></script>
-<script src="js/game.js?v=dev-textcards1"></script>
+<script src="js/game.js?v=dev-sidepanels1"></script>
 </body>
 </html>
