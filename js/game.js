@@ -371,13 +371,33 @@ function cardEl(p,z,c,visible){
   else{e.appendChild(createCardFace(c.name,z==="energy"?"horizontal":"portrait"));const a=c.modification-c.damage;if(a)e.insertAdjacentHTML("beforeend",'<span class="adjust">'+(a>0?"+":"")+a+"</span>");if(c.counters)e.insertAdjacentHTML("beforeend",'<span class="counter">'+c.counters+"</span>")}
   if(c.revealed){const mark=document.createElement("span");mark.className="revealed-marker";mark.textContent="!";e.appendChild(mark)}
   e.dataset.player=String(p);e.dataset.zone=z;e.dataset.cardId=c.id;
-  if(state.pendingDiscardPlayer!==null){if(state.pendingDiscardPlayer===1&&p===1&&z==="hand")e.onclick=()=>completePendingDiscard(1,c.id);else e.onclick=null}else e.onclick=null;
+  if(state.pendingDiscardPlayer!==null){if(state.pendingDiscardPlayer===1&&p===1&&z==="hand")e.onclick=()=>completePendingDiscard(1,c.id);else e.onclick=null}else e.onclick=()=>select(p,z,c.id);
   return e;
 }
 function find(p,z,id){return state.players[p][z].find(c=>c.id===id)}
 function select(p,z,id){const c=find(p,z,id);if(!c)return;state.selected={p,z,id};render()}
-function renderCardInfo(){}
-function selection(){}
+function renderCardInfo(card,visible){
+  const box=document.querySelector("#cardInfo");if(!box)return;box.innerHTML="";
+  if(!visible||(card.faceUp===false&&state.selected?.p!==1)){box.textContent="裏向きのカード";return}
+  const d=cardDefinition(card);if(!d){box.textContent=card.name||"カード情報なし";return}
+  const title=document.createElement("div");title.className="card-info-name";title.textContent=d.name||card.name;box.appendChild(title);
+  const fields=[["種類",String(d.tags||"").replace(/#/g,"")],["コスト",d.cost===null||d.cost===undefined?"—":String(d.cost)],["タイプ",d.types||"—"],["HP",d.power===null||d.power===undefined?"—":String(d.power)],["効果",d.effect_text||"効果なし"],["フレーバー",d.lore||"—"]];
+  for(const [label,value] of fields){const row=document.createElement("div");row.className="card-info-row";const key=document.createElement("b");key.textContent=label+"：";const val=document.createElement("span");val.textContent=value;row.append(key,val);box.appendChild(row)}
+}
+function selection(){
+  const op=document.querySelector("#ops");if(!op)return;op.innerHTML="";
+  if(!state.selected){op.textContent="カードを選択してください";return}
+  const s=state.selected,c=find(s.p,s.z,s.id);if(!c){state.selected=null;return}
+  const visible=s.p===1||c.faceUp!==false;renderCardInfo(c,visible);
+  if(state.pendingDiscardPlayer!==null){if(s.p===1&&s.z==="hand"&&s.p===state.pendingDiscardPlayer){add("このカードを捨てる",()=>completePendingDiscard(1,s.id));return}op.textContent="カードを捨てるまで操作できません";return}
+  if(!visible){op.textContent="裏向きのカード";return}
+  if(s.p!==1){op.textContent="相手のカード";return}
+  if(["monsters","energy","field"].includes(s.z)&&state.phase==="playing"){
+    CardEffectEngine.activatedAbilities(cardDefinition(c)?.effect_text||"").forEach((ability,index)=>add("能力を使用（コスト"+ability.cost+"）",()=>activateCardAbility(c.id,index)));
+  }
+  if(s.z==="monsters"&&state.phase==="playing")add("攻撃を宣言",()=>declareAttack(c.id));
+  if(s.z==="hand"&&state.phase==="playing")add("このカードを使用 / セット",()=>playCardFromHand(c.id));
+}
 function openMonsterAdjust(c){const modal=document.querySelector("#monsterAdjustModal"),input=document.querySelector("#monsterAdjustInput");modal.hidden=false;input.value="";input.focus();const close=()=>{modal.hidden=true};const apply=(action)=>{const raw=input.value.trim();if(!raw){close();return}const n=Number(raw);if(!Number.isInteger(n)){log("ダメージ／回復の変更をキャンセルしました");close();return}const amount=Math.abs(n);if(action==="cancel"){close();return}if(action==="damage")c.damage+=amount;if(action==="heal")c.damage=Math.max(0,c.damage-amount);if(action==="change")c.modification=amount+c.damage;checkMonsterDestruction(1);state.selected={p:1,z:"monsters",id:c.id};render();close()};modal.querySelectorAll("[data-monster-action]").forEach(b=>b.onclick=()=>apply(b.dataset.monsterAction));input.onkeydown=ev=>{if(ev.key!=="Enter")return;ev.preventDefault();const raw=input.value.trim();if(!raw)return;const n=Number(raw);if(!Number.isInteger(n)){log("ダメージ／回復の変更をキャンセルしました");close();return}apply(n>0&&raw.startsWith("+")?"heal":"damage")}}
 function openMonsterStatusAdjust(c){const modal=document.querySelector("#monsterStatusModal"),input=document.querySelector("#monsterStatusInput");modal.hidden=false;input.value="";input.focus();const close=()=>{modal.hidden=true};const apply=(action)=>{const raw=input.value.trim();if(!raw){close();return}const n=Number(raw);if(!Number.isInteger(n)){log("ステータス修正の変更をキャンセルしました");close();return}const amount=Math.abs(n);if(action==="cancel"){close();return}if(action==="increase")c.modification+=amount;if(action==="decrease")c.modification-=amount;if(action==="change")c.modification=amount+c.damage;checkMonsterDestruction(1);state.selected={p:1,z:"monsters",id:c.id};render();close()};modal.querySelectorAll("[data-monster-status-action]").forEach(b=>b.onclick=()=>apply(b.dataset.monsterStatusAction));input.onkeydown=ev=>{if(ev.key!=="Enter")return;ev.preventDefault();const raw=input.value.trim();if(!raw)return;const n=Number(raw);if(!Number.isInteger(n)){log("ステータス修正の変更をキャンセルしました");close();return}apply(n>0&&raw.startsWith("+")?"increase":"decrease")}}
 function add(t,fn){const b=document.createElement("button");b.textContent=t;b.onclick=fn;document.querySelector("#ops").appendChild(b)}
