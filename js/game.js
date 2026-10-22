@@ -7,13 +7,14 @@ let roomPlayerCount=0;
 let lastPublicState=null;
 let hasReceivedOpponentPublicState=false;
 let applyingPublicState=false;
+let devLocalMode=false;
 
 function getPublicState(){
   const x=state.players[1];
   return {life:x.life,handCount:x.hand.length,handIds:x.hand.map(c=>c.id),deckCount:x.deck.length,deckCounters:x.deckCounters||0,deckHorizontal:!!x.deckHorizontal,facedownCount:x.facedown.length,revealedHand:x.hand.filter(c=>c.revealed).map(c=>({id:c.id,name:c.name,faceUp:true,revealed:true})),facedownPublic:x.facedown.filter(c=>c.faceUp!==false),monsters:x.monsters,energy:x.energy,field:x.field,discard:x.discard,pendingDiscard:state.pendingDiscardPlayer===1,gameOver:state.gameOver||null,energyPool:x.energyPool||0,mulliganCount:state.mulligan[1].count,mulliganDone:state.mulligan[1].done,phase:state.phase};
 }
 function sendPublicState(){
-  if(applyingPublicState||!onlinePlayerId||!gameSocket||gameSocket.readyState!==WebSocket.OPEN)return;
+  if(devLocalMode||applyingPublicState||!onlinePlayerId||!gameSocket||gameSocket.readyState!==WebSocket.OPEN)return;
   const publicState=JSON.stringify(getPublicState());
   if(publicState===lastPublicState)return;
   lastPublicState=publicState;
@@ -172,29 +173,29 @@ function connectGameServer(){
           render();
           log("オンラインルームに参加しました（"+message.playerId+"）");
         }
-        else if(message.type==="operation"&&message.action==="mulligan_update"){
+        else if(message.type==="operation"&&message.action==="mulligan_update"&&!devLocalMode){
           if(message.playerId!==onlinePlayerId){state.mulligan[2].count=Number.isInteger(message.count)?message.count:0;state.mulligan[2].done=message.done===true;if(state.mulligan[1].done&&state.mulligan[2].done&&state.phase!=="playing"){state.phase="playing";if(state.turnPlayer===1)startTurn(1);else render()}else render();}
         }
-        else if(message.type==="operation"&&message.action==="energy_pool"){
+        else if(message.type==="operation"&&message.action==="energy_pool"&&!devLocalMode){
           if(message.playerId!==onlinePlayerId){state.players[2].energyPool=Number.isFinite(message.value)?message.value:0;render();}
         }
-        else if(message.type==="operation"&&message.action==="effect_delta"){
+        else if(message.type==="operation"&&message.action==="effect_delta"&&!devLocalMode){
           if(message.playerId!==onlinePlayerId)applyEffectDelta(message);
         }
-        else if(message.type==="operation"&&message.action==="force_end_turn"){
+        else if(message.type==="operation"&&message.action==="force_end_turn"&&!devLocalMode){
           if(message.playerId!==onlinePlayerId&&state.turnPlayer===1)endTurn();
         }
-        else if(message.type==="operation"&&message.action==="attack_declared"){
+        else if(message.type==="operation"&&message.action==="attack_declared"&&!devLocalMode){
           if(message.playerId!==onlinePlayerId){const attacker=state.players[2].monsters.find(c=>c.id===message.cardId);resolveTrapTriggers(1,"opponentAttack",attacker||null);render();}
         }
-        else if(message.type==="public_state"){
+        else if(message.type==="public_state"&&!devLocalMode){
           applyPublicState(message.playerId,message.state);
           applyingPublicState=true;
           render();
           applyingPublicState=false;
           sendPublicState();
         }
-        else if(message.type==="card_move"){
+        else if(message.type==="card_move"&&!devLocalMode){
           applyRemoteMove(message.playerId,message.zone,message.dest,message.cardId);
         }
         else if(message.type==="log"){const text=message.playerId===onlinePlayerId?message.text:String(message.text||"").replaceAll("自分",state.players[2].name);log(text,false)}
@@ -206,12 +207,12 @@ function connectGameServer(){
           if(message.type==="player_joined")log("対戦相手が参加しました");
           else log("プレイヤー名を更新しました");
         }
-        else if(message.type==="first_player_set"){
+        else if(message.type==="first_player_set"&&!devLocalMode){
           state.turnPlayer=message.turnPlayer===onlinePlayerId?1:2;
           render();
           log("先攻: "+state.players[state.turnPlayer].name,false);
         }
-        else if(message.type==="turn_changed"){
+        else if(message.type==="turn_changed"&&!devLocalMode){
           state.turnPlayer=message.turnPlayer===onlinePlayerId?1:2;
           const currentPlayer=message.previousTurnPlayer===onlinePlayerId?1:2;
           if(currentPlayer===1)state.players[1].monsters.forEach(m=>{m.damage=0});
@@ -269,7 +270,7 @@ function newPlayer(name,p){
   const pool=shuffle([...cardNames]).slice(0,50);
   return{name,life:4000,energyPool:0,deckCounters:0,deckList:pool.slice(),hand:pool.slice(0,7).map((n,i)=>newCard(n,p+"h"+i)),monsters:[],energy:[],field:[],discard:[],facedown:[],deck:pool.slice(7).map((n,i)=>newCard(n,p+"d"+i))};
 }
-function log(s,sendOnline=true){const e=document.querySelector("#log"),d=new Date().toLocaleTimeString("ja-JP"),html='<div>['+d+'] '+esc(s)+"</div>";e.insertAdjacentHTML("beforeend",html);e.scrollTop=e.scrollHeight;const v=document.querySelector("#deckViewerLog");if(v){v.insertAdjacentHTML("beforeend",html);v.scrollTop=v.scrollHeight}if(sendOnline&&onlinePlayerId&&gameSocket&&gameSocket.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"log",text:String(s).slice(0,200)}))}
+function log(s,sendOnline=true){const e=document.querySelector("#log"),d=new Date().toLocaleTimeString("ja-JP"),html='<div>['+d+'] '+esc(s)+"</div>";e.insertAdjacentHTML("beforeend",html);e.scrollTop=e.scrollHeight;const v=document.querySelector("#deckViewerLog");if(v){v.insertAdjacentHTML("beforeend",html);v.scrollTop=v.scrollHeight}if(sendOnline&&!devLocalMode&&onlinePlayerId&&gameSocket&&gameSocket.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"log",text:String(s).slice(0,200)}))}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 
 function closeDiscardViewer(){const v=document.querySelector("#discardViewer");if(v)v.hidden=true;state.discardInspectId=null}
@@ -447,7 +448,7 @@ function move(dest){
   const s=state.selected,x=state.players[1],src=x[s.z],i=src.findIndex(c=>c.id===s.id);
   if(i<0)return;
   if(MAX[dest]!==undefined&&x[dest].length>=MAX[dest])return log(dest+" の上限のため移動をキャンセル");
-  if(onlinePlayerId!==null){
+  if(onlinePlayerId!==null&&!devLocalMode){
     if(!gameSocket||gameSocket.readyState!==WebSocket.OPEN)return log("オンラインサーバーに接続されていません");
     gameSocket.send(JSON.stringify({type:"operation",action:"move_card",zone:s.z,dest,cardId:s.id}));
     return;
@@ -471,8 +472,8 @@ function endTurn(){const localPlayer=1;if(state.turnPlayer!==localPlayer||state.
 function cardDefinition(cardOrName){if(typeof cardOrName==="string")return cardDataByName.get(cardOrName)||null;const id=cardOrName?.cardDataId;if(id){const exact=cardDatabase.find(c=>c.id===id);if(exact)return exact}return cardDataByName.get(cardOrName?.name)||null}
 function cardKind(card){const tag=String(cardDefinition(card)?.tags||"");if(tag.includes("#エネルギーカード"))return "energy";if(tag.includes("#フィールドカード"))return "field";if(tag.includes("#モンスターカード"))return "monster";if(tag.includes("#魔法カード"))return "spell";if(tag.includes("#罠カード"))return "trap";return "unknown"}
 function cardCost(card){const value=cardDefinition(card)?.cost;if(typeof value==="number"&&Number.isFinite(value))return Math.max(0,value);if(typeof value==="string"&&/^\+?\d+$/.test(value))return Math.max(0,Number(value.replace("+","")));return 0}
-function broadcastEnergyPool(){if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"energy_pool",value:state.players[1].energyPool||0}))}
-function broadcastEffectDelta(delta){if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",...delta}))}
+function broadcastEnergyPool(){if(!devLocalMode&&onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"energy_pool",value:state.players[1].energyPool||0}))}
+function broadcastEffectDelta(delta){if(!devLocalMode&&onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",...delta}))}
 function applyEffectDelta(message){
  const actorIsLocal=message.playerId===onlinePlayerId;
  const targetPlayer=message.target==="ownLife"||message.target==="ownEnergyPool"?(actorIsLocal?1:2):(actorIsLocal?2:1);
@@ -800,13 +801,19 @@ function readDeckCode(code){
   if(raw.toUpperCase().startsWith("D2-")){let b64=raw.slice(3).replace(/-/g,"+").replace(/_/g,"/");b64+="=".repeat((4-b64.length%4)%4);const bin=atob(b64),deck=[];if(bin.length%3!==0)throw new Error("デッキコードの形式が正しくありません");for(let j=0;j<bin.length;j+=3){const i=((bin.charCodeAt(j)&3)<<8)|bin.charCodeAt(j+1),n=bin.charCodeAt(j+2);if(i<0||i>=cardNames.length||n<1)throw new Error("デッキコードに不正なカードがあります");for(let k=0;k<n;k++)deck.push(cardNames[i])}return deck}
   if(!s.startsWith("D1-"))throw new Error("デッキコードの形式が正しくありません");const parts=s.slice(3).split("-").filter(Boolean),deck=[];for(const part of parts){const q=part.split(".");if(q.length!==2)throw new Error("デッキコードの形式が正しくありません");const i=parseInt(q[0],36),n=parseInt(q[1],36);if(!Number.isInteger(i)||!Number.isInteger(n)||i<0||i>=cardNames.length||n<1)throw new Error("デッキコードに不正なカードがあります");for(let k=0;k<n;k++)deck.push(cardNames[i])}return deck;
 }
+function activateDevLocalMode(){if(!devLocalMode){devLocalMode=true;log("開発用ローカル操作を開始しました。以後の盤面変更はこの画面だけに反映されます",false)}}
+function devSkipMulligan(p){if(state.phase!=="mulligan"||state.mulligan[p].done)return;activateDevLocalMode();state.mulligan[p].done=true;log((p===1?"自分":"相手")+"のマリガンを開発用にスキップしました",false);if(state.mulligan[1].done&&state.mulligan[2].done){state.phase="playing";log("両プレイヤーのマリガンが終了。ゲーム開始",false)}render()}
+function devRefreshCardOptions(){const p=Number(document.querySelector("#devSourcePlayer")?.value||1),z=document.querySelector("#devSourceZone")?.value||"hand",sel=document.querySelector("#devSourceCard");if(!sel)return;sel.innerHTML="";const cards=state.players[p]?.[z]||[];if(!cards.length){const o=document.createElement("option");o.value="";o.textContent="このゾーンにカードなし";sel.appendChild(o);return}cards.forEach(c=>{const o=document.createElement("option");o.value=c.id;o.textContent=(c.name||"(非公開カード情報なし)")+" ["+c.id+"]";sel.appendChild(o)})}
+function devRefreshHiddenInfo(){const b=document.querySelector("#devHiddenInfo");if(!b)return;const p=state.players[2],fmt=a=>a.map(c=>c.name||"(カード名は未受信)").join("、")||"なし";b.textContent="相手の手札："+fmt(p.hand)+" ／ 山札："+fmt(p.deck)+" ／ 罠："+fmt(p.facedown)+"。オンライン対戦で未受信のカード名は復元できません。"}
+function setupDevTools(){const normal=document.querySelector("#normalToolsPanel"),dev=document.querySelector("#devToolsPanel"),nt=document.querySelector("#normalTab"),dt=document.querySelector("#devTab");const show=v=>{normal.hidden=v;dev.hidden=!v;nt.classList.toggle("active",!v);dt.classList.toggle("active",v);if(v){devRefreshCardOptions();devRefreshHiddenInfo()}};nt?.addEventListener("click",()=>show(false));dt?.addEventListener("click",()=>show(true));document.querySelector("#devSourcePlayer")?.addEventListener("change",devRefreshCardOptions);document.querySelector("#devSourceZone")?.addEventListener("change",devRefreshCardOptions);
+document.querySelector("#devMoveCard")?.addEventListener("click",()=>{const sp=Number(document.querySelector("#devSourcePlayer").value),sz=document.querySelector("#devSourceZone").value,id=document.querySelector("#devSourceCard").value,dp=Number(document.querySelector("#devDestPlayer").value),dz=document.querySelector("#devDestZone").value,src=state.players[sp]?.[sz],dest=state.players[dp]?.[dz];if(!id||!Array.isArray(src)||!Array.isArray(dest))return log("移動元・移動先を確認してください",false);const i=src.findIndex(c=>c.id===id);if(i<0)return log("選択したカードが見つかりません",false);activateDevLocalMode();const c=src.splice(i,1)[0];c.tapped=false;c.faceUp=dz!=="facedown";c.revealed=dz==="hand"&&!!c.revealed;if(dz==="discard"){c.damage=0;c.modification=0;c.counters=0}if(dz==="field")dest.splice(0,dest.length);dest.push(c);state.selected=null;render();devRefreshCardOptions();devRefreshHiddenInfo();log("開発用：カードを制限を無視して移動しました",false)});
+const setTurn=p=>{activateDevLocalMode();state.turnPlayer=p;state.phase="playing";state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.gameOver=null;state.mulligan[1].done=true;state.mulligan[2].done=true;render();log("開発用："+(p===1?"自分":"相手")+"のターンに設定しました",false)};document.querySelector("#devTurnSelf")?.addEventListener("click",()=>setTurn(1));document.querySelector("#devTurnOpponent")?.addEventListener("click",()=>setTurn(2));document.querySelector("#devTurnNext")?.addEventListener("click",()=>setTurn(state.turnPlayer===1?2:1));document.querySelector("#devMulliganSelf")?.addEventListener("click",()=>devSkipMulligan(1));document.querySelector("#devMulliganOpponent")?.addEventListener("click",()=>devSkipMulligan(2));document.querySelector("#devRevealOpponent")?.addEventListener("click",()=>{activateDevLocalMode();state.players[2].hand.forEach(c=>{if(c.name)c.faceUp=true});state.players[2].facedown.forEach(c=>{c.faceUp=true});render();devRefreshHiddenInfo();log("開発用：手元に存在する相手カード情報を表示しました。未受信のカード名は表示できません",false)})}
 function setup(){
   setupPreparationScreen();
   document.querySelector("#deckViewerClose").onclick=closeDeckViewer;
   const mulliganButton=document.querySelector("#mulliganAgain");if(mulliganButton)mulliganButton.onclick=doMulligan;
   const mulliganKeep=document.querySelector("#mulliganKeep");if(mulliganKeep)mulliganKeep.onclick=finishMulligan;
-  const mulliganSkip=document.querySelector("#mulliganSkip");if(mulliganSkip)mulliganSkip.onclick=()=>{if(state.phase!=="mulligan"||state.mulligan[1].done)return;log("マリガンをスキップしました");finishMulligan()};
-  const opponentMulliganSkip=document.querySelector("#opponentMulliganSkip");if(opponentMulliganSkip)opponentMulliganSkip.onclick=()=>{if(state.phase!=="mulligan"||state.mulligan[2].done)return;state.mulligan[2].done=true;log("開発用操作：対戦相手のマリガンをスキップしました");if(state.mulligan[1].done){state.phase="playing";log("両プレイヤーのマリガンが終了。ゲーム開始");if(state.turnPlayer===1){startTurn(1);return}}render()};
+  setupDevTools();
   document.addEventListener("click",e=>{const v=document.querySelector("#discardViewer");if(v&&!v.hidden&&!e.target.closest("#discardViewer .discard-viewer-panel")&&!e.target.closest(".player .other .zone:nth-child(2)"))closeDiscardViewer()});
   document.querySelector("#discardViewer").onclick=e=>{if(e.target===document.querySelector("#discardViewer"))closeDiscardViewer()};
   document.querySelector("#deckEdit").onclick=()=>{state.players[1].deckList=state.savedDeck.slice();document.querySelector("#deckEditor").hidden=false;const search=document.querySelector("#deckCardSearch");if(search)search.value="";renderDeckEditor()};
