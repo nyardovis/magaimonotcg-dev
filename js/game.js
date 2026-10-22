@@ -356,6 +356,7 @@ function render(){
     discardWarning.hidden=pending===null;
     if(pending!==null)discardWarning.textContent=state.players[pending].name+"：ドロー前に手札を1枚捨ててください（カードをクリック）";
   }
+  selection();
   renderMulliganOverlay();
   sendPublicState();
 }
