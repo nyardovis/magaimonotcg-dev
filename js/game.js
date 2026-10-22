@@ -325,7 +325,7 @@ function render(){
     deckCounterBadge.hidden=!(x.deckCounters||0);
     deck.appendChild(deckCounterBadge);
     deck.onclick=null;
-    if(x.deck.length)deck.onclick=null;
+    if(x.deck.length)deck.onclick=()=>openDeckViewer();
     deck.classList.toggle("back",!!x.deck.length);
     deck.classList.toggle("horizontal",!!x.deckHorizontal);
     zone(p,"energy",x.energy);
@@ -371,10 +371,7 @@ function cardEl(p,z,c,visible){
   else{e.appendChild(createCardFace(c.name,z==="energy"?"horizontal":"portrait"));const a=c.modification-c.damage;if(a)e.insertAdjacentHTML("beforeend",'<span class="adjust">'+(a>0?"+":"")+a+"</span>");if(c.counters)e.insertAdjacentHTML("beforeend",'<span class="counter">'+c.counters+"</span>")}
   if(c.revealed){const mark=document.createElement("span");mark.className="revealed-marker";mark.textContent="!";e.appendChild(mark)}
   e.dataset.player=String(p);e.dataset.zone=z;e.dataset.cardId=c.id;
-  if(state.pendingDiscardPlayer!==null){
-    if(state.pendingDiscardPlayer===1&&p===1&&z==="hand")e.onclick=()=>select(p,z,c.id);
-    else e.onclick=()=>select(p,z,c.id);
-  }else e.onclick=()=>select(p,z,c.id);
+  if(state.pendingDiscardPlayer!==null){if(state.pendingDiscardPlayer===1&&p===1&&z==="hand")e.onclick=()=>completePendingDiscard(1,c.id);else e.onclick=null}else e.onclick=null;
   return e;
 }
 function find(p,z,id){return state.players[p][z].find(c=>c.id===id)}
@@ -394,7 +391,6 @@ function renderDeckViewer(){
   displayDeck.forEach(c=>{const e=document.createElement("div");e.className="deck-viewer-card"+(state.deckInspectId===c.id?" selected":"");e.appendChild(createCardFace(c.name));e.onclick=()=>{state.deckInspectId=c.id;renderDeckViewer()};list.appendChild(e)});
   const c=displayDeck.find(v=>v.id===state.deckInspectId);if(!c){preview.textContent="カードを選択";return}
   preview.appendChild(createCardFace(c.name));const name=document.createElement("div");name.className="deck-viewer-name";name.textContent=c.name;preview.appendChild(name);
-  for(const[z,label]of[["hand","手札へ"],["hand","公開して手札へ"],["monsters","モンスターへ"],["energy","エネルギーへ"],["field","フィールドへ"],["facedown","罠へ"],["discard","捨て札へ"]]){const b=document.createElement("button");b.textContent=label;b.onclick=()=>moveInspectedDeckCard(z,label==="公開して手札へ");actions.appendChild(b)}
 }
 function moveInspectedDeckCard(dest,reveal=false){
   if(state.pendingDiscardPlayer!==null)return log("強制捨て中は山札からカードを移動できません");
