@@ -116,3 +116,7 @@
 
 /* Place card choices above the card, with larger, clearer controls. */
 .card-choice-actions{top:-48px;bottom:auto;left:0;right:0;height:44px;inset-inline:0;background:transparent;border-radius:0;gap:8px;overflow:visible}.card-choice-actions button{width:40px;height:40px;flex:0 0 40px;font-size:25px;border-width:2px}.card-choice-actions .attack,.card-choice-actions .effect{font-size:23px}
+
+
+/* Energy row: available-energy count on the left, all-tap action on the right. */
+.energy-row{gap:8px!important;min-height:145px!important}.energy-row>label{width:28px!important;flex:0 0 28px!important}.energy-pool{flex:0 0 30px;min-width:30px;text-align:center;font-size:18px;color:#fff;align-self:center}.energy-row>.cards{justify-content:flex-start;overflow-x:auto}.energy-row>#tapAllEnergy{flex:0 0 auto;align-self:center;max-width:100px;white-space:normal;font-size:11px;padding:7px 6px;border:1px solid #59616d;border-radius:4px;background:#292d34;color:#fff;cursor:pointer}.game>header #leaveRoom{margin-left:8px;flex:0 0 auto;padding:6px 9px;border:1px solid #655;background:#38292b;color:#fff;border-radius:4px;cursor:pointer;font-size:11px}
