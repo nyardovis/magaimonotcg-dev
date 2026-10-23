@@ -371,7 +371,7 @@ function cardEl(p,z,c,visible){
   const e=document.createElement("div");
   e.className="card zone-"+z+(c.tapped?" tapped":"")+(state.selected?.id===c.id?" selected":"");if(c.tapped){e.style.transformOrigin="center center";e.style.transform="rotate(-15deg)"}
   if(!visible||c.faceUp===false)e.classList.add("back");
-  else{e.appendChild(createCardFace(c.name,z==="energy"?"horizontal":"portrait"));const a=c.modification-c.damage;if(a)e.insertAdjacentHTML("beforeend",'<span class="adjust">'+(a>0?"+":"")+a+"</span>");if(c.counters)e.insertAdjacentHTML("beforeend",'<span class="counter">'+c.counters+"</span>")}
+  else{e.appendChild(createCardFace(c.name,z==="energy"?"horizontal":"portrait"));const def=cardDefinition(c);if(def&&def.cost!==undefined&&def.cost!==null&&String(def.cost).trim()!==""){const cost=document.createElement("span");cost.className="card-cost";cost.textContent=String(def.cost);e.appendChild(cost)}const a=c.modification-c.damage;if(a)e.insertAdjacentHTML("beforeend",'<span class="adjust">' +(a>0?"+":"")+a+"</span>");if(c.counters)e.insertAdjacentHTML("beforeend",'<span class="counter">' +c.counters+"</span>")}
   if(c.revealed){const mark=document.createElement("span");mark.className="revealed-marker";mark.textContent="!";e.appendChild(mark)}
   e.dataset.player=String(p);e.dataset.zone=z;e.dataset.cardId=c.id;
   if(state.pendingDiscardPlayer!==null){if(state.pendingDiscardPlayer===1&&p===1&&z==="hand")e.onclick=()=>completePendingDiscard(1,c.id);else e.onclick=null}
