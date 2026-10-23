@@ -254,7 +254,8 @@ function createCardFace(name,orientation="portrait"){
     const type=document.createElement("div");
     type.className="card-face-type";
     type.dataset.kind=kind;
-    type.style.backgroundColor=color;
+    type.style.backgroundColor=kind==="field"?"#8b5a2b":color;
+    type.textContent=({monster:"モンスター",spell:"魔法",trap:"罠",energy:"エネルギー",field:"フィールド"})[kind]||"モンスター";
     face.appendChild(type);
   }
   return face;
@@ -372,7 +373,28 @@ function cardEl(p,z,c,visible){
   else{e.appendChild(createCardFace(c.name,z==="energy"?"horizontal":"portrait"));const a=c.modification-c.damage;if(a)e.insertAdjacentHTML("beforeend",'<span class="adjust">'+(a>0?"+":"")+a+"</span>");if(c.counters)e.insertAdjacentHTML("beforeend",'<span class="counter">'+c.counters+"</span>")}
   if(c.revealed){const mark=document.createElement("span");mark.className="revealed-marker";mark.textContent="!";e.appendChild(mark)}
   e.dataset.player=String(p);e.dataset.zone=z;e.dataset.cardId=c.id;
-  if(state.pendingDiscardPlayer!==null){if(state.pendingDiscardPlayer===1&&p===1&&z==="hand")e.onclick=()=>completePendingDiscard(1,c.id);else e.onclick=null}else e.onclick=()=>select(p,z,c.id);
+  if(state.pendingDiscardPlayer!==null){if(state.pendingDiscardPlayer===1&&p===1&&z==="hand")e.onclick=()=>completePendingDiscard(1,c.id);else e.onclick=null}
+  else if(p===1&&z==="energy")e.onclick=()=>{state.selected={p,z,id:c.id};if(!c.tapped){c.tapped=true;log("エネルギー「"+c.name+"」をタップしました")}render()}
+  else e.onclick=()=>select(p,z,c.id);
+  if(state.selected?.p===p&&state.selected?.z===z&&state.selected?.id===c.id&&p===1&&state.phase==="playing"&&state.pendingDiscardPlayer===null){
+    const actions=document.createElement("div");actions.className="card-choice-actions";
+    const s=state.selected;
+    const addChoice=(label,cls,fn)=>{const b=document.createElement("button");b.type="button";b.className=cls;b.textContent=label;b.onclick=ev=>{ev.stopPropagation();fn()};actions.appendChild(b)};
+    if(z==="hand"){
+      addChoice("○","confirm",()=>playCardFromHand(c.id));
+      addChoice("×","cancel",()=>{state.selected=null;render()});
+    }else if(z==="monsters"){
+      if(state.phase==="playing")addChoice("⚔","attack",()=>declareAttack(c.id));
+      const abilities=CardEffectEngine.activatedAbilities(cardDefinition(c)?.effect_text||"");
+      abilities.forEach((ability,index)=>addChoice("✦","effect",()=>activateCardAbility(c.id,index)));
+      addChoice("×","cancel",()=>{state.selected=null;render()});
+    }else if(["field","facedown"].includes(z)){
+      const abilities=CardEffectEngine.activatedAbilities(cardDefinition(c)?.effect_text||"");
+      abilities.forEach((ability,index)=>addChoice("✦","effect",()=>activateCardAbility(c.id,index)));
+      if(abilities.length)addChoice("×","cancel",()=>{state.selected=null;render()});
+    }
+    if(actions.childElementCount)e.appendChild(actions);
+  }
   return e;
 }
 function find(p,z,id){return state.players[p][z].find(c=>c.id===id)}
@@ -393,11 +415,11 @@ function selection(){
   if(state.pendingDiscardPlayer!==null){if(s.p===1&&s.z==="hand"&&s.p===state.pendingDiscardPlayer){add("このカードを捨てる",()=>completePendingDiscard(1,s.id));return}op.textContent="カードを捨てるまで操作できません";return}
   if(!visible){op.textContent="裏向きのカード";return}
   if(s.p!==1){op.textContent="相手のカード";return}
-  if(["monsters","energy","field"].includes(s.z)&&state.phase==="playing"){
-    CardEffectEngine.activatedAbilities(cardDefinition(c)?.effect_text||"").forEach((ability,index)=>add("能力を使用（コスト"+ability.cost+"）",()=>activateCardAbility(c.id,index)));
+  if(["monsters","energy","field","facedown"].includes(s.z)&&state.phase==="playing"){
+    CardEffectEngine.activatedAbilities(cardDefinition(c)?.effect_text||"").forEach((ability,index)=>add("✦ 効果発動（コスト"+ability.cost+"）",()=>activateCardAbility(c.id,index)));
   }
-  if(s.z==="monsters"&&state.phase==="playing")add("攻撃を宣言",()=>declareAttack(c.id));
-  if(s.z==="hand"&&state.phase==="playing")add("このカードを使用 / セット",()=>playCardFromHand(c.id));
+  if(s.z==="monsters"&&state.phase==="playing")add("⚔ 攻撃を宣言",()=>declareAttack(c.id));
+  if(s.z==="hand"&&state.phase==="playing")add("○ カードを使用 / セット",()=>playCardFromHand(c.id));
 }
 function openMonsterAdjust(c){const modal=document.querySelector("#monsterAdjustModal"),input=document.querySelector("#monsterAdjustInput");modal.hidden=false;input.value="";input.focus();const close=()=>{modal.hidden=true};const apply=(action)=>{const raw=input.value.trim();if(!raw){close();return}const n=Number(raw);if(!Number.isInteger(n)){log("ダメージ／回復の変更をキャンセルしました");close();return}const amount=Math.abs(n);if(action==="cancel"){close();return}if(action==="damage")c.damage+=amount;if(action==="heal")c.damage=Math.max(0,c.damage-amount);if(action==="change")c.modification=amount+c.damage;checkMonsterDestruction(1);state.selected={p:1,z:"monsters",id:c.id};render();close()};modal.querySelectorAll("[data-monster-action]").forEach(b=>b.onclick=()=>apply(b.dataset.monsterAction));input.onkeydown=ev=>{if(ev.key!=="Enter")return;ev.preventDefault();const raw=input.value.trim();if(!raw)return;const n=Number(raw);if(!Number.isInteger(n)){log("ダメージ／回復の変更をキャンセルしました");close();return}apply(n>0&&raw.startsWith("+")?"heal":"damage")}}
 function openMonsterStatusAdjust(c){const modal=document.querySelector("#monsterStatusModal"),input=document.querySelector("#monsterStatusInput");modal.hidden=false;input.value="";input.focus();const close=()=>{modal.hidden=true};const apply=(action)=>{const raw=input.value.trim();if(!raw){close();return}const n=Number(raw);if(!Number.isInteger(n)){log("ステータス修正の変更をキャンセルしました");close();return}const amount=Math.abs(n);if(action==="cancel"){close();return}if(action==="increase")c.modification+=amount;if(action==="decrease")c.modification-=amount;if(action==="change")c.modification=amount+c.damage;checkMonsterDestruction(1);state.selected={p:1,z:"monsters",id:c.id};render();close()};modal.querySelectorAll("[data-monster-status-action]").forEach(b=>b.onclick=()=>apply(b.dataset.monsterStatusAction));input.onkeydown=ev=>{if(ev.key!=="Enter")return;ev.preventDefault();const raw=input.value.trim();if(!raw)return;const n=Number(raw);if(!Number.isInteger(n)){log("ステータス修正の変更をキャンセルしました");close();return}apply(n>0&&raw.startsWith("+")?"increase":"decrease")}}
@@ -521,7 +543,7 @@ function resolveCardTrigger(card,p,trigger){
 function activateCardAbility(cardId,abilityIndex){
   if(state.phase!=="playing"||state.pendingDiscardPlayer!==null)return;
   const selected=state.selected;
-  if(!selected||selected.p!==1||!["monsters","energy","field"].includes(selected.z))return;
+  if(!selected||selected.p!==1||!["monsters","energy","field","facedown"].includes(selected.z))return;
   const card=find(1,selected.z,cardId);if(!card)return;
   const abilities=CardEffectEngine.activatedAbilities(cardDefinition(card)?.effect_text||"");
   const ability=abilities[abilityIndex];if(!ability)return;
