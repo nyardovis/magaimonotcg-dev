@@ -389,7 +389,7 @@ function cardEl(p,z,c,visible){
       const abilities=CardEffectEngine.activatedAbilities(cardDefinition(c)?.effect_text||"");
       abilities.forEach((ability,index)=>addChoice("✦","effect",()=>activateCardAbility(c.id,index)));
       addChoice("×","cancel",()=>{state.selected=null;render()});
-    }else if(["field","facedown"].includes(z)){
+    }else if(["discard","field","facedown"].includes(z)){
       const abilities=CardEffectEngine.activatedAbilities(cardDefinition(c)?.effect_text||"");
       abilities.forEach((ability,index)=>addChoice("✦","effect",()=>activateCardAbility(c.id,index)));
       if(abilities.length)addChoice("×","cancel",()=>{state.selected=null;render()});
@@ -416,7 +416,7 @@ function selection(){
   if(state.pendingDiscardPlayer!==null){if(s.p===1&&s.z==="hand"&&s.p===state.pendingDiscardPlayer){add("このカードを捨てる",()=>completePendingDiscard(1,s.id));return}op.textContent="カードを捨てるまで操作できません";return}
   if(!visible){op.textContent="裏向きのカード";return}
   if(s.p!==1){op.textContent="相手のカード";return}
-  if(["monsters","energy","field","facedown"].includes(s.z)&&state.phase==="playing"){
+  if(["monsters","energy","field","facedown","discard"].includes(s.z)&&state.phase==="playing"){
     CardEffectEngine.activatedAbilities(cardDefinition(c)?.effect_text||"").forEach((ability,index)=>add("✦ 効果発動（コスト"+ability.cost+"）",()=>activateCardAbility(c.id,index)));
   }
   if(s.z==="monsters"&&state.phase==="playing")add("⚔ 攻撃を宣言",()=>declareAttack(c.id));
@@ -544,7 +544,7 @@ function resolveCardTrigger(card,p,trigger){
 function activateCardAbility(cardId,abilityIndex){
   if(state.phase!=="playing"||state.pendingDiscardPlayer!==null)return;
   const selected=state.selected;
-  if(!selected||selected.p!==1||!["monsters","energy","field","facedown"].includes(selected.z))return;
+  if(!selected||selected.p!==1||!["monsters","energy","field","facedown","discard"].includes(selected.z))return;
   const card=find(1,selected.z,cardId);if(!card)return;
   const abilities=CardEffectEngine.activatedAbilities(cardDefinition(card)?.effect_text||"");
   const ability=abilities[abilityIndex];if(!ability)return;
