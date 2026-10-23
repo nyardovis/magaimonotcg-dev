@@ -8,20 +8,20 @@
 </head>
 <body>
 <main class="game">
-<header><h1>Ankr TCG</h1><span id="roomStatus">ルーム: -</span><span>ターン: <b id="turnPlayer">プレイヤー1</b></span></header>
+<header><h1>Ankr TCG</h1><span id="roomStatus">ルーム: -</span><span>ターン: <b id="turnPlayer">プレイヤー1</b></span><button id="leaveRoom" type="button">ルームを退出</button></header>
 <section class="board">
 <aside class="side left"><div class="title">選択中のカード</div><div id="cardInfo" class="card-info">カードを選択すると、効果などの情報が表示されます。</div><div class="title">カード操作</div><div id="ops" class="card-ops">カードを選択してください</div><div class="revealed-status" id="revealedStatus"></div></aside>
 <section class="table">
 <div class="player opponent">
 <div class="row hand"><label>手札</label><div id="p2-hand" class="cards"></div></div>
 <div class="other" style="margin-top:20px !important;"><div class="zone"><span>フィールド</span><div id="p2-field"></div></div><div class="zone discard-zone"><span>捨て札 <b id="p2-discard-count">0枚</b></span><div id="p2-discard"></div></div><div class="zone deck-zone"><span>山札 <b id="p2-deck-count">0枚</b></span><div id="p2-deck" class="back"><b id="p2-deck-counter">0</b></div></div><div class="info"><b id="p2-name">プレイヤー2</b><span>ライフ <b id="p2-life">4000</b></span></div><div class="zone facedown">罠<div id="p2-facedown"></div></div><button data-end>ターン終了</button></div>
-<div class="row"><label>エネルギー（使用可能 <b id="p2-energy-pool">0</b>）</label><div id="p2-energy" class="cards"></div></div>
+<div class="row energy-row"><label>エネルギー</label><b id="p2-energy-pool" class="energy-pool">0</b><div id="p2-energy" class="cards"></div></div>
 <div class="row monsters"><label>モンスター</label><div id="p2-monsters" class="cards"></div></div>
 </div>
 <div class="divider"><span id="turnAreaLabel">プレイヤー1のターン</span></div>
 <div class="player self">
 <div class="row monsters"><label>モンスター</label><div id="p1-monsters" class="cards"></div></div>
-<div class="row"><label>エネルギー（使用可能 <b id="p1-energy-pool">0</b>）</label><div id="p1-energy" class="cards"></div></div>
+<div class="row energy-row"><label>エネルギー</label><b id="p1-energy-pool" class="energy-pool">0</b><div id="p1-energy" class="cards"></div><button id="tapAllEnergy" type="button">エネルギーを全てタップ</button></div>
 <div class="other"><div class="zone"><span>フィールド</span><div id="p1-field"></div></div><div class="zone discard-zone"><span>捨て札 <b id="p1-discard-count">0枚</b></span><div id="p1-discard"></div></div><div class="zone deck-zone"><span>山札 <b id="p1-deck-count">0枚</b></span><div id="p1-deck" class="back"><b id="p1-deck-counter">0</b></div></div><div class="info"><b id="p1-name">プレイヤー1</b><span class="editable-life" title="クリックして変更">ライフ <b id="p1-life">4000</b></span></div><div class="zone facedown">罠<div id="p1-facedown"></div></div><button data-end>ターン終了</button></div>
 <div class="row hand"><label>手札</label><div id="p1-hand" class="cards"></div></div>
 </div>
