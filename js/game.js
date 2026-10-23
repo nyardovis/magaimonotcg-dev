@@ -9,6 +9,7 @@ let hasReceivedOpponentPublicState=false;
 let applyingPublicState=false;
 let devLocalMode=false;
 let devToolsOpenDuringMulligan=false;
+let cardChoiceHiddenFor=null;
 
 function getPublicState(){
   const x=state.players[1];
@@ -376,13 +377,13 @@ function cardEl(p,z,c,visible){
   if(state.pendingDiscardPlayer!==null){if(state.pendingDiscardPlayer===1&&p===1&&z==="hand")e.onclick=()=>completePendingDiscard(1,c.id);else e.onclick=null}
   else if(p===1&&z==="energy")e.onclick=()=>{state.selected={p,z,id:c.id};if(!c.tapped){c.tapped=true;log("エネルギー「"+c.name+"」をタップしました")}render()}
   else e.onclick=()=>select(p,z,c.id);
-  if(state.selected?.p===p&&state.selected?.z===z&&state.selected?.id===c.id&&p===1&&state.phase==="playing"&&state.pendingDiscardPlayer===null){
+  if(state.selected?.p===p&&state.selected?.z===z&&state.selected?.id===c.id&&cardChoiceHiddenFor!==c.id&&p===1&&state.phase==="playing"&&state.pendingDiscardPlayer===null){
     const actions=document.createElement("div");actions.className="card-choice-actions";
     const s=state.selected;
     const addChoice=(label,cls,fn)=>{const b=document.createElement("button");b.type="button";b.className=cls;b.textContent=label;b.onclick=ev=>{ev.stopPropagation();fn()};actions.appendChild(b)};
     if(z==="hand"){
       addChoice("○","confirm",()=>playCardFromHand(c.id));
-      addChoice("×","cancel",()=>{state.selected=null;render()});
+      addChoice("×","cancel",()=>{cardChoiceHiddenFor=c.id;render()});
     }else if(z==="monsters"){
       if(state.phase==="playing")addChoice("⚔","attack",()=>declareAttack(c.id));
       const abilities=CardEffectEngine.activatedAbilities(cardDefinition(c)?.effect_text||"");
@@ -398,7 +399,7 @@ function cardEl(p,z,c,visible){
   return e;
 }
 function find(p,z,id){return state.players[p][z].find(c=>c.id===id)}
-function select(p,z,id){const c=find(p,z,id);if(!c)return;state.selected={p,z,id};render()}
+function select(p,z,id){const c=find(p,z,id);if(!c)return;cardChoiceHiddenFor=null;state.selected={p,z,id};render()}
 function renderCardInfo(card,visible){
   const box=document.querySelector("#cardInfo");if(!box)return;box.innerHTML="";
   if(!visible||(card.faceUp===false&&state.selected?.p!==1)){box.textContent="裏向きのカード";return}
