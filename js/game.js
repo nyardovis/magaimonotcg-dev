@@ -295,7 +295,7 @@ function connectGameServer(){
       }catch{}
     };
     gameSocket.onerror=()=>log("オンラインサーバーへの接続に失敗しました");
-    gameSocket.onclose=e=>{if(currentRoom&&e.code!==1000){log("オンラインサーバーとの接続が切れました",false);resetToPreparation("接続が切れたため、対戦準備に戻りました。")}};
+    gameSocket.onclose=e=>{if(currentRoom){log("オンラインサーバーとの接続が切れました",false);resetToPreparation("接続が切れたため、対戦準備に戻りました。")}};
   }catch(e){console.error(e);log("オンラインサーバーへの接続を開始できませんでした")}
 }
 
