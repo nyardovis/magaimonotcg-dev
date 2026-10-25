@@ -127,3 +127,6 @@
 
 /* Mulligan hand preview and tap-all placement. */
 .mulligan-panel{width:min(900px,96vw);max-height:94vh;overflow:auto}.mulligan-hand-title{margin-top:16px;font-weight:700;color:#f3c85b}.mulligan-hand{display:flex;justify-content:center;align-items:flex-start;gap:8px;flex-wrap:wrap;margin-top:10px}.mulligan-hand .card{flex:0 0 74px;width:74px;height:106px;cursor:default;position:relative}.mulligan-hand .card-face{width:100%;height:100%}.mulligan-hand .card-cost{top:-6px;left:-7px}.energy-row{justify-content:center!important}.energy-row>.cards{flex:0 1 auto!important;min-width:0;max-width:calc(100% - 90px);justify-content:center!important;overflow:visible!important}.energy-row>#tapAllEnergy{margin-left:2px;align-self:center}.energy-row>#tapAllEnergy[hidden]{display:none!important}
+
+/* Attack target selection controls. */
+.attack-target-heading{font-weight:700;margin:10px 0 5px;color:#f3c85b}.attack-target-button{display:block;width:100%;margin:5px 0;padding:8px;text-align:left;background:#303640;color:#fff;border:1px solid #697586;border-radius:5px;cursor:pointer}.attack-player-button{border-color:#bd8d38;background:#47381f}
