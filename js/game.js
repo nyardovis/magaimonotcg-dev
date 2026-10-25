@@ -10,6 +10,7 @@ let applyingPublicState=false;
 let devLocalMode=false;
 let devToolsOpenDuringMulligan=false;
 let cardChoiceHiddenFor=null;
+let pendingAttack=null;
 
 function getPublicState(){
   const x=state.players[1];
@@ -413,6 +414,15 @@ function selection(){
   const op=document.querySelector("#ops");const info=document.querySelector("#cardInfo");if(info&&!state.selected)info.textContent="カードを選択すると、効果などの情報が表示されます。";if(!op)return;op.innerHTML="";
   if(!state.selected){op.textContent="カードを選択してください";return}
   const s=state.selected,c=find(s.p,s.z,s.id);if(!c){state.selected=null;return}
+  if(pendingAttack){
+    op.innerHTML="";const title=document.createElement("div");title.textContent="攻撃対象を選択："+pendingAttack.name;op.appendChild(title);
+    const targetLabel=document.createElement("div");targetLabel.textContent="相手のモンスター";targetLabel.className="attack-target-heading";op.appendChild(targetLabel);
+    const targets=state.players[2].monsters;
+    if(!targets.length){const empty=document.createElement("div");empty.textContent="相手の場にモンスターはいません";op.appendChild(empty)}
+    targets.forEach(target=>{const b=document.createElement("button");b.type="button";b.className="attack-target-button";b.textContent=target.name+"（攻撃力 "+attackPower(target)+"）";b.onclick=()=>resolveAttack(target.id);op.appendChild(b)});
+    const playerButton=document.createElement("button");playerButton.type="button";playerButton.className="attack-target-button attack-player-button";playerButton.textContent=state.players[2].name+"に攻撃（プレイヤー）";playerButton.onclick=()=>resolveAttack(null);op.appendChild(playerButton);
+    const cancel=document.createElement("button");cancel.type="button";cancel.textContent="攻撃をキャンセル";cancel.onclick=()=>{pendingAttack=null;render()};op.appendChild(cancel);return;
+  }
   const visible=s.p===1||c.faceUp!==false;renderCardInfo(c,visible);
   if(state.pendingDiscardPlayer!==null){if(s.p===1&&s.z==="hand"&&s.p===state.pendingDiscardPlayer){add("このカードを捨てる",()=>completePendingDiscard(1,s.id));return}op.textContent="カードを捨てるまで操作できません";return}
   if(!visible){op.textContent="裏向きのカード";return}
@@ -489,13 +499,13 @@ function broadcastEnergyPool(){if(!devLocalMode&&onlinePlayerId&&gameSocket?.rea
 function broadcastEffectDelta(delta){if(!devLocalMode&&onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",...delta}))}
 function applyEffectDelta(message){
  const actorIsLocal=message.playerId===onlinePlayerId;
- const targetPlayer=message.target==="ownLife"||message.target==="ownEnergyPool"?(actorIsLocal?1:2):(actorIsLocal?2:1);
+ const targetPlayer=["ownLife","ownEnergyPool","ownMonsterDamage"].includes(message.target)?(actorIsLocal?1:2):(actorIsLocal?2:1);
  if(message.target==="ownEnergyPool"||message.target==="opponentEnergyPool"){
   const delta=Number(message.delta)||0;state.players[targetPlayer].energyPool=Math.max(0,(Number(state.players[targetPlayer].energyPool)||0)+delta);render();return;
  }
  if(message.target==="ownLife"||message.target==="opponentLife"){const delta=Number(message.delta)||0;state.players[targetPlayer].life+=delta;if(targetPlayer===1&&delta<0)resolveTrapTriggers(1,"opponentDamagedMe");if(targetPlayer===2&&delta>0)resolveTrapTriggers(1,"opponentHeal");checkLifeWinner(targetPlayer);render();return}
  if(message.target==="ownLifeSet"){const target=actorIsLocal?1:2;if(Number.isFinite(message.value))state.players[target].life=message.value;render();return}
- if(message.target==="opponentMonsterDamage"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.damage=(c.damage||0)+(Number(message.delta)||0);checkMonsterDestruction(targetPlayer);render();return}}
+ if(message.target==="ownMonsterDamage"||message.target==="opponentMonsterDamage"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.damage=(c.damage||0)+(Number(message.delta)||0);checkMonsterDestruction(targetPlayer);render();return}}
  if(message.target==="opponentCardCounter"){const x=state.players[targetPlayer];let card=null;for(const z of ["monsters","energy","field","facedown","hand","discard"]){const i=(x[z]||[]).findIndex(c=>c.id===message.cardId);if(i>=0){card=x[z].splice(i,1)[0];break}}if(card)moveToDiscard(targetPlayer,card,"効果を打ち消された");render();return}
  if(message.target==="opponentMonsterModifier"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.modification=(c.modification||0)+(Number(message.delta)||0);render();return}}
  if(message.target==="opponentDisable"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.effectsDisabled=true;render();return}}
@@ -716,15 +726,36 @@ function resolveEffectText(text,p,sourceCard,eventCard=null){
  if(resolveSummonEffects(s,p,sourceCard))handled=true;
  if(!handled)log("未対応の効果（手動で処理してください）: "+s.slice(0,90));
 }
+function attackPower(card){const base=Number(card.power)||Number(cardDefinition(card)?.power)||0;return Math.max(0,base+(Number(card.modification)||0))}
 function declareAttack(cardId){
-  if(state.phase!=="playing"||state.pendingDiscardPlayer!==null)return;
+  if(state.phase!=="playing"||state.pendingDiscardPlayer!==null||state.turnPlayer!==1||state.gameOver)return;
   const card=state.players[1].monsters.find(c=>c.id===cardId);if(!card)return;
-  log("「"+card.name+"」の攻撃を宣言しました");
-  resolveCardTrigger(card,1,"attack");
-  resolveTrapTriggers(1,"ownAttack",card);
+  pendingAttack={cardId:card.id,name:card.name};state.selected={p:1,z:"monsters",id:card.id};
+  log("「"+card.name+"」の攻撃を宣言しました。攻撃対象を選んでください");
+  resolveCardTrigger(card,1,"attack");resolveTrapTriggers(1,"ownAttack",card);
   if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"attack_declared",cardId}));
   else if(!onlinePlayerId)resolveTrapTriggers(2,"opponentAttack");
   render();
+}
+function resolveAttack(targetMonsterId){
+  if(!pendingAttack||state.phase!=="playing"||state.pendingDiscardPlayer!==null)return;
+  const attacker=state.players[1].monsters.find(c=>c.id===pendingAttack.cardId);if(!attacker){pendingAttack=null;render();return}
+  const attack=attackPower(attacker);
+  if(targetMonsterId){
+    const defender=state.players[2].monsters.find(c=>c.id===targetMonsterId);if(!defender)return;
+    const counter=attackPower(defender);
+    attacker.damage=(Number(attacker.damage)||0)+counter;
+    defender.damage=(Number(defender.damage)||0)+attack;
+    log("「"+attacker.name+"」と「"+defender.name+"」が戦闘。"+attacker.name+"は"+counter+"ダメージ、"+defender.name+"は"+attack+"ダメージを受けました");
+    if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN){gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",target:"ownMonsterDamage",cardId:attacker.id,delta:counter}));gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",target:"opponentMonsterDamage",cardId:defender.id,delta:attack}))}
+    checkMonsterDestruction(1);checkMonsterDestruction(2);
+  }else{
+    state.players[2].life-=attack;
+    log(state.players[2].name+"は「"+attacker.name+"」の直接攻撃で"+attack+"ダメージを受けました");
+    if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",target:"opponentLife",delta:-attack}));
+    checkLifeWinner(2);
+  }
+  pendingAttack=null;state.selected=null;render();
 }
 function trapConditionMet(owner,trigger,abilityText,eventCard){
  const match=String(abilityText||"").match(/^\s*\[([^\]]+)\]/);if(!match)return true;
@@ -842,7 +873,7 @@ function setup(){
   document.querySelector("#deckEditBack").onclick=()=>{const current=state.players[1].deckList||[],saved=state.savedDeck||[],same=current.length===saved.length&&current.every((name,i)=>name===saved[i]);if(!same&&!confirm("デッキの内容が保存されていません。保存せずに戻りますか？"))return;document.querySelector("#deckEditor").hidden=true;updatePreparationDeckSummary()};
   document.querySelectorAll("[data-end]").forEach(b=>b.onclick=endTurn);
   const tapAllEnergyButton=document.querySelector("#tapAllEnergy");if(tapAllEnergyButton)tapAllEnergyButton.onclick=()=>{if(state.turnPlayer!==1||state.phase!=="playing"||state.pendingDiscardPlayer!==null)return log("今はエネルギーをタップできません");const untapped=state.players[1].energy.filter(e=>!e.tapped);if(!untapped.length)return log("タップできるエネルギーがありません");untapped.forEach(e=>e.tapped=true);state.players[1].energyPool=(state.players[1].energyPool||0)+untapped.length;broadcastEnergyPool();render();log("エネルギーを"+untapped.length+"枚タップしました（使用可能エネルギー +"+untapped.length+"）")};
-  const leaveRoomButton=document.querySelector("#leaveRoom");if(leaveRoomButton)leaveRoomButton.onclick=()=>{if(!confirm("ルームを退出して盤面をリセットしますか？"))return;if(gameSocket){gameSocket.onclose=null;gameSocket.close();gameSocket=null}onlinePlayerId=null;roomPlayerCount=0;currentRoom="";preparationCompleted=false;lastPublicState=null;hasReceivedOpponentPublicState=false;applyingPublicState=false;state.players[1]=newPlayer(state.players[1]?.name||"プレイヤー1","p1");state.players[2]=newPlayer("プレイヤー2","p2");state.turnPlayer=1;state.selected=null;state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.gameOver=null;state.phase="mulligan";state.mulligan={1:{count:0,done:false},2:{count:0,done:false}};state.deckInspectId=null;state.discardInspectId=null;state.energyPlacedThisTurn=false;try{localStorage.removeItem("originalCardGameLocalStateDev")}catch{}const url=new URL(location.href);url.searchParams.delete("room");history.replaceState(null,"",url);const lobby=document.querySelector("#roomLobby");if(lobby)lobby.hidden=false;const prep=document.querySelector("#prepScreen");if(prep)prep.hidden=true;const status=document.querySelector("#roomStatus");if(status)status.textContent="ルーム: -";render();log("ルームを退出し、盤面をリセットしました",false)};
+  const leaveRoomButton=document.querySelector("#leaveRoom");if(leaveRoomButton)leaveRoomButton.onclick=()=>{if(!confirm("ルームを退出して盤面をリセットしますか？"))return;if(gameSocket){gameSocket.onclose=null;gameSocket.close();gameSocket=null}const savedName=state.players[1]?.name||"プレイヤー1";onlinePlayerId=null;roomPlayerCount=0;currentRoom="";preparationCompleted=false;lastPublicState=null;hasReceivedOpponentPublicState=false;applyingPublicState=false;devLocalMode=false;pendingAttack=null;state.players[1]=newPlayer(savedName,"p1");state.players[2]=newPlayer("プレイヤー2","p2");state.turnPlayer=1;state.selected=null;state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.gameOver=null;state.phase="mulligan";state.mulligan={1:{count:0,done:false},2:{count:0,done:false}};state.deckInspectId=null;state.discardInspectId=null;state.discardInspectPlayer=1;state.deckInspectPlayer=1;state.energyPlacedThisTurn=false;state._previousOpponentMonsters=[];state.discardInspectId=null;state.deckInspectId=null;cardChoiceHiddenFor=null;devToolsOpenDuringMulligan=false;try{localStorage.removeItem("originalCardGameLocalStateDev")}catch{}const url=new URL(location.href);url.searchParams.delete("room");history.replaceState(null,"",url);const lobby=document.querySelector("#roomLobby");if(lobby)lobby.hidden=false;const prep=document.querySelector("#prepScreen");if(prep)prep.hidden=true;const mulligan=document.querySelector("#mulliganOverlay");if(mulligan)mulligan.hidden=true;const status=document.querySelector("#roomStatus");if(status)status.textContent="ルーム: -";const logBox=document.querySelector("#log");if(logBox)logBox.innerHTML="";render();log("ルームを退出し、盤面をすべてリセットしました",false)};
   document.querySelectorAll("[data-first]").forEach(b=>b.onclick=()=>{
     const q=b.dataset.first;
     const target=q==="self"?"player1":q==="opponent"?"player2":(Math.random()<.5?"player1":"player2");
