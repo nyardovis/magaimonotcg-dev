@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Ankr TCG 開発版</title>
-<link rel="stylesheet" href="css/style.css?v=dev-attack-flow1">
+<link rel="stylesheet" href="css/style.css?v=dev-match-flow1">
 </head>
 <body>
 <main class="game">
-<header><h1>Ankr TCG</h1><span id="roomStatus">ルーム: -</span><span>ターン: <b id="turnPlayer">プレイヤー1</b></span><button id="leaveRoom" type="button">ルームを退出</button></header>
+<header><h1>Ankr TCG</h1><span id="roomStatus">ルーム: -</span><span>ターン: <b id="turnPlayer">プレイヤー1</b></span><button id="leaveRoom" type="button">降参</button></header>
 <section class="board">
 <aside class="side left"><div class="title">選択中のカード</div><div id="cardInfo" class="card-info">カードを選択すると、効果などの情報が表示されます。</div><div class="title">カード操作</div><div id="ops" class="card-ops">カードを選択してください</div><div class="revealed-status" id="revealedStatus"></div></aside>
 <section class="table">
@@ -63,9 +63,18 @@
   <div class="mulligan-actions"><button id="mulliganAgain" type="button">引き直す（7枚）</button><button id="mulliganKeep" type="button">この手札で開始</button></div>
  </div>
 </section>
+<section id="roomWaitOverlay" class="flow-overlay" hidden>
+ <div class="flow-panel"><h2>対戦相手を待っています</h2><p>ルーム番号：<b id="waitingRoomCode">-</b></p><p id="waitingRoomMessage">同じルーム番号で対戦相手が参加するまでお待ちください。</p><button id="waitingSurrender" class="danger-action" type="button">降参して対戦準備に戻る</button></div>
+</section>
+<section id="gameOverOverlay" class="flow-overlay" hidden>
+ <div class="flow-panel"><h2 id="gameOverTitle">対戦終了</h2><p id="gameOverMessage">勝敗を確認しています。</p><button id="requestRematch" type="button">再戦を申し込む</button><button id="exitAfterGame" class="danger-action" type="button">降参してルームを退出</button></div>
+</section>
+<section id="rematchWaitOverlay" class="flow-overlay" hidden>
+ <div class="flow-panel"><h2>再戦の返事を待っています</h2><p id="rematchWaitMessage">再戦を申し込みました。相手の返事を待っています。</p><button id="returnToGameOver" type="button">ルームに戻る</button><button id="cancelRematch" class="danger-action" type="button">降参してルームを退出</button></div>
+</section>
 <button id="devDuringMulligan" type="button">開発用コマンドを開く</button>
 </main>
 <script src="js/effect-engine.js?v=dev-effects3"></script>
-<script src="js/game.js?v=dev-attack-flow1"></script>
+<script src="js/game.js?v=dev-match-flow1"></script>
 </body>
 </html>
