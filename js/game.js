@@ -30,7 +30,7 @@ function applyPublicState(playerId,publicState){
   const oldOpponentCardIds=new Set([...(x.monsters||[]),...(x.energy||[]),...(x.field||[]),...(x.discard||[])].map(c=>c.id));
   const oldOpponentMonsterIds=new Set((x.monsters||[]).map(c=>c.id));
   const previousOpponentMonsters=(state._previousOpponentMonsters||x.monsters||[]).map(c=>({...c}));
-  state.gameOver=publicState.gameOver&&typeof publicState.gameOver==="object"?publicState.gameOver:null;
+  state.gameOver=publicState.gameOver&&typeof publicState.gameOver==="object"?{...publicState.gameOver,winner:publicState.gameOver.winner===1?2:1}:null;if(state.gameOver)state.phase="finished";
   x.life=Number.isFinite(publicState.life)?publicState.life:x.life;
   if(state.pendingDiscardPlayer!==1)state.pendingDiscardPlayer=publicState.pendingDiscard===true?2:null;
   const handCount=Number.isInteger(publicState.handCount)&&publicState.handCount>=0?publicState.handCount:0;
@@ -68,6 +68,70 @@ function applyOnlinePlayers(players){
 }
 
 function showPreparationScreen(){
+  const screen=document.querySelector("#prepScreen");if(screen)screen.hidden=false;
+  const lobby=document.querySelector("#roomLobby");if(lobby)lobby.hidden=true;
+  ["roomWaitOverlay","gameOverOverlay","rematchWaitOverlay","mulliganOverlay"].forEach(id=>{const el=document.querySelector("#"+id);if(el)el.hidden=true});
+  const input=document.querySelector("#prepPlayerName");if(input)input.value=state.players[1]?.name||"プレイヤー1";
+  updatePreparationDeckSummary();
+}
+function buildFreshPlayer(name,prefix){
+  const fallback=state.players[1]?.deckList||[];
+  const deckList=(state.savedDeck&&state.savedDeck.length?state.savedDeck:fallback).slice();
+  const p=newPlayer(name,prefix);const pool=shuffle((deckList.length?deckList:p.deckList).slice());
+  p.deckList=pool.slice();p.hand=pool.slice(0,7).map((n,i)=>newCard(n,prefix+"h"+i));p.deck=pool.slice(7).map((n,i)=>newCard(n,prefix+"d"+i));return p;
+}
+function resetMatchState(phase="waiting"){
+  const ownName=state.players[1]?.name||"プレイヤー1",opponentName=state.players[2]?.name||"プレイヤー2";
+  state.players[1]=buildFreshPlayer(ownName,"p1");state.players[2]=newPlayer(opponentName,"p2");
+  state.turnPlayer=1;state.selected=null;state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;
+  state.gameOver=null;state.phase=phase;state.mulligan={1:{count:0,done:false},2:{count:0,done:false}};
+  state.deckInspectId=null;state.discardInspectId=null;state.discardInspectPlayer=1;state.deckInspectPlayer=1;
+  state._previousOpponentMonsters=[];pendingAttack=null;rematchRequested=false;lastPublicState=null;hasReceivedOpponentPublicState=false;
+}
+function resetToPreparation(message=""){
+  if(gameSocket){gameSocket.onclose=null;try{gameSocket.close()}catch{}gameSocket=null}
+  const savedName=state.players[1]?.name||"プレイヤー1";
+  onlinePlayerId=null;roomPlayerCount=0;currentRoom="";preparationCompleted=false;lastPublicState=null;hasReceivedOpponentPublicState=false;applyingPublicState=false;devLocalMode=false;pendingAttack=null;rematchRequested=false;
+  state.players[1]=buildFreshPlayer(savedName,"p1");state.players[2]=newPlayer("プレイヤー2","p2");
+  state.turnPlayer=1;state.selected=null;state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.gameOver=null;state.phase="waiting";state.mulligan={1:{count:0,done:false},2:{count:0,done:false}};
+  state.deckInspectId=null;state.discardInspectId=null;state.discardInspectPlayer=1;state.deckInspectPlayer=1;state._previousOpponentMonsters=[];cardChoiceHiddenFor=null;devToolsOpenDuringMulligan=false;
+  try{localStorage.removeItem("originalCardGameLocalStateDev")}catch{}
+  const url=new URL(location.href);url.searchParams.delete("room");history.replaceState(null,"",url);
+  const status=document.querySelector("#roomStatus");if(status)status.textContent="ルーム: -";
+  const logBox=document.querySelector("#log");if(logBox)logBox.innerHTML="";
+  showPreparationScreen();const prepMessage=document.querySelector("#prepMessage");if(prepMessage&&message)prepMessage.textContent=message;render();
+}
+function renderFlowScreens(){
+  const waiting=document.querySelector("#roomWaitOverlay"),result=document.querySelector("#gameOverOverlay"),rematch=document.querySelector("#rematchWaitOverlay");
+  const inRoom=!!currentRoom&&!!onlinePlayerId;
+  if(waiting){waiting.hidden=!(inRoom&&state.phase==="waiting");const code=document.querySelector("#waitingRoomCode");if(code)code.textContent=currentRoom||"-"}
+  if(result){
+    result.hidden=!(inRoom&&state.phase==="finished"&&!!state.gameOver);
+    if(state.gameOver){
+      const title=document.querySelector("#gameOverTitle"),message=document.querySelector("#gameOverMessage");
+      if(title)title.textContent=state.gameOver.winner===1?"勝利！":"敗北…";
+      if(message){const reason=({surrender:"相手が降参しました。",disconnect:"相手が切断しました。",life_zero:"ライフが0以下になりました。",deck_empty:"山札切れです。"})[state.gameOver.reason]||"対戦が終了しました。";message.textContent=reason}
+    }
+  }
+  if(rematch){rematch.hidden=!(inRoom&&state.phase==="rematch_wait");const message=document.querySelector("#rematchWaitMessage");if(message)message.textContent="再戦を申し込みました。相手の返事を待っています。"}
+  const headerLeave=document.querySelector("#leaveRoom");if(headerLeave)headerLeave.textContent="降参";
+}
+function requestRematch(){if(!currentRoom||!gameSocket||gameSocket.readyState!==WebSocket.OPEN)return;rematchRequested=true;state.phase="rematch_wait";gameSocket.send(JSON.stringify({type:"operation",action:"rematch_request"}));render()}
+function requestRoomExit(){
+  if(currentRoom&&gameSocket&&gameSocket.readyState===WebSocket.OPEN){gameSocket.send(JSON.stringify({type:"operation",action:"leave_room"}));const status=document.querySelector("#waitingRoomMessage");if(status)status.textContent="ルームを解散しています…";return}
+  resetToPreparation("ルームを退出しました。");
+}
+function surrender(){
+  if(!currentRoom||!gameSocket||gameSocket.readyState!==WebSocket.OPEN){resetToPreparation("対戦準備に戻りました。");return}
+  if(state.phase==="finished"){requestRoomExit();return}
+  if(!confirm("降参しますか？ 降参すると敗北になります。"))return;
+  gameSocket.send(JSON.stringify({type:"operation",action:"concede"}));
+}
+function handleRoomClosed(message){
+  const note=message?.reason==="disconnect"?"対戦相手が切断したため、対戦を終了しました。":message?.reason==="surrender"?"対戦相手が降参したため、対戦を終了しました。":"ルームが解散されました。";
+  resetToPreparation(note);
+}
+function updatePreparationDeckSummary(){
   const screen=document.querySelector("#prepScreen");
   if(screen)screen.hidden=false;
   const input=document.querySelector("#prepPlayerName");
@@ -126,34 +190,18 @@ function normalizeRoomCode(value){return String(value||"").trim().toUpperCase().
 function createRoomCode(){const chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";let code="";for(let i=0;i<6;i++)code+=chars[Math.floor(Math.random()*chars.length)];return code}
 function enterRoom(room){
   const code=normalizeRoomCode(room);
-  if(code.length!==6){const m=document.querySelector("#roomMessage");if(m)m.textContent="6文字のルームIDを入力してください";return false}
-  currentRoom=code;
-  const url=new URL(location.href);url.searchParams.set("room",code);history.replaceState(null,"",url);
-  const lobby=document.querySelector("#roomLobby");if(lobby)lobby.hidden=true;
+  if(code.length!==6){const m=document.querySelector("#prepMessage");if(m)m.textContent="6文字のルーム番号を入力してください";return false}
+  if(gameSocket){gameSocket.onclose=null;try{gameSocket.close()}catch{}gameSocket=null}
+  currentRoom=code;preparationCompleted=true;resetMatchState("waiting");
+  const url=new URL(location.href);url.searchParams.delete("room");history.replaceState(null,"",url);
+  const prep=document.querySelector("#prepScreen");if(prep)prep.hidden=true;
   const status=document.querySelector("#roomStatus");if(status)status.textContent="ルーム: "+code;
-  if(preparationCompleted){connectGameServer();renderMulliganOverlay();}
-  else showPreparationScreen();
-  return true;
+  connectGameServer();render();return true;
 }
 function setupRoomLobby(){
-  const params=new URLSearchParams(location.search);
-  const room=normalizeRoomCode(params.get("room"));
-  const lobby=document.querySelector("#roomLobby");
-  const create=document.querySelector("#roomCreate");
-  const input=document.querySelector("#roomInput");
-  const join=document.querySelector("#roomJoin");
-  if(create)create.onclick=()=>enterRoom(createRoomCode());
-  if(join)join.onclick=()=>enterRoom(input?.value);
-  if(input)input.onkeydown=e=>{if(e.key==="Enter")enterRoom(input.value)};
-  if(room.length===6){
-    currentRoom=room;
-    if(lobby)lobby.hidden=true;
-    const status=document.querySelector("#roomStatus");if(status)status.textContent="ルーム: "+room;
-    showPreparationScreen();
-    return true;
-  }
-  if(lobby)lobby.hidden=false;
-  return false;
+  currentRoom="";preparationCompleted=false;roomPlayerCount=0;
+  const url=new URL(location.href);if(url.searchParams.has("room")){url.searchParams.delete("room");history.replaceState(null,"",url)}
+  const lobby=document.querySelector("#roomLobby");if(lobby)lobby.hidden=true;showPreparationScreen();return false;
 }
 function connectGameServer(){
   if(!currentRoom)return;
@@ -202,8 +250,23 @@ function connectGameServer(){
           applyRemoteMove(message.playerId,message.zone,message.dest,message.cardId);
         }
         else if(message.type==="log"){const text=message.playerId===onlinePlayerId?message.text:String(message.text||"").replaceAll("自分",state.players[2].name);log(text,false)}
-        else if(message.type==="player_left"){log("対戦相手が退出しました",false)}
-        else if(message.type==="room_status"){roomPlayerCount=Number.isInteger(message.playerCount)?message.playerCount:0;render()}
+        else if(message.type==="game_finished"){
+          const winner=message.winner===onlinePlayerId?1:2;state.gameOver={winner,reason:message.reason||"surrender"};state.phase="finished";render();log(winner===1?"対戦に勝利しました":"対戦に敗北しました",false);
+        }
+        else if(message.type==="room_closed"){handleRoomClosed(message)}
+        else if(message.type==="rematch_waiting"){
+          if(message.playerId!==onlinePlayerId){const text=document.querySelector("#gameOverMessage");if(text)text.textContent="相手が再戦を申し込みました。再戦する場合はボタンを押してください。"}
+        }
+        else if(message.type==="rematch_start"){
+          resetMatchState("mulligan");roomPlayerCount=2;state.phase="mulligan";render();log("両者が再戦を選択しました。マリガンから再開します",false);
+        }
+        else if(message.type==="player_left"){handleRoomClosed({reason:"disconnect"})}
+        else if(message.type==="room_status"){
+          roomPlayerCount=Number.isInteger(message.playerCount)?message.playerCount:0;
+          if(roomPlayerCount>=2&&state.phase==="waiting"){state.phase="mulligan";render();log("対戦相手がそろいました。マリガンを開始してください")}
+          else if(roomPlayerCount<2&&state.phase!=="finished"&&state.phase!=="rematch_wait"){state.phase="waiting";render()}
+          render();
+        }
         else if(message.type==="player_joined"||message.type==="player_names"){
           applyOnlinePlayers(message.players);
           render();
@@ -227,7 +290,7 @@ function connectGameServer(){
       }catch{}
     };
     gameSocket.onerror=()=>log("オンラインサーバーへの接続に失敗しました");
-    gameSocket.onclose=e=>{if(e.code!==1000)log("オンラインサーバーとの接続が切れました")};
+    gameSocket.onclose=e=>{if(currentRoom&&e.code!==1000){log("オンラインサーバーとの接続が切れました",false);resetToPreparation("接続が切れたため、対戦準備に戻りました。")}};
   }catch(e){console.error(e);log("オンラインサーバーへの接続を開始できませんでした")}
 }
 
@@ -362,6 +425,7 @@ function render(){
   }
   selection();
   renderMulliganOverlay();
+  renderFlowScreens();
   sendPublicState();
 }
 function zone(p,z,a){
@@ -488,7 +552,7 @@ function move(dest){
 
 function drawCards(n,p=1){if(!Number.isInteger(n)||n<=0)return log("ドロー枚数は1以上の整数にしてください");drawEffectCards(p,n);state.selected=null;render()}
 function ensureDiscardWarning(){if(document.querySelector("#discardWarning"))return;const e=document.createElement("div");e.id="discardWarning";e.hidden=true;e.style.cssText="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9999;background:#8b0000;color:#fff;padding:10px 18px;border:2px solid #f33;border-radius:6px;font-weight:700;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.45);";document.body.appendChild(e)}
-function startTurn(p,showLog=true){if(state.phase!=="playing")return;const x=state.players[p];x.energyPlacedThisTurn=false;x.extraEnergyPlacements=0;x.energyPool=0;if(p===1)broadcastEnergyPool();x.monsters.forEach(m=>m.tapped=false);x.energy.forEach(e=>e.tapped=false);if(x.deck.length===0){const winner=p===1?2:1;state.gameOver={winner,reason:"deck_empty"};render();log(x.name+"はターン開始時に山札が0枚だったため、"+state.players[winner].name+"の勝利です");return}if(x.deck.length&&x.hand.length>=MAX.hand){state.pendingDiscardPlayer=p;state.pendingDiscardReason="turn_start";state.pendingDrawCount=1;state.selected=null;render();log(x.name+"はドロー前に手札を1枚捨てる必要があります。手札のカードをクリックしてください");return}if(x.deck.length&&x.hand.length<MAX.hand)drawCards(1,p);resolveTurnTriggers(p,"start");render();if(showLog)log(x.name+" のターン開始")}
+function startTurn(p,showLog=true){if(state.phase!=="playing")return;const x=state.players[p];x.energyPlacedThisTurn=false;x.extraEnergyPlacements=0;x.energyPool=0;if(p===1)broadcastEnergyPool();x.monsters.forEach(m=>m.tapped=false);x.energy.forEach(e=>e.tapped=false);if(x.deck.length===0){const winner=p===1?2:1;state.gameOver={winner,reason:"deck_empty"};state.phase="finished";render();log(x.name+"はターン開始時に山札が0枚だったため、"+state.players[winner].name+"の勝利です");return}if(x.deck.length&&x.hand.length>=MAX.hand){state.pendingDiscardPlayer=p;state.pendingDiscardReason="turn_start";state.pendingDrawCount=1;state.selected=null;render();log(x.name+"はドロー前に手札を1枚捨てる必要があります。手札のカードをクリックしてください");return}if(x.deck.length&&x.hand.length<MAX.hand)drawCards(1,p);resolveTurnTriggers(p,"start");render();if(showLog)log(x.name+" のターン開始")}
 function completePendingDiscard(p,id){if(p!==1)return false;if(state.pendingDiscardPlayer!==p)return false;const x=state.players[p],i=x.hand.findIndex(c=>c.id===id);if(i<0)return true;const discarded=x.hand.splice(i,1)[0],reason=state.pendingDiscardReason,remaining=state.pendingDrawCount;moveToDiscard(p,discarded,"手札上限による破棄");state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.selected=null;log(x.name+"は「"+discarded.name+"」を捨てました");if(reason==="effect_draw"){if(remaining>0)drawEffectCards(p,remaining);render();return true}if(x.deck.length&&x.hand.length<MAX.hand)drawCards(1,p);resolveTurnTriggers(p,"start");render();log(x.name+" のターン開始");return true}
 function endTurn(){const localPlayer=1;if(state.turnPlayer!==localPlayer||state.pendingDiscardPlayer!==null||state.phase!=="playing")return;if(onlinePlayerId!==null&&!devLocalMode){if(!gameSocket||gameSocket.readyState!==WebSocket.OPEN)return log("オンラインサーバーに接続されていません");resolveTurnTriggers(1,"end");state.players[1].monsters.forEach(m=>{m.damage=0});state.players[1].energyPool=0;broadcastEnergyPool();render();gameSocket.send(JSON.stringify({type:"operation",action:"end_turn"}));return}const p=state.turnPlayer,x=state.players[p];resolveTurnTriggers(p,"end");x.monsters.forEach(m=>{m.damage=0});x.energyPool=0;state.turnPlayer=p===1?2:1;startTurn(state.turnPlayer)}
 
@@ -514,7 +578,7 @@ function applyEffectDelta(message){
  if(message.target==="opponentMill"){const x=state.players[targetPlayer];for(let i=0;i<Math.max(0,Number(message.count)||0)&&x.deck.length;i++)x.discard.push(x.deck.shift());render();return}
  if(message.target==="opponentMonsterDestroy"){const x=state.players[targetPlayer],c=x.monsters.find(m=>m.id===message.cardId);if(c){x.monsters=x.monsters.filter(m=>m.id!==c.id);moveToDiscard(targetPlayer,c,"効果による破壊");resolveCardTrigger(c,targetPlayer,"destroy");if(targetPlayer===1)resolveTrapTriggers(1,"ownDestroy");render()}}
 }
-function checkLifeWinner(p){if(state.players[p].life<=0){if(!onlinePlayerId||p===1)resolveTrapTriggers(p,"ownLifeZero");if(state.players[p].life>0)return;const winner=p===1?2:1;state.gameOver={winner,reason:"life_zero"};log(state.players[p].name+"のライフが0以下になったため、"+state.players[winner].name+"の勝利です")}}
+function checkLifeWinner(p){if(state.players[p].life<=0){if(!onlinePlayerId||p===1)resolveTrapTriggers(p,"ownLifeZero");if(state.players[p].life>0)return;const winner=p===1?2:1;state.gameOver={winner,reason:"life_zero"};state.phase="finished";log(state.players[p].name+"のライフが0以下になったため、"+state.players[winner].name+"の勝利です")}}
 function toggleCardTap(p,z,c){if(z==="energy"){const x=state.players[p],value=cardCost(c);if(!c.tapped)x.energyPool=(x.energyPool||0)+value;else x.energyPool=Math.max(0,(x.energyPool||0)-value);if(p===1)broadcastEnergyPool()}c.tapped=!c.tapped}
 function renderMulliganOverlay(){
  const overlay=document.querySelector("#mulliganOverlay");if(!overlay)return;const lobby=document.querySelector("#roomLobby"),prep=document.querySelector("#prepScreen");overlay.hidden=devToolsOpenDuringMulligan||state.phase!=="mulligan"||!currentRoom||!!(lobby&&!lobby.hidden)||!!(prep&&!prep.hidden);const devDuring=document.querySelector("#devDuringMulligan");if(devDuring)devDuring.classList.toggle("visible",state.phase==="mulligan"&&!!currentRoom&&!(lobby&&!lobby.hidden)&&!(prep&&!prep.hidden)&&!devToolsOpenDuringMulligan);
@@ -873,7 +937,12 @@ function setup(){
   document.querySelector("#deckEditBack").onclick=()=>{const current=state.players[1].deckList||[],saved=state.savedDeck||[],same=current.length===saved.length&&current.every((name,i)=>name===saved[i]);if(!same&&!confirm("デッキの内容が保存されていません。保存せずに戻りますか？"))return;document.querySelector("#deckEditor").hidden=true;updatePreparationDeckSummary()};
   document.querySelectorAll("[data-end]").forEach(b=>b.onclick=endTurn);
   const tapAllEnergyButton=document.querySelector("#tapAllEnergy");if(tapAllEnergyButton)tapAllEnergyButton.onclick=()=>{if(state.turnPlayer!==1||state.phase!=="playing"||state.pendingDiscardPlayer!==null)return log("今はエネルギーをタップできません");const untapped=state.players[1].energy.filter(e=>!e.tapped);if(!untapped.length)return log("タップできるエネルギーがありません");untapped.forEach(e=>e.tapped=true);state.players[1].energyPool=(state.players[1].energyPool||0)+untapped.length;broadcastEnergyPool();render();log("エネルギーを"+untapped.length+"枚タップしました（使用可能エネルギー +"+untapped.length+"）")};
-  const leaveRoomButton=document.querySelector("#leaveRoom");if(leaveRoomButton)leaveRoomButton.onclick=()=>{if(!confirm("ルームを退出して盤面をリセットしますか？"))return;if(gameSocket){gameSocket.onclose=null;gameSocket.close();gameSocket=null}const savedName=state.players[1]?.name||"プレイヤー1";onlinePlayerId=null;roomPlayerCount=0;currentRoom="";preparationCompleted=false;lastPublicState=null;hasReceivedOpponentPublicState=false;applyingPublicState=false;devLocalMode=false;pendingAttack=null;state.players[1]=newPlayer(savedName,"p1");state.players[2]=newPlayer("プレイヤー2","p2");state.turnPlayer=1;state.selected=null;state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.gameOver=null;state.phase="mulligan";state.mulligan={1:{count:0,done:false},2:{count:0,done:false}};state.deckInspectId=null;state.discardInspectId=null;state.discardInspectPlayer=1;state.deckInspectPlayer=1;state.energyPlacedThisTurn=false;state._previousOpponentMonsters=[];state.discardInspectId=null;state.deckInspectId=null;cardChoiceHiddenFor=null;devToolsOpenDuringMulligan=false;try{localStorage.removeItem("originalCardGameLocalStateDev")}catch{}const url=new URL(location.href);url.searchParams.delete("room");history.replaceState(null,"",url);const lobby=document.querySelector("#roomLobby");if(lobby)lobby.hidden=false;const prep=document.querySelector("#prepScreen");if(prep)prep.hidden=true;const mulligan=document.querySelector("#mulliganOverlay");if(mulligan)mulligan.hidden=true;const status=document.querySelector("#roomStatus");if(status)status.textContent="ルーム: -";const logBox=document.querySelector("#log");if(logBox)logBox.innerHTML="";render();log("ルームを退出し、盤面をすべてリセットしました",false)};
+  const leaveRoomButton=document.querySelector("#leaveRoom");if(leaveRoomButton)leaveRoomButton.onclick=surrender;
+  document.querySelector("#waitingSurrender")?.addEventListener("click",requestRoomExit);
+  document.querySelector("#exitAfterGame")?.addEventListener("click",requestRoomExit);
+  document.querySelector("#cancelRematch")?.addEventListener("click",requestRoomExit);
+  document.querySelector("#requestRematch")?.addEventListener("click",requestRematch);
+  document.querySelector("#returnToGameOver")?.addEventListener("click",()=>{state.phase="finished";render()});
   document.querySelectorAll("[data-first]").forEach(b=>b.onclick=()=>{
     const q=b.dataset.first;
     const target=q==="self"?"player1":q==="opponent"?"player2":(Math.random()<.5?"player1":"player2");
@@ -909,7 +978,7 @@ async function start(){
   state.players={1:newPlayer("プレイヤー1","p1"),2:newPlayer("プレイヤー2","p2")};
   const defaultDeck=readDeckCode("D2-AFoTAJsBARYEAVUEAYgBAd0EAd4CAd8DAfEEAoUEApgE");
   const p1=state.players[1];p1.deckList=defaultDeck.slice();const shuffledDeck=shuffle(defaultDeck.slice());p1.hand=shuffledDeck.slice(0,7).map((n,i)=>newCard(n,"p1h"+i));p1.deck=shuffledDeck.slice(7).map((n,i)=>newCard(n,"p1d"+i));state.savedDeck=defaultDeck.slice();
-  loadLocalGameState();
+  // Reloads always start at the preparation screen; stale match state is not restored.
   setup();render();log("カード画像を読み込みました（"+cardNames.length+"種類）");
   const hasRoom=setupRoomLobby();
   if(hasRoom){showPreparationScreen();}
