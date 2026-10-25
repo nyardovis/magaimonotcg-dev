@@ -331,6 +331,7 @@ function render(){
     deck.classList.toggle("back",!!x.deck.length);
     deck.classList.toggle("horizontal",!!x.deckHorizontal);
     zone(p,"energy",x.energy);
+    if(p===1){const tapButton=document.querySelector("#tapAllEnergy");if(tapButton)tapButton.hidden=x.energy.length===0}
     zone(p,"monsters",x.monsters);
     const endButton=document.querySelector("#p"+p+"-hand")?.closest(".player")?.querySelector("button[data-end]");
     if(endButton){
@@ -371,7 +372,7 @@ function cardEl(p,z,c,visible){
   const e=document.createElement("div");
   e.className="card zone-"+z+(c.tapped?" tapped":"")+(state.selected?.id===c.id?" selected":"");if(c.tapped){e.style.transformOrigin="center center";e.style.transform="rotate(-15deg)"}
   if(!visible||c.faceUp===false)e.classList.add("back");
-  else{e.appendChild(createCardFace(c.name,z==="energy"?"horizontal":"portrait"));const def=cardDefinition(c);if(def&&def.cost!==undefined&&def.cost!==null&&String(def.cost).trim()!==""){const cost=document.createElement("span");cost.className="card-cost";cost.textContent=String(def.cost);e.appendChild(cost)}const a=c.modification-c.damage;if(a)e.insertAdjacentHTML("beforeend",'<span class="adjust">' +(a>0?"+":"")+a+"</span>");if(c.counters)e.insertAdjacentHTML("beforeend",'<span class="counter">' +c.counters+"</span>")}
+  else{e.appendChild(createCardFace(c.name,z==="energy"?"horizontal":"portrait"));const def=cardDefinition(c);if(z!=="energy"&&def&&def.cost!==undefined&&def.cost!==null&&String(def.cost).trim()!==""){const cost=document.createElement("span");cost.className="card-cost";cost.textContent=String(def.cost);e.appendChild(cost)}const a=c.modification-c.damage;if(a)e.insertAdjacentHTML("beforeend",'<span class="adjust">' +(a>0?"+":"")+a+"</span>");if(c.counters)e.insertAdjacentHTML("beforeend",'<span class="counter">' +c.counters+"</span>")}
   if(c.revealed){const mark=document.createElement("span");mark.className="revealed-marker";mark.textContent="!";e.appendChild(mark)}
   e.dataset.player=String(p);e.dataset.zone=z;e.dataset.cardId=c.id;
   if(state.pendingDiscardPlayer!==null){if(state.pendingDiscardPlayer===1&&p===1&&z==="hand")e.onclick=()=>completePendingDiscard(1,c.id);else e.onclick=null}
@@ -508,6 +509,7 @@ function toggleCardTap(p,z,c){if(z==="energy"){const x=state.players[p],value=ca
 function renderMulliganOverlay(){
  const overlay=document.querySelector("#mulliganOverlay");if(!overlay)return;const lobby=document.querySelector("#roomLobby"),prep=document.querySelector("#prepScreen");overlay.hidden=devToolsOpenDuringMulligan||state.phase!=="mulligan"||!currentRoom||!!(lobby&&!lobby.hidden)||!!(prep&&!prep.hidden);const devDuring=document.querySelector("#devDuringMulligan");if(devDuring)devDuring.classList.toggle("visible",state.phase==="mulligan"&&!!currentRoom&&!(lobby&&!lobby.hidden)&&!(prep&&!prep.hidden)&&!devToolsOpenDuringMulligan);
  const own=state.mulligan[1],other=state.mulligan[2],status=document.querySelector("#mulliganStatus");
+ const handView=document.querySelector("#mulliganHand");if(handView){handView.innerHTML="";state.players[1].hand.forEach(c=>{const card=document.createElement("div");card.className="card zone-hand";card.appendChild(createCardFace(c.name));const def=cardDefinition(c);if(def&&def.cost!==undefined&&def.cost!==null&&String(def.cost).trim()!==""){const cost=document.createElement("span");cost.className="card-cost";cost.textContent=String(def.cost);card.appendChild(cost)}handView.appendChild(card)})}
  if(status)status.textContent="自分："+(own.done?"確定":(7-own.count)+"枚で引き直し可能")+" ／ 相手："+(other.done?"確定":"選択中")+(onlinePlayerId&&roomPlayerCount<2?" ／ 対戦相手の参加待ち":"");
  const again=document.querySelector("#mulliganAgain"),keep=document.querySelector("#mulliganKeep");
  if(again){again.disabled=own.done||8-own.count<=0||!!onlinePlayerId&&roomPlayerCount<2;again.textContent="引き直す（"+Math.max(0,7-own.count)+"枚）"}
