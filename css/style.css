@@ -130,3 +130,13 @@
 
 /* Attack target selection controls. */
 .attack-target-heading{font-weight:700;margin:10px 0 5px;color:#f3c85b}.attack-target-button{display:block;width:100%;margin:5px 0;padding:8px;text-align:left;background:#303640;color:#fff;border:1px solid #697586;border-radius:5px;cursor:pointer}.attack-player-button{border-color:#bd8d38;background:#47381f}
+
+/* Match lifecycle screens */
+.flow-overlay{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box;background:rgba(8,10,14,.94);color:#f4f5f7}
+.flow-overlay[hidden]{display:none!important}
+.flow-panel{width:min(480px,96vw);padding:26px 22px;border:1px solid #59616d;border-radius:12px;background:#20242b;box-shadow:0 12px 48px #0009;text-align:center}
+.flow-panel h2{margin:0 0 16px;color:#f3c85b}
+.flow-panel p{line-height:1.6;overflow-wrap:anywhere}
+.flow-panel button{display:block;width:100%;margin:12px 0 0;padding:11px 14px;border:1px solid #697586;border-radius:6px;background:#35404d;color:#fff;font-weight:700;cursor:pointer}
+.flow-panel button:disabled{opacity:.45;cursor:not-allowed}
+.flow-panel .danger-action{border-color:#a84b52;background:#512b31}
