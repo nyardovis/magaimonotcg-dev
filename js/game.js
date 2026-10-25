@@ -128,7 +128,12 @@ function surrender(){
   gameSocket.send(JSON.stringify({type:"operation",action:"concede"}));
 }
 function handleRoomClosed(message){
-  const note=message?.reason==="disconnect"?"対戦相手が切断したため、対戦を終了しました。":message?.reason==="surrender"?"対戦相手が降参したため、対戦を終了しました。":"ルームが解散されました。";
+  let note="ルームが解散されました。";
+  if(message && message.winner && onlinePlayerId){
+    if(message.winner===onlinePlayerId)note="対戦終了：勝利しました。対戦準備に戻りました。";
+    else if(message.leavingPlayerId===onlinePlayerId)note="対戦終了：降参または退出により敗北しました。対戦準備に戻りました。";
+    else note=message.reason==="disconnect"?"対戦相手が切断したため勝利です。対戦準備に戻りました。":"対戦相手がルームを退出しました。対戦準備に戻りました。";
+  }else if(message && message.reason==="disconnect")note="接続が切れたため、対戦を終了しました。対戦準備に戻りました。";
   resetToPreparation(note);
 }
 function updatePreparationDeckSummary(){
