@@ -112,7 +112,7 @@ function renderFlowScreens(){
       const title=document.querySelector("#gameOverTitle"),message=document.querySelector("#gameOverMessage");
       if(title)title.textContent=state.gameOver.winner===1?"勝利！":"敗北…";
       const rematchButton=document.querySelector("#requestRematch"),exitButton=document.querySelector("#exitAfterGame");if(rematchButton){rematchButton.textContent=rematchRequested?"ルームに戻る":"再戦を申し込む"}if(exitButton)exitButton.hidden=rematchRequested;
-      if(message){const reason=({surrender:"相手が降参しました。",disconnect:"相手が切断しました。",life_zero:"ライフが0以下になりました。",deck_empty:"山札切れです。"})[state.gameOver.reason]||"対戦が終了しました。";message.textContent=reason}
+      if(message){const reason=state.gameOver.reason==="surrender"?(state.gameOver.winner===1?"相手が降参しました。":"降参しました。"):({disconnect:"相手が切断しました。",life_zero:"ライフが0以下になりました。",deck_empty:"山札切れです。"})[state.gameOver.reason]||"対戦が終了しました。";message.textContent=reason}
     }
   }
   if(rematch){rematch.hidden=!(inRoom&&state.phase==="rematch_wait");const message=document.querySelector("#rematchWaitMessage");if(message)message.textContent="再戦を申し込みました。相手の返事を待っています。";const cancel=document.querySelector("#cancelRematch");if(cancel)cancel.hidden=true;}
@@ -455,7 +455,9 @@ function cardEl(p,z,c,visible){
     const s=state.selected;
     const addChoice=(label,cls,fn)=>{const b=document.createElement("button");b.type="button";b.className=cls;b.textContent=label;b.onclick=ev=>{ev.stopPropagation();fn()};actions.appendChild(b)};
     if(z==="hand"){
-      addChoice("○","confirm",()=>playCardFromHand(c.id));
+      const handKind=cardKind(c);
+      const energyPlacementBlocked=handKind==="energy"&&state.players[1].energyPlacedThisTurn&&(Number(state.players[1].extraEnergyPlacements)||0)<=0;
+      if(!energyPlacementBlocked)addChoice("○","confirm",()=>playCardFromHand(c.id));
       addChoice("×","cancel",()=>{cardChoiceHiddenFor=c.id;render()});
     }else if(z==="monsters"){
       if(state.phase==="playing")addChoice("⚔","attack",()=>declareAttack(c.id));
