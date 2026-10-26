@@ -11,6 +11,7 @@ let devLocalMode=false;
 let devToolsOpenDuringMulligan=false;
 let cardChoiceHiddenFor=null;
 let pendingAttack=null;
+let rematchStateResetPending=false;
 
 function getPublicState(){
   const x=state.players[1];
@@ -30,7 +31,7 @@ function applyPublicState(playerId,publicState){
   const oldOpponentCardIds=new Set([...(x.monsters||[]),...(x.energy||[]),...(x.field||[]),...(x.discard||[])].map(c=>c.id));
   const oldOpponentMonsterIds=new Set((x.monsters||[]).map(c=>c.id));
   const previousOpponentMonsters=(state._previousOpponentMonsters||x.monsters||[]).map(c=>({...c}));
-  if(state.phase!=="rematch_wait"&&state.phase!=="mulligan"){state.gameOver=publicState.gameOver&&typeof publicState.gameOver==="object"?{...publicState.gameOver,winner:publicState.gameOver.winner===1?2:1}:null;if(state.gameOver)state.phase="finished";}else{state.gameOver=null;}
+  if(rematchStateResetPending){if(!publicState.gameOver||typeof publicState.gameOver!=="object")rematchStateResetPending=false;state.gameOver=null;}else if(state.phase!=="rematch_wait"&&state.phase!=="mulligan"){state.gameOver=publicState.gameOver&&typeof publicState.gameOver==="object"?{...publicState.gameOver,winner:publicState.gameOver.winner===1?2:1}:null;if(state.gameOver)state.phase="finished";}else{state.gameOver=null;}
   x.life=Number.isFinite(publicState.life)?publicState.life:x.life;
   if(state.pendingDiscardPlayer!==1)state.pendingDiscardPlayer=publicState.pendingDiscard===true?2:null;
   const handCount=Number.isInteger(publicState.handCount)&&publicState.handCount>=0?publicState.handCount:0;
@@ -264,7 +265,7 @@ function connectGameServer(){
           if(message.playerId!==onlinePlayerId){const text=document.querySelector("#gameOverMessage");if(text)text.textContent="相手が再戦を申し込みました。再戦する場合はボタンを押してください。"}
         }
         else if(message.type==="rematch_start"){
-          resetMatchState("mulligan");roomPlayerCount=2;state.phase="mulligan";render();log("両者が再戦を選択しました。マリガンから再開します",false);
+          resetMatchState("mulligan");rematchStateResetPending=true;roomPlayerCount=2;state.phase="mulligan";render();log("両者が再戦を選択しました。マリガンから再開します",false);
         }
         else if(message.type==="player_left"){handleRoomClosed({reason:"disconnect"})}
         else if(message.type==="room_status"){
