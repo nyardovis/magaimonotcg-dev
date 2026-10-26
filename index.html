@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Ankr TCG 開発版</title>
-<link rel="stylesheet" href="css/style.css?v=dev-match-flow1">
+<link rel="stylesheet" href="css/style.css?v=dev-match-flow2">
 </head>
 <body>
 <main class="game">
@@ -64,10 +64,10 @@
  </div>
 </section>
 <section id="roomWaitOverlay" class="flow-overlay" hidden>
- <div class="flow-panel"><h2>対戦相手を待っています</h2><p>ルーム番号：<b id="waitingRoomCode">-</b></p><p id="waitingRoomMessage">同じルーム番号で対戦相手が参加するまでお待ちください。</p><button id="waitingSurrender" class="danger-action" type="button">降参して対戦準備に戻る</button></div>
+ <div class="flow-panel"><h2>対戦相手を待っています</h2><p>ルーム番号：<b id="waitingRoomCode">-</b></p><p id="waitingRoomMessage">同じルーム番号で対戦相手が参加するまでお待ちください。</p><button id="waitingSurrender" type="button">対戦準備に戻る</button></div>
 </section>
 <section id="gameOverOverlay" class="flow-overlay" hidden>
- <div class="flow-panel"><h2 id="gameOverTitle">対戦終了</h2><p id="gameOverMessage">勝敗を確認しています。</p><button id="requestRematch" type="button">再戦を申し込む</button><button id="exitAfterGame" class="danger-action" type="button">降参してルームを退出</button></div>
+ <div class="flow-panel"><h2 id="gameOverTitle">対戦終了</h2><p id="gameOverMessage">勝敗を確認しています。</p><button id="requestRematch" type="button">再戦を申し込む</button><button id="exitAfterGame" class="danger-action" type="button">ルームを退出</button></div>
 </section>
 <section id="rematchWaitOverlay" class="flow-overlay" hidden>
  <div class="flow-panel"><h2>再戦の返事を待っています</h2><p id="rematchWaitMessage">再戦を申し込みました。相手の返事を待っています。</p><button id="returnToGameOver" type="button">ルームに戻る</button><button id="cancelRematch" class="danger-action" type="button">降参してルームを退出</button></div>
@@ -75,6 +75,6 @@
 <button id="devDuringMulligan" type="button">開発用コマンドを開く</button>
 </main>
 <script src="js/effect-engine.js?v=dev-effects3"></script>
-<script src="js/game.js?v=dev-match-flow1"></script>
+<script src="js/game.js?v=dev-match-flow2"></script>
 </body>
 </html>
