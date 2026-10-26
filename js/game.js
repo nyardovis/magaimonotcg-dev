@@ -30,7 +30,7 @@ function applyPublicState(playerId,publicState){
   const oldOpponentCardIds=new Set([...(x.monsters||[]),...(x.energy||[]),...(x.field||[]),...(x.discard||[])].map(c=>c.id));
   const oldOpponentMonsterIds=new Set((x.monsters||[]).map(c=>c.id));
   const previousOpponentMonsters=(state._previousOpponentMonsters||x.monsters||[]).map(c=>({...c}));
-  state.gameOver=publicState.gameOver&&typeof publicState.gameOver==="object"?{...publicState.gameOver,winner:publicState.gameOver.winner===1?2:1}:null;if(state.gameOver&&state.phase!=="rematch_wait")state.phase="finished";
+  if(state.phase!=="rematch_wait"&&state.phase!=="mulligan"){state.gameOver=publicState.gameOver&&typeof publicState.gameOver==="object"?{...publicState.gameOver,winner:publicState.gameOver.winner===1?2:1}:null;if(state.gameOver)state.phase="finished";}else{state.gameOver=null;}
   x.life=Number.isFinite(publicState.life)?publicState.life:x.life;
   if(state.pendingDiscardPlayer!==1)state.pendingDiscardPlayer=publicState.pendingDiscard===true?2:null;
   const handCount=Number.isInteger(publicState.handCount)&&publicState.handCount>=0?publicState.handCount:0;
