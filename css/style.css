@@ -145,3 +145,7 @@
 /* Requested board label and energy-count alignment refinements. */
 .energy-pool{text-align:left!important;align-self:center!important}
 .table .row.hand>label,.table .row.energy-row>label,.table .row.monsters>label{display:none!important}
+
+
+/* Move the available-energy number into the gap between the deck and player name. */
+.info{flex:0 0 132px!important;width:132px!important;gap:4px!important;position:relative}.info .info-energy-pool{display:block;flex:0 0 auto;min-width:0;width:100%;text-align:center!important;font-size:19px;line-height:1.1;font-weight:800;color:#78d9f2;padding:2px 0 4px;border-bottom:1px solid #59616d}.info #p1-name,.info #p2-name{white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}.player .other{justify-content:flex-start!important;gap:3px!important}.player .other>.zone:not(.facedown){width:92px;flex:0 1 92px;min-width:0}.player .other .zone.facedown{margin-left:2px}
