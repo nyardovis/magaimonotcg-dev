@@ -110,16 +110,17 @@ function renderFlowScreens(){
     if(state.gameOver){
       const title=document.querySelector("#gameOverTitle"),message=document.querySelector("#gameOverMessage");
       if(title)title.textContent=state.gameOver.winner===1?"勝利！":"敗北…";
+      const rematchButton=document.querySelector("#requestRematch"),exitButton=document.querySelector("#exitAfterGame");if(rematchButton){rematchButton.textContent=rematchRequested?"ルームに戻る":"再戦を申し込む"}if(exitButton)exitButton.hidden=rematchRequested;
       if(message){const reason=({surrender:"相手が降参しました。",disconnect:"相手が切断しました。",life_zero:"ライフが0以下になりました。",deck_empty:"山札切れです。"})[state.gameOver.reason]||"対戦が終了しました。";message.textContent=reason}
     }
   }
-  if(rematch){rematch.hidden=!(inRoom&&state.phase==="rematch_wait");const message=document.querySelector("#rematchWaitMessage");if(message)message.textContent="再戦を申し込みました。相手の返事を待っています。"}
+  if(rematch){rematch.hidden=!(inRoom&&state.phase==="rematch_wait");const message=document.querySelector("#rematchWaitMessage");if(message)message.textContent="再戦を申し込みました。相手の返事を待っています。";const cancel=document.querySelector("#cancelRematch");if(cancel)cancel.hidden=true;}
   const headerLeave=document.querySelector("#leaveRoom");if(headerLeave)headerLeave.textContent="降参";
 }
-function requestRematch(){if(!currentRoom||!gameSocket||gameSocket.readyState!==WebSocket.OPEN)return;rematchRequested=true;state.phase="rematch_wait";gameSocket.send(JSON.stringify({type:"operation",action:"rematch_request"}));render()}
+function requestRematch(){if(rematchRequested){state.phase="finished";render();return}if(!currentRoom||!gameSocket||gameSocket.readyState!==WebSocket.OPEN){log("サーバーに接続されていないため、再戦を申し込めません");return}rematchRequested=true;state.phase="rematch_wait";gameSocket.send(JSON.stringify({type:"operation",action:"rematch_request"}));render()}
 function requestRoomExit(){
-  if(currentRoom&&gameSocket&&gameSocket.readyState===WebSocket.OPEN){gameSocket.send(JSON.stringify({type:"operation",action:"leave_room"}));const status=document.querySelector("#waitingRoomMessage");if(status)status.textContent="ルームを解散しています…";return}
-  resetToPreparation("ルームを退出しました。");
+  if(currentRoom&&gameSocket&&gameSocket.readyState===WebSocket.OPEN){const action=state.phase==="waiting"?"cancel_wait":"leave_room";gameSocket.send(JSON.stringify({type:"operation",action}));const status=document.querySelector("#waitingRoomMessage");if(status)status.textContent="対戦準備に戻っています…";return}
+  resetToPreparation("対戦準備に戻る");
 }
 function surrender(){
   if(!currentRoom||!gameSocket||gameSocket.readyState!==WebSocket.OPEN){resetToPreparation("対戦準備に戻りました。");return}
@@ -943,11 +944,11 @@ function setup(){
   document.querySelectorAll("[data-end]").forEach(b=>b.onclick=endTurn);
   const tapAllEnergyButton=document.querySelector("#tapAllEnergy");if(tapAllEnergyButton)tapAllEnergyButton.onclick=()=>{if(state.turnPlayer!==1||state.phase!=="playing"||state.pendingDiscardPlayer!==null)return log("今はエネルギーをタップできません");const untapped=state.players[1].energy.filter(e=>!e.tapped);if(!untapped.length)return log("タップできるエネルギーがありません");untapped.forEach(e=>e.tapped=true);state.players[1].energyPool=(state.players[1].energyPool||0)+untapped.length;broadcastEnergyPool();render();log("エネルギーを"+untapped.length+"枚タップしました（使用可能エネルギー +"+untapped.length+"）")};
   const leaveRoomButton=document.querySelector("#leaveRoom");if(leaveRoomButton)leaveRoomButton.onclick=surrender;
-  document.querySelector("#waitingSurrender")?.addEventListener("click",requestRoomExit);
-  document.querySelector("#exitAfterGame")?.addEventListener("click",requestRoomExit);
-  document.querySelector("#cancelRematch")?.addEventListener("click",requestRoomExit);
-  document.querySelector("#requestRematch")?.addEventListener("click",requestRematch);
-  document.querySelector("#returnToGameOver")?.addEventListener("click",()=>{state.phase="finished";render()});
+  document.querySelector("#waitingSurrender").onclick=requestRoomExit;
+  document.querySelector("#exitAfterGame").onclick=requestRoomExit;
+  document.querySelector("#cancelRematch").onclick=requestRoomExit;
+  document.querySelector("#requestRematch").onclick=requestRematch;
+  document.querySelector("#returnToGameOver").onclick=()=>{state.phase="finished";render()};
   document.querySelectorAll("[data-first]").forEach(b=>b.onclick=()=>{
     const q=b.dataset.first;
     const target=q==="self"?"player1":q==="opponent"?"player2":(Math.random()<.5?"player1":"player2");
