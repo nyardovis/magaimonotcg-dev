@@ -140,3 +140,8 @@
 .flow-panel button{display:block;width:100%;margin:12px 0 0;padding:11px 14px;border:1px solid #697586;border-radius:6px;background:#35404d;color:#fff;font-weight:700;cursor:pointer}
 .flow-panel button:disabled{opacity:.45;cursor:not-allowed}
 .flow-panel .danger-action{border-color:#a84b52;background:#512b31}
+
+
+/* Requested board label and energy-count alignment refinements. */
+.energy-pool{text-align:left!important;align-self:center!important}
+.table .row.hand>label,.table .row.energy-row>label,.table .row.monsters>label{display:none!important}
