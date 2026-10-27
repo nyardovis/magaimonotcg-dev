@@ -813,7 +813,7 @@ function resolveSummonEffects(text,p,sourceCard){
 }
 
 function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
- const own=state.players[p],opp=state.players[p===1?2:1],s=String(text||"");let handled=false,revealedCardForEffect=null;
+ const own=state.players[p],opp=state.players[p===1?2:1];let s=String(text||"");let handled=false,revealedCardForEffect=null;
  const countNamed=(list,name)=>list.filter(c=>String(c.name||"").includes(name)).length;
  const countTag=(list,tag)=>list.filter(c=>String(cardDefinition(c)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)).length;
  const extraPlacement=s.match(/(?:エネルギーを(?:手札から)?(?:追加で|さらに|もう一度)(\d*)枚?(?:置く|出す)|(?:追加で|さらに|もう一度)(\d*)枚?のエネルギーを(?:手札から)?(?:置く|出す)|エネルギーを(?:手札から)?(\d+)枚追加で(?:置く|出す))(?:ことができる|できる|してもよい|してよい)?/);
@@ -839,8 +839,16 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   for(const m of s.matchAll(/自分のモンスターが場に無いなら/g)){known=true;met=met&&own.monsters.length===0}
   for(const m of s.matchAll(/これのカウンターが(\d+)個以上なら/g)){known=true;met=met&&(Number(sourceCard?.counters)||0)>=Number(m[1])}
   for(const m of s.matchAll(/自分のモンスターが場にいるなら/g)){known=true;met=met&&own.monsters.length>0}
-  if(!known){log("未対応の条件付き効果（手動で処理してください）: "+s.slice(0,90));return}
-  if(!met){log("効果の条件を満たしていません");return}
+  for(const m of s.matchAll(/自分の\[([^\]]+)\]のフィールドが場にあるなら/g)){known=true;met=met&&own.field.some(c=>String(cardDefinition(c)?.types||"").includes(m[1]))}
+  for(const m of s.matchAll(/相手の\[([^\]]+)\]のフィールドが場にあるなら/g)){known=true;met=met&&opp.field.some(c=>String(cardDefinition(c)?.types||"").includes(m[1]))}
+  for(const m of s.matchAll(/自分の\[([^\]]+)\]のエネルギーが場にあるなら/g)){known=true;met=met&&own.energy.some(c=>String(cardDefinition(c)?.types||"").includes(m[1]))}
+  for(const m of s.matchAll(/自分の\[([^\]]+)\]のエネルギーが場に無いなら/g)){known=true;met=met&&!own.energy.some(c=>String(cardDefinition(c)?.types||"").includes(m[1]))}
+  if(!known||!met){
+   const conditionPos=s.indexOf("なら"),prefix=conditionPos>=0?s.slice(0,conditionPos).replace(/[、,\s]+$/,""):"";
+   const hasEarlierAction=/(?:引く|回復|ダメージ|破壊|タップ|手札に加える|場に出す|カウンター\d+個を乗せる|を\s*[＋+]\s*\d+|マナ\s*[+-]\s*\d+)/.test(prefix);
+   if(hasEarlierAction){s=prefix;log(!known?"条件付き部分は未対応のため、条件より前の効果のみ処理します":"条件を満たしていないため、条件より前の効果のみ処理します")}
+   else{log(!known?"未対応の条件付き効果（手動で処理してください）: "+s.slice(0,90):"効果の条件を満たしていません");return}
+  }
  }
  if(s.includes("場に出たターンでも攻撃できる"))own.monsters.forEach(m=>{if(m.summonedThisTurn)m.canAttackOnSummon=true});
  const manaChanges=[...s.matchAll(/(?:(自分の|相手の|お互いの))?マナ\s*([+-])\s*(\d+)/g)];
