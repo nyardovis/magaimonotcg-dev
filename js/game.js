@@ -675,11 +675,22 @@ function resolveCardTrigger(card,p,trigger){
   const text=String(data.effect_text);
   if(trigger==="enter"){
     if(/(?:^|。)\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(text))card.cannotAttack=true;
-    if(/(?:^|。)\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(text))card.cannotBeAttacked=true;
+    if(/(?:^|。)\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(text)||text.includes("アンタップ中は攻撃されない"))card.cannotBeAttacked=true;
     if(text.includes("相手のモンスターはこれにしか攻撃できない"))card.mustBeAttacked=true;
+    if(text.includes("相手のモンスターはプレイヤーに攻撃できない"))state.players[p].opponentMonstersCannotAttackPlayer=true;
+    if(text.includes("相手の効果で選ばれない"))card.cannotBeChosenByOpponent=true;
+    if(text.includes("相手の罠は発動しない"))state.players[p].disableOpponentTraps=true;
+    if(text.includes("相手の「場に出た時」の効果は発動しない"))state.players[p].disableOpponentEnterEffects=true;
+    if(text.includes("モンスターとの戦闘時、戦闘相手のパワーで戦闘する"))card.combatPowerUsesOpponent=true;
+    if(text.includes("モンスターとの戦闘時、これのパワーの代わりに0パワーで戦闘する"))card.combatPowerOverride=0;
+    const repeatAttack=text.match(/1ターンに(\d+)回攻撃できる/);
+    if(repeatAttack)card.attacksPerTurn=Number(repeatAttack[1]);
     const reduction=text.match(/自分が受けるダメージ-(\d+)/);
     if(reduction)state.players[p].damageReduction=Math.max(Number(state.players[p].damageReduction)||0,Number(reduction[1]));
+    const ownCardReduction=text.match(/これが受けるダメージ-(\d+)/);
+    if(ownCardReduction)card.damageReduction=Math.max(Number(card.damageReduction)||0,Number(ownCardReduction[1]));
   }
+  if(trigger==="enter"&&state.players[p===1?2:1].disableOpponentEnterEffects){debugLog("相手の効果により場に出た時効果を無効化: "+card.name,"effect","skipped",{player:p,card:card.name});return}
   const abilities=trigger==="spell"?CardEffectEngine.immediateAbilities(text):CardEffectEngine.forTrigger(text,trigger);
   if(!abilities.length)debugLog("カード効果の発動条件に一致なし: "+card.name+" / "+trigger,"effect","skipped",{player:p,card:card.name,trigger});
   abilities.forEach(ability=>{debugLog("カード効果を発動: "+card.name+" / "+trigger,"effect","info",{player:p,card:card.name,trigger,ability:ability.body});resolveEffectText(ability.body,p,card)});
@@ -1016,11 +1027,13 @@ function resolveAttack(targetMonsterId){
     resolveTrapTriggers(nonActive,"opponentAttack",attacker);
     if(defender){debugLog("防御側モンスターの効果を確認","effect","info",{player:nonActive,card:defender.name});resolveCardTrigger(defender,nonActive,"attack")}
   }
-  const attack=attackPower(attacker);
+  const attack=attacker.combatPowerUsesOpponent&&defender?attackPower(defender):attackPower(attacker);
   debugLog("戦闘ダメージを計算","combat","info",{attacker:attacker.name,attackerPower:attack,defender:defender?.name||"プレイヤー",defenderPower:defender?attackPower(defender):null});
   if(defender&&state.players[2].monsters.some(c=>c.id===defender.id)){
-    const counter=reduceIncomingDamage(attacker,attackPower(defender));
-    const defenderDamage=reduceIncomingDamage(defender,attack);
+    const defenderPower=defender.combatPowerUsesOpponent?attackPower(attacker):attackPower(defender);
+    const attackerPower=attacker.combatPowerUsesOpponent?attackPower(defender):attack;
+    const counter=reduceIncomingDamage(attacker,defenderPower);
+    const defenderDamage=reduceIncomingDamage(defender,attackerPower);
     attacker.damage=(Number(attacker.damage)||0)+counter;
     defender.damage=(Number(defender.damage)||0)+defenderDamage;
     log("「"+attacker.name+"」と「"+defender.name+"」が戦闘。"+attacker.name+"は"+counter+"ダメージ、"+defender.name+"は"+defenderDamage+"ダメージを受けました");
@@ -1057,7 +1070,9 @@ function forceEndTurnForTrap(owner){
  const p=state.turnPlayer;resolveTurnTriggers(p,"end");state.players[p].monsters.forEach(m=>{m.damage=0});state.players[p].energyPool=0;state.turnPlayer=p===1?2:1;startTurn(state.turnPlayer);
 }
 function resolveTrapTriggers(owner,trigger,eventCard=null){
- const x=state.players[owner];if(!x||!Array.isArray(x.facedown))return;
+ const x=state.players[owner];
+ const opponent=state.players[owner===1?2:1];
+ if(opponent.disableOpponentTraps){debugLog("相手の効果により罠の発動を禁止","effect","skipped",{player:owner,trigger});return}if(!x||!Array.isArray(x.facedown))return;
  const source=[...x.facedown];
  for(const trap of source){
   const currentIndex=x.facedown.findIndex(c=>c.id===trap.id);if(currentIndex<0)continue;
