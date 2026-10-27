@@ -220,8 +220,9 @@ function connectGameServer(){
       localStorage.setItem(key,playerToken);
     }
     gameSocket=new WebSocket(SERVER_WS_BASE+"/room/"+encodeURIComponent(currentRoom)+"?session="+encodeURIComponent(playerToken));
-    gameSocket.onopen=()=>log("オンラインサーバーに接続しました");
+    gameSocket.onopen=()=>{debugLog("WebSocket接続を確立","network","success",{room:currentRoom});log("オンラインサーバーに接続しました")};
     gameSocket.onmessage=e=>{
+      debugLog("サーバーからメッセージを受信","network","info",{bytes:String(e.data||"").length});
       try{
         const message=JSON.parse(e.data);
         if(message.type==="joined"){
@@ -363,7 +364,54 @@ function newPlayer(name,p){
   const pool=shuffle([...cardNames]).slice(0,50);
   return{name,life:4000,energyPool:0,deckCounters:0,deckList:pool.slice(),hand:pool.slice(0,7).map((n,i)=>newCard(n,p+"h"+i)),monsters:[],energy:[],field:[],discard:[],facedown:[],deck:pool.slice(7).map((n,i)=>newCard(n,p+"d"+i))};
 }
-function log(s,sendOnline=true){const e=document.querySelector("#log"),d=new Date().toLocaleTimeString("ja-JP"),html='<div>['+d+'] '+esc(s)+"</div>";e.insertAdjacentHTML("beforeend",html);e.scrollTop=e.scrollHeight;const v=document.querySelector("#deckViewerLog");if(v){v.insertAdjacentHTML("beforeend",html);v.scrollTop=v.scrollHeight}if(sendOnline&&!devLocalMode&&onlinePlayerId&&gameSocket&&gameSocket.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"log",text:String(s).slice(0,200)}))}
+const DEBUG_LOG_LIMIT=500;
+let debugLogEntries=[];
+let debugLogSequence=0;
+function debugLog(message,category="system",status="info",details=null){
+ const entry={id:++debugLogSequence,time:new Date().toISOString(),category,status,message:String(message||""),details,room:currentRoom||"",turn:typeof state!=="undefined"&&state.turnPlayer?state.turnPlayer:null,phase:typeof state!=="undefined"&&state.phase?state.phase:""};
+ debugLogEntries.push(entry);if(debugLogEntries.length>DEBUG_LOG_LIMIT)debugLogEntries.splice(0,debugLogEntries.length-DEBUG_LOG_LIMIT);
+ renderDebugLogs();return entry;
+}
+function classifyLogMessage(message){
+ const s=String(message||"");
+ if(/エラー|失敗|できませんでした|例外|未対応/.test(s))return {category:/通信|サーバー|同期|オンライン/.test(s)?"network":"effect",status:/未対応/.test(s)?"unimplemented":/できませんでした|失敗|エラー/.test(s)?"error":"warning"};
+ if(/攻撃|ダメージ|戦闘|破壊/.test(s))return {category:"combat",status:"info"};
+ if(/効果|罠|発動|条件|手札に加え/.test(s))return {category:"effect",status:/条件を満たしていません/.test(s)?"skipped":"info"};
+ if(/オンライン|通信|接続|同期|ルーム/.test(s))return {category:"network",status:"info"};
+ if(/ターン|ドロー|手札|ライフ|エネルギー|マナ/.test(s))return {category:"state",status:"info"};
+ return {category:"game",status:"info"};
+}
+function renderDebugLogs(){
+ const list=document.querySelector("#debugLogList");if(!list)return;
+ const category=document.querySelector("#debugLogFilter")?.value||"all";
+ const query=(document.querySelector("#debugLogSearch")?.value||"").trim().toLocaleLowerCase("ja-JP");
+ const filtered=debugLogEntries.filter(e=>(category==="all"||e.category===category||category==="errors"&&["error","warning","unimplemented"].includes(e.status))&&(!query||(e.message+" "+JSON.stringify(e.details||"")).toLocaleLowerCase("ja-JP").includes(query)));
+ list.innerHTML="";
+ if(!filtered.length){list.innerHTML='<div class="debug-log-empty">該当するログはありません</div>';return}
+ filtered.slice().reverse().forEach(entry=>{
+  const row=document.createElement("button");row.type="button";row.className="debug-log-entry status-"+entry.status;
+  const time=document.createElement("span");time.className="debug-log-time";time.textContent=new Date(entry.time).toLocaleTimeString("ja-JP",{hour12:false});
+  const tag=document.createElement("span");tag.className="debug-log-tag";tag.textContent=({effect:"効果",combat:"戦闘",network:"通信",state:"状態",game:"対戦",system:"システム"})[entry.category]||entry.category;
+  const message=document.createElement("span");message.className="debug-log-message";message.textContent=entry.message;
+  row.append(time,tag,message);row.addEventListener("click",()=>{const detail=document.querySelector("#debugLogDetail");if(detail)detail.textContent=JSON.stringify({id:entry.id,time:entry.time,category:entry.category,status:entry.status,room:entry.room,turn:entry.turn,phase:entry.phase,message:entry.message,details:entry.details},null,2)});list.appendChild(row);
+ });
+}
+function log(s,sendOnline=true){
+ const message=String(s),e=document.querySelector("#log"),d=new Date().toLocaleTimeString("ja-JP"),html='<div>['+d+'] '+esc(message)+"</div>";
+ if(e){e.insertAdjacentHTML("beforeend",html);e.scrollTop=e.scrollHeight}
+ const v=document.querySelector("#deckViewerLog");if(v){v.insertAdjacentHTML("beforeend",html);v.scrollTop=v.scrollHeight}
+ const classified=classifyLogMessage(message);debugLog(message,classified.category,classified.status);
+ if(sendOnline&&!devLocalMode&&onlinePlayerId&&gameSocket&&gameSocket.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"log",text:message.slice(0,200)}))
+}
+function setupDebugLogControls(){
+ document.querySelector("#debugLogFilter")?.addEventListener("change",renderDebugLogs);
+ document.querySelector("#debugLogSearch")?.addEventListener("input",renderDebugLogs);
+ document.querySelector("#debugLogClear")?.addEventListener("click",()=>{debugLogEntries=[];debugLogSequence=0;const detail=document.querySelector("#debugLogDetail");if(detail)detail.textContent="ログを選択すると詳細が表示されます。";renderDebugLogs()});
+ document.querySelector("#debugLogCopy")?.addEventListener("click",async()=>{const text=JSON.stringify(debugLogEntries,null,2);try{await navigator.clipboard.writeText(text);const b=document.querySelector("#debugLogCopy");if(b){b.textContent="コピーしました";setTimeout(()=>b.textContent="ログをコピー",1200)}}catch(e){const detail=document.querySelector("#debugLogDetail");if(detail)detail.textContent=text;debugLog("クリップボードへのコピーに失敗しました。詳細欄からログをコピーしてください","system","warning")}});
+ renderDebugLogs();
+}
+window.addEventListener("error",event=>debugLog("JavaScriptエラー: "+(event.message||"不明なエラー"),"system","error",{file:event.filename||"",line:event.lineno||0,column:event.colno||0}));
+window.addEventListener("unhandledrejection",event=>debugLog("未処理の非同期エラー: "+String(event.reason?.message||event.reason||"不明なエラー"),"system","error"));
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 
 function closeDiscardViewer(){const v=document.querySelector("#discardViewer");if(v)v.hidden=true;state.discardInspectId=null}
@@ -562,7 +610,7 @@ function move(dest){
 
 function drawCards(n,p=1){if(!Number.isInteger(n)||n<=0)return log("ドロー枚数は1以上の整数にしてください");drawEffectCards(p,n);state.selected=null;render()}
 function ensureDiscardWarning(){if(document.querySelector("#discardWarning"))return;const e=document.createElement("div");e.id="discardWarning";e.hidden=true;e.style.cssText="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9999;background:#8b0000;color:#fff;padding:10px 18px;border:2px solid #f33;border-radius:6px;font-weight:700;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.45);";document.body.appendChild(e)}
-function startTurn(p,showLog=true){if(state.phase!=="playing")return;const x=state.players[p];x.energyPlacedThisTurn=false;x.extraEnergyPlacements=0;x.energyPool=0;if(p===1)broadcastEnergyPool();x.monsters.forEach(m=>{m.tapped=false;m.summonedThisTurn=false;m.canAttackOnSummon=false});x.energy.forEach(e=>e.tapped=false);if(x.deck.length===0){const winner=p===1?2:1;state.gameOver={winner,reason:"deck_empty"};state.phase="finished";render();log(x.name+"はターン開始時に山札が0枚だったため、"+state.players[winner].name+"の勝利です");return}if(x.deck.length&&x.hand.length>=MAX.hand){state.pendingDiscardPlayer=p;state.pendingDiscardReason="turn_start";state.pendingDrawCount=1;state.selected=null;render();log(x.name+"はドロー前に手札を1枚捨てる必要があります。手札のカードをクリックしてください");return}if(x.deck.length&&x.hand.length<MAX.hand)drawCards(1,p);resolveTurnTriggers(p,"start");render();if(showLog)log(x.name+" のターン開始")}
+function startTurn(p,showLog=true){if(state.phase!=="playing")return;debugLog("ターン開始処理: "+(state.players[p]?.name||("プレイヤー"+p)),"state","info",{player:p,phase:state.phase});const x=state.players[p];x.energyPlacedThisTurn=false;x.extraEnergyPlacements=0;x.energyPool=0;if(p===1)broadcastEnergyPool();x.monsters.forEach(m=>{m.tapped=false;m.summonedThisTurn=false;m.canAttackOnSummon=false});x.energy.forEach(e=>e.tapped=false);if(x.deck.length===0){const winner=p===1?2:1;state.gameOver={winner,reason:"deck_empty"};state.phase="finished";render();log(x.name+"はターン開始時に山札が0枚だったため、"+state.players[winner].name+"の勝利です");return}if(x.deck.length&&x.hand.length>=MAX.hand){state.pendingDiscardPlayer=p;state.pendingDiscardReason="turn_start";state.pendingDrawCount=1;state.selected=null;render();log(x.name+"はドロー前に手札を1枚捨てる必要があります。手札のカードをクリックしてください");return}if(x.deck.length&&x.hand.length<MAX.hand)drawCards(1,p);resolveTurnTriggers(p,"start");render();if(showLog)log(x.name+" のターン開始")}
 function completePendingDiscard(p,id){if(p!==1)return false;if(state.pendingDiscardPlayer!==p)return false;const x=state.players[p],i=x.hand.findIndex(c=>c.id===id);if(i<0)return true;const discarded=x.hand.splice(i,1)[0],reason=state.pendingDiscardReason,remaining=state.pendingDrawCount;moveToDiscard(p,discarded,"手札上限による破棄");state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.selected=null;log(x.name+"は「"+discarded.name+"」を捨てました");if(reason==="effect_draw"){if(remaining>0)drawEffectCards(p,remaining);render();return true}if(x.deck.length&&x.hand.length<MAX.hand)drawCards(1,p);resolveTurnTriggers(p,"start");render();log(x.name+" のターン開始");return true}
 function endTurn(){const localPlayer=1;if(state.turnPlayer!==localPlayer||state.pendingDiscardPlayer!==null||state.phase!=="playing")return;if(onlinePlayerId!==null&&!devLocalMode){if(!gameSocket||gameSocket.readyState!==WebSocket.OPEN)return log("オンラインサーバーに接続されていません");resolveTurnTriggers(1,"end");state.players[1].monsters.forEach(m=>{m.damage=0});render();gameSocket.send(JSON.stringify({type:"operation",action:"end_turn"}));return}const p=state.turnPlayer,x=state.players[p];resolveTurnTriggers(p,"end");x.monsters.forEach(m=>{m.damage=0});state.turnPlayer=p===1?2:1;startTurn(state.turnPlayer)}
 
@@ -711,7 +759,7 @@ function resolveSummonEffects(text,p,sourceCard){
  return matched;
 }
 
-function resolveEffectText(text,p,sourceCard,eventCard=null){
+function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const own=state.players[p],opp=state.players[p===1?2:1],s=String(text||"");let handled=false,revealedCardForEffect=null;
  const extraPlacement=s.match(/(?:エネルギーを(?:手札から)?(?:追加で|さらに|もう一度)(\d*)枚?(?:置く|出す)|(?:追加で|さらに|もう一度)(\d*)枚?のエネルギーを(?:手札から)?(?:置く|出す)|エネルギーを(?:手札から)?(\d+)枚追加で(?:置く|出す))(?:ことができる|できる|してもよい|してよい)?/);
  if(extraPlacement){const amount=Math.max(1,Number(extraPlacement[1]||extraPlacement[2]||extraPlacement[3])||1);own.extraEnergyPlacements=(Number(own.extraEnergyPlacements)||0)+amount;log("このターン、手札から追加でエネルギーを"+amount+"回置けます");}
@@ -801,6 +849,19 @@ function resolveEffectText(text,p,sourceCard,eventCard=null){
  if(resolveSummonEffects(s,p,sourceCard))handled=true;
  if(!handled)log("未対応の効果（手動で処理してください）: "+s.slice(0,90));
 }
+function resolveEffectText(text,p,sourceCard,eventCard=null){
+ const cardName=sourceCard?.name||"不明なカード",summary=String(text||"").slice(0,180);
+ const before={life:state.players[p]?.life,hand:state.players[p]?.hand?.length,deck:state.players[p]?.deck?.length,discard:state.players[p]?.discard?.length,monsters:state.players[p]?.monsters?.length,energy:state.players[p]?.energy?.length,field:state.players[p]?.field?.length};
+ const trace=debugLog("効果処理開始: "+cardName+" / "+summary,"effect","info",{player:p,sourceCard:cardName,eventCard:eventCard?.name||null,before});
+ try{
+  const result=resolveEffectTextCore(text,p,sourceCard,eventCard);
+  const after={life:state.players[p]?.life,hand:state.players[p]?.hand?.length,deck:state.players[p]?.deck?.length,discard:state.players[p]?.discard?.length,monsters:state.players[p]?.monsters?.length,energy:state.players[p]?.energy?.length,field:state.players[p]?.field?.length};
+  debugLog("効果処理終了: "+cardName,"effect","success",{traceId:trace.id,player:p,before,after,changed:JSON.stringify(before)!==JSON.stringify(after)});
+  return result;
+ }catch(error){
+  debugLog("効果処理中に例外: "+cardName+" / "+String(error?.message||error),"effect","error",{traceId:trace.id,stack:error?.stack||""});throw error;
+ }
+}
 function attackPower(card){const base=Number(card.power)||Number(cardDefinition(card)?.power)||0;return Math.max(0,base+(Number(card.modification)||0))}
 function declareAttack(cardId){
   if(state.phase!=="playing"||state.pendingDiscardPlayer!==null||state.turnPlayer!==1||state.gameOver)return;
@@ -813,21 +874,27 @@ function declareAttack(cardId){
 }
 function resolveAttack(targetMonsterId){
   if(!pendingAttack||state.phase!=="playing"||state.pendingDiscardPlayer!==null)return;
+  debugLog("攻撃対象を確定: "+(pendingAttack.name||"モンスター")+" → "+(targetMonsterId?("相手モンスターID "+targetMonsterId):"プレイヤーへの直接攻撃"),"combat","info",{attackerId:pendingAttack.cardId,targetMonsterId:targetMonsterId||null});
   const attacker=state.players[1].monsters.find(c=>c.id===pendingAttack.cardId);if(!attacker){pendingAttack=null;render();return}
   if(attacker.tapped){pendingAttack=null;render();return log("タップしているモンスターは攻撃できません")}
   const defender=targetMonsterId?state.players[2].monsters.find(c=>c.id===targetMonsterId):null;
   if(targetMonsterId&&!defender)return;
   attacker.tapped=true;
+  debugLog("攻撃者をタップ: "+attacker.name,"combat","info",{attackerId:attacker.id});
   const active=state.turnPlayer,nonActive=active===1?2:1;
+  debugLog("攻撃側の罠効果を確認","effect","info",{player:active,trigger:"ownAttack"});
   resolveTrapTriggers(active,"ownAttack",attacker);
+  debugLog("攻撃側モンスターの攻撃時効果を確認","effect","info",{player:active,card:attacker.name});
   resolveCardTrigger(attacker,active,"attack");
   if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN){
     gameSocket.send(JSON.stringify({type:"operation",action:"attack_declared",cardId:attacker.id,targetCardId:defender?.id||null}));
   }else{
+    debugLog("防御側の罠効果を確認","effect","info",{player:nonActive,trigger:"opponentAttack"});
     resolveTrapTriggers(nonActive,"opponentAttack",attacker);
-    if(defender)resolveCardTrigger(defender,nonActive,"attack");
+    if(defender){debugLog("防御側モンスターの効果を確認","effect","info",{player:nonActive,card:defender.name});resolveCardTrigger(defender,nonActive,"attack")}
   }
   const attack=attackPower(attacker);
+  debugLog("戦闘ダメージを計算","combat","info",{attacker:attacker.name,attackerPower:attack,defender:defender?.name||"プレイヤー",defenderPower:defender?attackPower(defender):null});
   if(defender&&state.players[2].monsters.some(c=>c.id===defender.id)){
     const counter=attackPower(defender);
     attacker.damage=(Number(attacker.damage)||0)+counter;
@@ -940,7 +1007,7 @@ function activateDevLocalMode(){if(!devLocalMode){devLocalMode=true;log("開発�
 function devSkipMulligan(p){if(state.phase!=="mulligan"||state.mulligan[p].done)return;activateDevLocalMode();state.mulligan[p].done=true;log((p===1?"自分":"相手")+"のマリガンを開発用にスキップしました",false);if(state.mulligan[1].done&&state.mulligan[2].done){state.phase="playing";log("両プレイヤーのマリガンが終了。ゲーム開始",false);if(state.turnPlayer===1){startTurn(1,false);return}}render()}
 function devRefreshCardOptions(){const p=Number(document.querySelector("#devSourcePlayer")?.value||1),z=document.querySelector("#devSourceZone")?.value||"hand",sel=document.querySelector("#devSourceCard");if(!sel)return;sel.innerHTML="";const cards=state.players[p]?.[z]||[];if(!cards.length){const o=document.createElement("option");o.value="";o.textContent="このゾーンにカードなし";sel.appendChild(o);return}cards.forEach(c=>{const o=document.createElement("option");o.value=c.id;o.textContent=(c.name||"(非公開カード情報なし)")+" ["+c.id+"]";sel.appendChild(o)})}
 function devRefreshHiddenInfo(){const b=document.querySelector("#devHiddenInfo");if(!b)return;const p=state.players[2],fmt=a=>a.map(c=>c.name||"(カード名は未受信)").join("、")||"なし";b.textContent="相手の手札："+fmt(p.hand)+" ／ 山札："+fmt(p.deck)+" ／ 罠："+fmt(p.facedown)+"。オンライン対戦で未受信のカード名は復元できません。"}
-function setupDevTools(){const normal=document.querySelector("#normalToolsPanel"),dev=document.querySelector("#devToolsPanel"),nt=document.querySelector("#normalTab"),dt=document.querySelector("#devTab");const show=v=>{normal.hidden=v;dev.hidden=!v;nt.classList.toggle("active",!v);dt.classList.toggle("active",v);if(v){devRefreshCardOptions();devRefreshHiddenInfo()}};const during=document.querySelector("#devDuringMulligan"),back=document.querySelector("#devReturnMulligan");const refreshMulliganAccess=()=>{const active=state.phase==="mulligan"&&!!currentRoom;during?.classList.toggle("visible",active&&!devToolsOpenDuringMulligan);if(active&&!devToolsOpenDuringMulligan)show(false)};during?.addEventListener("click",()=>{devToolsOpenDuringMulligan=true;show(true);renderMulliganOverlay()});back?.addEventListener("click",()=>{devToolsOpenDuringMulligan=false;show(false);renderMulliganOverlay()});nt?.addEventListener("click",()=>show(false));dt?.addEventListener("click",()=>show(true));document.querySelector("#devSourcePlayer")?.addEventListener("change",devRefreshCardOptions);document.querySelector("#devSourceZone")?.addEventListener("change",devRefreshCardOptions);
+function setupDevTools(){const normal=document.querySelector("#normalToolsPanel"),dev=document.querySelector("#devToolsPanel"),logs=document.querySelector("#debugLogPanel"),nt=document.querySelector("#normalTab"),dt=document.querySelector("#devTab"),lt=document.querySelector("#debugLogTab");const show=v=>{normal.hidden=v;dev.hidden=!v;logs.hidden=true;nt.classList.toggle("active",!v);dt.classList.toggle("active",v);lt.classList.remove("active");if(v){devRefreshCardOptions();devRefreshHiddenInfo()}};const showLogs=()=>{normal.hidden=true;dev.hidden=true;logs.hidden=false;nt.classList.remove("active");dt.classList.remove("active");lt.classList.add("active");renderDebugLogs()};const during=document.querySelector("#devDuringMulligan"),back=document.querySelector("#devReturnMulligan");const refreshMulliganAccess=()=>{const active=state.phase==="mulligan"&&!!currentRoom;during?.classList.toggle("visible",active&&!devToolsOpenDuringMulligan);if(active&&!devToolsOpenDuringMulligan)show(false)};during?.addEventListener("click",()=>{devToolsOpenDuringMulligan=true;show(true);renderMulliganOverlay()});back?.addEventListener("click",()=>{devToolsOpenDuringMulligan=false;show(false);renderMulliganOverlay()});nt?.addEventListener("click",()=>show(false));dt?.addEventListener("click",()=>show(true));lt?.addEventListener("click",showLogs);document.querySelector("#devSourcePlayer")?.addEventListener("change",devRefreshCardOptions);document.querySelector("#devSourceZone")?.addEventListener("change",devRefreshCardOptions);
 document.querySelector("#devMoveCard")?.addEventListener("click",()=>{const sp=Number(document.querySelector("#devSourcePlayer").value),sz=document.querySelector("#devSourceZone").value,id=document.querySelector("#devSourceCard").value,dp=Number(document.querySelector("#devDestPlayer").value),dz=document.querySelector("#devDestZone").value,src=state.players[sp]?.[sz],dest=state.players[dp]?.[dz];if(!id||!Array.isArray(src)||!Array.isArray(dest))return log("移動元・移動先を確認してください",false);const i=src.findIndex(c=>c.id===id);if(i<0)return log("選択したカードが見つかりません",false);activateDevLocalMode();const c=src.splice(i,1)[0];c.tapped=false;c.faceUp=dz!=="facedown";c.revealed=dz==="hand"&&!!c.revealed;if(dz==="discard"){c.damage=0;c.modification=0;c.counters=0}if(dz==="field")dest.splice(0,dest.length);dest.push(c);state.selected=null;render();devRefreshCardOptions();devRefreshHiddenInfo();log("開発用：カードを制限を無視して移動しました",false)});
 const setTurn=p=>{activateDevLocalMode();state.turnPlayer=p;state.phase="playing";state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.gameOver=null;state.mulligan[1].done=true;state.mulligan[2].done=true;render();log("開発用："+(p===1?"自分":"相手")+"のターンに設定しました",false)};document.querySelector("#devTurnSelf")?.addEventListener("click",()=>setTurn(1));document.querySelector("#devTurnOpponent")?.addEventListener("click",()=>setTurn(2));document.querySelector("#devTurnNext")?.addEventListener("click",()=>setTurn(state.turnPlayer===1?2:1));document.querySelector("#devMulliganSelf")?.addEventListener("click",()=>devSkipMulligan(1));document.querySelector("#devMulliganOpponent")?.addEventListener("click",()=>devSkipMulligan(2));document.querySelector("#devRevealOpponent")?.addEventListener("click",()=>{activateDevLocalMode();state.players[2].hand.forEach(c=>{if(c.name){c.faceUp=true;c.revealed=true}});state.players[2].facedown.forEach(c=>{c.faceUp=true});render();devRefreshHiddenInfo();log("開発用：手元に存在する相手カード情報を表示しました。未受信のカード名は表示できません",false)})}
 function setup(){
@@ -949,6 +1016,7 @@ function setup(){
   const mulliganButton=document.querySelector("#mulliganAgain");if(mulliganButton)mulliganButton.onclick=doMulligan;
   const mulliganKeep=document.querySelector("#mulliganKeep");if(mulliganKeep)mulliganKeep.onclick=finishMulligan;
   setupDevTools();
+  setupDebugLogControls();
   document.addEventListener("click",e=>{const v=document.querySelector("#discardViewer");if(v&&!v.hidden&&!e.target.closest("#discardViewer .discard-viewer-panel")&&!e.target.closest(".player .other .zone:nth-child(2)"))closeDiscardViewer()});
   document.querySelector("#discardViewer").onclick=e=>{if(e.target===document.querySelector("#discardViewer"))closeDiscardViewer()};
   document.querySelector("#deckEdit").onclick=()=>{state.players[1].deckList=state.savedDeck.slice();document.querySelector("#deckEditor").hidden=false;const search=document.querySelector("#deckCardSearch");if(search)search.value="";renderDeckEditor()};
