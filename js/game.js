@@ -618,6 +618,18 @@ function endTurn(){const localPlayer=1;if(state.turnPlayer!==localPlayer||state.
 function cardDefinition(cardOrName){if(typeof cardOrName==="string")return cardDataByName.get(cardOrName)||null;const id=cardOrName?.cardDataId;if(id){const exact=cardDatabase.find(c=>c.id===id);if(exact)return exact}return cardDataByName.get(cardOrName?.name)||null}
 function cardKind(card){const tag=String(cardDefinition(card)?.tags||"");if(tag.includes("#エネルギーカード"))return "energy";if(tag.includes("#フィールドカード"))return "field";if(tag.includes("#モンスターカード"))return "monster";if(tag.includes("#魔法カード"))return "spell";if(tag.includes("#罠カード"))return "trap";return "unknown"}
 function cardCost(card){const value=cardDefinition(card)?.cost;if(typeof value==="number"&&Number.isFinite(value))return Math.max(0,value);if(typeof value==="string"&&/^\+?\d+$/.test(value))return Math.max(0,Number(value.replace("+","")));return 0}
+function effectiveCardCost(card,p=1){
+ let cost=cardCost(card);const player=state.players[p];if(!player)return cost;
+ const data=cardDefinition(card),types=String(data?.types||"");
+ for(const source of [...player.monsters,...player.field]){
+  const text=String(cardDefinition(source)?.effect_text||"");
+  const reduction=text.match(/自分の手札の\[([^\]]+)\]のコスト-(\d+)/);
+  if(reduction&&types.includes(reduction[1]))cost-=Number(reduction[2]);
+ }
+ const ownFormula=String(data?.effect_text||"").match(/手札にある時、これのコスト-\s*[（(]自分のパワー-(\d+)の\[([^\]]+)\]の数[）)]/);
+ if(ownFormula){const threshold=Number(ownFormula[1]),tag=ownFormula[2],count=player.monsters.filter(m=>String(cardDefinition(m)?.types||"").includes(tag)&&(Number(m.power)||Number(cardDefinition(m)?.power)||0)>=threshold).length;cost-=count}
+ return Math.max(0,cost);
+}
 function broadcastEnergyPool(){if(!devLocalMode&&onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"energy_pool",value:state.players[1].energyPool||0}))}
 function broadcastEffectDelta(delta){if(!devLocalMode&&onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",...delta}))}
 function applyEffectDelta(message){
@@ -675,7 +687,8 @@ function resolveCardTrigger(card,p,trigger){
   const text=String(data.effect_text);
   if(trigger==="enter"){
     if(/(?:^|。)\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(text))card.cannotAttack=true;
-    if(/(?:^|。)\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(text)||text.includes("アンタップ中は攻撃されない"))card.cannotBeAttacked=true;
+    if(/(?:^|。)\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(text))card.cannotBeAttacked=true;
+    if(text.includes("アンタップ中は攻撃されない"))card.cannotBeAttackedWhileUntapped=true;
     if(text.includes("相手のモンスターはこれにしか攻撃できない"))card.mustBeAttacked=true;
     if(text.includes("相手のモンスターはプレイヤーに攻撃できない"))state.players[p].opponentMonstersCannotAttackPlayer=true;
     if(text.includes("相手の効果で選ばれない"))card.cannotBeChosenByOpponent=true;
@@ -1009,7 +1022,7 @@ function resolveAttack(targetMonsterId){
   if(targetMonsterId&&!defender)return;
   const forcedTargets=state.players[2].monsters.filter(c=>c.mustBeAttacked||String(cardDefinition(c)?.effect_text||"").includes("相手のモンスターはこれにしか攻撃できない"));
   if(forcedTargets.length&&(!defender||!forcedTargets.some(c=>c.id===defender.id))){log("相手の効果により、指定されたモンスターにしか攻撃できません");return}
-  if(defender&&(defender.cannotBeAttacked||/(?:^|。)\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(String(cardDefinition(defender)?.effect_text||"")))){log("そのモンスターは攻撃されません");return}
+  if(defender&&(defender.cannotBeAttacked||(!defender.tapped&&defender.cannotBeAttackedWhileUntapped)||/(?:^|。)\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(String(cardDefinition(defender)?.effect_text||"")))){log("そのモンスターは攻撃されません");return}
   if(!targetMonsterId&&state.players[2].opponentMonstersCannotAttackPlayer){log("相手の効果によりプレイヤーへの攻撃が禁止されています");return}
   const maxAttacks=Math.max(1,Number(attacker.attacksPerTurn)||1);
   const attackNumber=(Number(attacker.attacksThisTurn)||0)+1;
@@ -1109,7 +1122,8 @@ function resolveTurnTriggers(p,when){
 }
 function playCardFromHand(cardId){
  if(state.phase!=="playing"||state.pendingDiscardPlayer!==null)return;const x=state.players[1],idx=x.hand.findIndex(c=>c.id===cardId);if(idx<0)return;
- const card=x.hand[idx],kind=cardKind(card),cost=cardCost(card),effect=String(cardDefinition(card)?.effect_text||"");
+ const card=x.hand[idx],kind=cardKind(card),cost=effectiveCardCost(card,1),effect=String(cardDefinition(card)?.effect_text||"");
+ if(effect.includes("これは使わずに場に出せない"))return log("このカードは通常の手札使用では場に出せません");
  const requiredElement=effect.match(/自分の\[([^\]]+)\]のエネルギーが場に無い時使用できず場に出せない/);
  if(requiredElement&&!x.energy.some(e=>String(cardDefinition(e)?.types||"").includes(requiredElement[1])))return log("条件を満たしていないため「"+card.name+"」は使用できません");
  const requiredEnergyTag=effect.match(/自分の\[([^\]]+)\]のエネルギーが場に無い時使用できない/);
