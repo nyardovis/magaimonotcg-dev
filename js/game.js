@@ -789,6 +789,8 @@ function resolveSummonEffects(text,p,sourceCard){
 
 function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const own=state.players[p],opp=state.players[p===1?2:1],s=String(text||"");let handled=false,revealedCardForEffect=null;
+ const countNamed=(list,name)=>list.filter(c=>String(c.name||"").includes(name)).length;
+ const countTag=(list,tag)=>list.filter(c=>String(cardDefinition(c)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)).length;
  const extraPlacement=s.match(/(?:エネルギーを(?:手札から)?(?:追加で|さらに|もう一度)(\d*)枚?(?:置く|出す)|(?:追加で|さらに|もう一度)(\d*)枚?のエネルギーを(?:手札から)?(?:置く|出す)|エネルギーを(?:手札から)?(\d+)枚追加で(?:置く|出す))(?:ことができる|できる|してもよい|してよい)?/);
  if(extraPlacement){const amount=Math.max(1,Number(extraPlacement[1]||extraPlacement[2]||extraPlacement[3])||1);own.extraEnergyPlacements=(Number(own.extraEnergyPlacements)||0)+amount;log("このターン、手札から追加でエネルギーを"+amount+"回置けます");}
  const eventOwner=eventCard?[1,2].find(owner=>["monsters","energy","field","facedown","discard","hand"].some(zone=>state.players[owner]?.[zone]?.some(c=>c.id===eventCard.id))):null;
@@ -885,8 +887,6 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  if(/自分のフィールドカードを破壊|自分のフィールドを破壊/.test(s)&&own.field.length){moveToDiscard(p,own.field.shift(),"効果");handled=true}
  if(resolveSummonEffects(s,p,sourceCard))handled=true;
  /* Additional broadly reusable effect patterns. */
- const countNamed=(list,name)=>list.filter(c=>String(c.name||"").includes(name)).length;
- const countTag=(list,tag)=>list.filter(c=>String(cardDefinition(c)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)).length;
  const counterCount=Number(sourceCard?.counters)||0;
  const formulaCounterHeal=s.match(/自分を\s*[（(]これのカウンターの数\s*[×x*]\s*(\d+)[）)]\s*回復/);
  if(formulaCounterHeal){const amount=counterCount*Number(formulaCounterHeal[1]);own.life+=amount;broadcastEffectDelta({target:"ownLife",delta:amount});handled=true;log(own.name+"はカウンター数に応じて"+amount+"回復")}
