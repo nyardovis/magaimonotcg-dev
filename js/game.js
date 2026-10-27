@@ -690,8 +690,28 @@ function activateCardAbility(cardId,abilityIndex){
   const card=find(1,selected.z,cardId);if(!card)return;
   const abilities=CardEffectEngine.activatedAbilities(cardDefinition(card)?.effect_text||"");
   const ability=abilities[abilityIndex];if(!ability)return;
-  if(!useEnergyCost(1,ability.cost))return;
-  log("「"+card.name+"」の能力を使用（コスト"+ability.cost+"）");
+  if(ability.costKind==="energy"){
+    if(!useEnergyCost(1,ability.costValue||0))return;
+  }else if(ability.costKind==="tap"){
+    if(card.tapped){log("タップ中のカードは能力を使用できません");return}
+    card.tapped=true;
+    if(selected.z==="energy"){state.players[1].energyPool=Math.max(0,(state.players[1].energyPool||0)-cardCost(card));broadcastEnergyPool()}
+  }else if(ability.costKind==="destroy"){
+    const zone=state.players[1][selected.z],index=zone.findIndex(c=>c.id===card.id);
+    if(index<0)return;
+    zone.splice(index,1);moveToDiscard(1,card,"能力コスト");
+  }else if(ability.costKind==="counter"){
+    const required=Number(ability.costValue)||0;
+    if((Number(card.counters)||0)<required){log("必要なカウンターが不足しています（必要："+required+"）");return}
+    card.counters=Math.max(0,(Number(card.counters)||0)-required);
+  }else if(ability.costKind==="discard"){
+    const count=Number(ability.costValue)||1;
+    if(state.players[1].hand.length<count){log("能力コストとして捨てる手札が不足しています");return}
+    for(let i=0;i<count;i++)moveToDiscard(1,state.players[1].hand.shift(),"能力コスト");
+  }else{
+    log("未対応の能力コストです："+(ability.costToken||"不明"));return;
+  }
+  log("「"+card.name+"」の能力を使用"+(ability.costKind==="energy"?"（コスト"+(ability.costValue||0)+"）":"（コスト："+(ability.costToken||"不明")+"）"));
   resolveEffectText(ability.body,1,card);
   checkMonsterDestruction(1);
   state.selected={p:1,z:selected.z,id:card.id};render();
@@ -783,6 +803,15 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   for(const m of s.matchAll(/自分のライフが相手より(\d+)以上低いなら/g)){known=true;met=met&&own.life<=opp.life-Number(m[1])}
   for(const m of s.matchAll(/自分のモンスターが(\d+)体以上場にいるなら/g)){known=true;met=met&&own.monsters.length>=Number(m[1])}
   for(const m of s.matchAll(/自分の名前に「([^」]+)」を含むモンスターが場にいるなら/g)){known=true;met=met&&own.monsters.some(c=>String(c.name||"").includes(m[1]))}
+  for(const m of s.matchAll(/自分の\[([^\]]+)\]が(\d+)体以上場にいるなら/g)){known=true;met=met&&countTag(own.monsters,m[1])>=Number(m[2])}
+  for(const m of s.matchAll(/相手の\[([^\]]+)\]が(\d+)体以上場にいるなら/g)){known=true;met=met&&countTag(opp.monsters,m[1])>=Number(m[2])}
+  for(const m of s.matchAll(/自分の名前に「([^」]+)」を含むモンスターが(\d+)体以上場にいるなら/g)){known=true;met=met&&countNamed(own.monsters,m[1])>=Number(m[2])}
+  for(const m of s.matchAll(/自分の手札が(\d+)枚以上なら/g)){known=true;met=met&&own.hand.length>=Number(m[1])}
+  for(const m of s.matchAll(/自分の手札が(\d+)枚以下なら/g)){known=true;met=met&&own.hand.length<=Number(m[1])}
+  for(const m of s.matchAll(/相手のモンスターが場に無いなら/g)){known=true;met=met&&opp.monsters.length===0}
+  for(const m of s.matchAll(/自分のモンスターが場に無いなら/g)){known=true;met=met&&own.monsters.length===0}
+  for(const m of s.matchAll(/これのカウンターが(\d+)個以上なら/g)){known=true;met=met&&(Number(sourceCard?.counters)||0)>=Number(m[1])}
+  for(const m of s.matchAll(/自分のモンスターが場にいるなら/g)){known=true;met=met&&own.monsters.length>0}
   if(!known){log("未対応の条件付き効果（手動で処理してください）: "+s.slice(0,90));return}
   if(!met){log("効果の条件を満たしていません");return}
  }
