@@ -688,7 +688,7 @@ function resolveSummonEffects(text,p,sourceCard){
    const card=selectedSource.splice(selectedIndex,1)[0],kind=candidateKind;
    card.faceUp=kind!=="trap";card.revealed=false;card.tapped=false;
    if(kind==="monster"){
-    card.power=Number(cardDefinition(card)?.power)||card.power||0;card.damage=0;card.modification=0;own.monsters.push(card);
+    card.power=Number(cardDefinition(card)?.power)||card.power||0;card.damage=0;card.modification=0;card.summonedThisTurn=true;card.canAttackOnSummon=String(cardDefinition(card)?.effect_text||"").includes("場に出たターンでも攻撃できる");own.monsters.push(card);
     log(own.name+"は効果で「"+card.name+"」を場に出しました");
     resolveCardTrigger(card,p,"enter");resolveTrapTriggers(p,"ownEnter",card);
     if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentEnter",card);
@@ -713,6 +713,7 @@ function resolveSummonEffects(text,p,sourceCard){
 
 function resolveEffectText(text,p,sourceCard,eventCard=null){
  const own=state.players[p],opp=state.players[p===1?2:1],s=String(text||"");let handled=false,revealedCardForEffect=null;
+ if(s.includes("場に出たターンでも攻撃できる"))own.monsters.forEach(m=>{if(m.summonedThisTurn)m.canAttackOnSummon=true});
  const extraPlacement=s.match(/(?:エネルギーを(?:手札から)?(?:追加で|さらに|もう一度)(\d*)枚?(?:置く|出す)|(?:追加で|さらに|もう一度)(\d*)枚?のエネルギーを(?:手札から)?(?:置く|出す)|エネルギーを(?:手札から)?(\d+)枚追加で(?:置く|出す))(?:ことができる|できる|してもよい|してよい)?/);
  if(extraPlacement){const amount=Math.max(1,Number(extraPlacement[1]||extraPlacement[2]||extraPlacement[3])||1);own.extraEnergyPlacements=(Number(own.extraEnergyPlacements)||0)+amount;log("このターン、手札から追加でエネルギーを"+amount+"回置けます");}
  const eventOwner=eventCard?[1,2].find(owner=>["monsters","energy","field","facedown","discard","hand"].some(zone=>state.players[owner]?.[zone]?.some(c=>c.id===eventCard.id))):null;
