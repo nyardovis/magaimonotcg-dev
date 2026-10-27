@@ -956,6 +956,16 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const ownMill=s.match(/自分のデッキの上(\d+)枚を捨てる/);
  if(ownMill){for(let i=0;i<Number(ownMill[1])&&own.deck.length;i++)own.discard.push(own.deck.shift());handled=true}
  if(/自分のフィールドカードを破壊|自分のフィールドを破壊/.test(s)&&own.field.length){moveToDiscard(p,own.field.shift(),"効果");handled=true}
+ const returnMonsterToDeck=s.match(/(自分の|相手の)モンスター(?:1体|1体まで)をデッキの(?:一番)?下に戻す/);
+ if(returnMonsterToDeck){
+  const owner=returnMonsterToDeck[1]==="自分の"?p:(p===1?2:1),targetPlayer=state.players[owner],target=targetPlayer.monsters[0];
+  if(target){
+   targetPlayer.monsters=targetPlayer.monsters.filter(mon=>mon.id!==target.id);
+   targetPlayer.deck.push(target);
+   if(owner!==p&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});
+   handled=true;log("「"+target.name+"」をデッキの下に戻しました");
+  }
+ }
  if(resolveSummonEffects(s,p,sourceCard))handled=true;
  /* Additional broadly reusable effect patterns. */
  const counterCount=Number(sourceCard?.counters)||0;
