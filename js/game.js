@@ -851,6 +851,8 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   }
  }
  if(s.includes("場に出たターンでも攻撃できる"))own.monsters.forEach(m=>{if(m.summonedThisTurn)m.canAttackOnSummon=true});
+  if(sourceCard&&/モンスターとの戦闘時、戦闘相手のパワーで戦闘する/.test(s))sourceCard.combatPowerUsesOpponent=true;
+  if(sourceCard&&/モンスターとの戦闘時、これのパワーの代わりに0パワーで戦闘する/.test(s))sourceCard.combatPowerOverride=0;
  const manaChanges=[...s.matchAll(/(?:(自分の|相手の|お互いの))?マナ\s*([+-])\s*(\d+)/g)];
  for(const m of manaChanges){
   const scope=m[1]||"自分の",delta=(m[2]==="+"?1:-1)*Number(m[3]);
@@ -1196,6 +1198,9 @@ function playCardFromHand(cardId){
  if(state.phase!=="playing"||state.pendingDiscardPlayer!==null)return;const x=state.players[1],idx=x.hand.findIndex(c=>c.id===cardId);if(idx<0)return;
  const card=x.hand[idx],kind=cardKind(card),cost=effectiveCardCost(card,1),effect=String(cardDefinition(card)?.effect_text||"");
  if(effect.includes("これは使わずに場に出せない"))return log("このカードは通常の手札使用では場に出せません");
+  if(/自分のデッキが縦向きの時使用できず場に出せない/.test(effect)&&!x.deckHorizontal)return log("自分のデッキが横向きの時だけ使用できます");
+  if(/自分のデッキが縦向きの時使用できない/.test(effect)&&!x.deckHorizontal)return log("自分のデッキが横向きの時だけ使用できます");
+  if(/自分のデッキが横向きの時使用できない/.test(effect)&&x.deckHorizontal)return log("自分のデッキが縦向きの時だけ使用できます");
  const requiredElement=effect.match(/自分の\[([^\]]+)\]のエネルギーが場に無い時使用できず場に出せない/);
  if(requiredElement&&!x.energy.some(e=>String(cardDefinition(e)?.types||"").includes(requiredElement[1])))return log("条件を満たしていないため「"+card.name+"」は使用できません");
  const requiredEnergyTag=effect.match(/自分の\[([^\]]+)\]のエネルギーが場に無い時使用できない/);
