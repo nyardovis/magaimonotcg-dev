@@ -959,11 +959,12 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const returnMonsterToDeck=s.match(/(自分の|相手の)モンスター(?:1体|1体まで)をデッキの(?:一番)?下に戻す/);
  if(returnMonsterToDeck){
   const owner=returnMonsterToDeck[1]==="自分の"?p:(p===1?2:1),targetPlayer=state.players[owner],target=targetPlayer.monsters[0];
-  if(target){
+  if(target&&(owner===p||!onlinePlayerId)){
    targetPlayer.monsters=targetPlayer.monsters.filter(mon=>mon.id!==target.id);
    targetPlayer.deck.push(target);
-   if(owner!==p&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});
    handled=true;log("「"+target.name+"」をデッキの下に戻しました");
+  }else if(target&&owner!==p&&onlinePlayerId){
+   log("オンライン対戦中の相手モンスターをデッキに戻す同期は未対応です。手動で処理してください");
   }
  }
  if(resolveSummonEffects(s,p,sourceCard))handled=true;
