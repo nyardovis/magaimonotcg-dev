@@ -159,3 +159,22 @@
 /* Keep monster attack power visible on every face-up monster. */
 .card.zone-monsters{position:relative}
 .card.zone-monsters .monster-power{position:absolute;left:3px;bottom:3px;z-index:4;min-width:24px;padding:2px 4px;border-radius:4px;background:rgba(15,20,28,.92);border:1px solid #e7c66b;color:#fff2b2;font-size:12px;font-weight:800;line-height:1.15;text-align:center;pointer-events:none;text-shadow:0 1px 1px #000}
+
+/* Development effect/debug log panel */
+.debug-log-panel{display:flex;flex-direction:column;min-height:0;gap:5px}
+.debug-log-panel[hidden]{display:none!important}
+.debug-log-panel select,.debug-log-panel input{width:100%;padding:7px;background:#171a20;color:#eee;border:1px solid #4c535e;border-radius:4px}
+.debug-log-actions{display:flex;gap:5px}
+.debug-log-actions button{flex:1;min-width:0;font-size:11px}
+.debug-log-list{height:34vh;min-height:110px;overflow:auto;border:1px solid #424852;background:#111419;border-radius:4px}
+.debug-log-entry{display:grid;grid-template-columns:56px 38px minmax(0,1fr);gap:4px;width:100%;margin:0!important;padding:5px 4px!important;text-align:left;border:0!important;border-bottom:1px solid #2a2e35!important;border-radius:0!important;background:transparent!important;color:#e8eaf0!important;font-size:10px!important;line-height:1.35}
+.debug-log-entry:hover{background:#2b3039!important}
+.debug-log-time{color:#aab2bf;font-variant-numeric:tabular-nums}
+.debug-log-tag{color:#f1ce79}
+.debug-log-message{overflow-wrap:anywhere;white-space:normal}
+.debug-log-entry.status-error .debug-log-message,.debug-log-entry.status-unimplemented .debug-log-message{color:#ff8585}
+.debug-log-entry.status-warning .debug-log-message{color:#ffd27b}
+.debug-log-empty{padding:12px;color:#929aa7;font-size:11px}
+.debug-log-detail{max-height:20vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#111419;border:1px solid #424852;border-radius:4px;padding:7px;font-size:10px;color:#dce2eb}
+.side-tabs{gap:3px!important}
+.side-tabs .side-tab{font-size:10px!important;padding:5px 3px!important}
