@@ -33,7 +33,17 @@
     ["disableEffect",/(?:効果|発動).{0,30}(?:発動しない|無効|使用できない|使えない)/],
     ["preventDamage",/(?:ダメージを受けない|受けるダメージ.{0,12}(?:減|\-)|ダメージ.{0,12}軽減)/],
     ["restriction",/(?:使用できず|使用できない|場に出せない|選ぶことができない|対象にならない)/],
-    ["passive",/(?:攻撃されない|ダメージ.{0,20}(?:受けない|減らす)|相手の.{0,20}できない)/]
+    ["passive",/(?:攻撃されない|ダメージ.{0,20}(?:受けない|減らす)|相手の.{0,20}できない)/],
+    ["energyToBoard",/(?:デッキ|手札)から.{0,30}エネルギー.{0,20}(?:タップして)?(?:場に)?出す/],
+    ["deckOrientation",/デッキの向きを変える/],
+    ["effectImmunity",/(?:相手の効果で選ばれない|効果を受けない|選ばれない)/],
+    ["costReduction",/(?:手札の|手札にある).{0,35}コスト\s*[-−]\s*\d*|コスト-\s*[（(]/],
+    ["returnToDeck",/(?:デッキの下|デッキの上|デッキに戻す)/],
+    ["resonanceSummon",/共鳴召喚/],
+    ["chooseOption",/(?:以下から|次から).{0,20}(?:1つ選ぶ|ランダムに1つ)/],
+    ["untapRestriction",/(?:アンタップ|アンタップは).{0,30}(?:のみ|できない|発生する)/],
+    ["counterRemove",/カウンター.{0,20}(?:取り除く|除く|0個にする)/],
+    ["deckbuildingRule",/何枚でもデッキに入れることができる/]
   ];
   const COST = /^\s*[（(]\s*(\d+|これをタップ|これを破壊|カウンター\s*\d+|手札から\d+枚捨てる)\s*[）)]\s*/;
   function detectTrigger(text){
@@ -126,7 +136,12 @@
       {text:"自分のデッキから魔法1枚までを手札に加える。",trigger:null,action:"moveToHand",targetZone:"デッキ",targetOwner:"自分"},
       {text:"相手のモンスターはこれにしか攻撃できない。",trigger:null,action:"preventAttack"},
       {text:"自分のモンスターが2体以上場にいるなら、カードを1枚引く。",trigger:null,action:"draw",condition:"ownMonsterCount"},
-      {text:"(3) 自分を(これのカウンターの数×300)回復",trigger:null,action:"heal",costKind:"energy",numericKind:"multiply"}
+      {text:"(3) 自分を(これのカウンターの数×300)回復",trigger:null,action:"heal",costKind:"energy",numericKind:"multiply"},
+      {text:"自分のデッキからエネルギー1枚までをタップして出す。",trigger:null,action:"energyToBoard"},
+      {text:"自分のデッキの向きを変える。",trigger:null,action:"deckOrientation"},
+      {text:"相手のモンスター全ての効果を消す。",trigger:null,action:"disableEffect"},
+      {text:"相手の効果で選ばれない。",trigger:null,action:"effectImmunity"},
+      {text:"共鳴召喚：[夢]、[妖精]",trigger:null,action:"resonanceSummon"}
     ];
     const failures=[];
     for(const item of cases){
