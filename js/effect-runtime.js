@@ -123,13 +123,21 @@
     const cases=[
       {text:"場に出た時、カードを2枚引く。",trigger:"enter",action:"draw"},
       {text:"攻撃時、相手に300ダメージ。",trigger:"attack",action:"damage"},
-      {text:"自分のデッキから魔法1枚までを手札に加える。",trigger:null,action:"moveToHand"},
-      {text:"相手のモンスターはこれにしか攻撃できない。",trigger:null,action:"preventAttack"}
+      {text:"自分のデッキから魔法1枚までを手札に加える。",trigger:null,action:"moveToHand",targetZone:"デッキ",targetOwner:"自分"},
+      {text:"相手のモンスターはこれにしか攻撃できない。",trigger:null,action:"preventAttack"},
+      {text:"自分のモンスターが2体以上場にいるなら、カードを1枚引く。",trigger:null,action:"draw",condition:"ownMonsterCount"},
+      {text:"(3) 自分を(これのカウンターの数×300)回復",trigger:null,action:"heal",costKind:"energy",numericKind:"multiply"}
     ];
     const failures=[];
     for(const item of cases){
       const clause=compile(item.text)[0];
-      if(!clause||clause.trigger!==item.trigger||!clause.actions.includes(item.action))failures.push({text:item.text,expected:item,actual:clause||null});
+      if(!clause||clause.trigger!==item.trigger||!clause.actions.includes(item.action)||
+        (item.targetZone&&clause.target?.zone!==item.targetZone)||
+        (item.targetOwner&&clause.target?.owner!==item.targetOwner)||
+        (item.condition&&!clause.conditions.some(c=>c.type===item.condition))||
+        (item.costKind&&clause.cost?.kind!==item.costKind)||
+        (item.numericKind&&clause.numeric?.kind!==item.numericKind))
+        failures.push({text:item.text,expected:item,actual:clause||null});
     }
     return {passed:cases.length-failures.length,total:cases.length,failures};
   }
