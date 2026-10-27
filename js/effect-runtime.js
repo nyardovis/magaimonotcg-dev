@@ -47,8 +47,8 @@
   }
   function parseNumericExpression(text){
     const s=String(text||"");
-    let m=s.match(/(\d+)\s*[×x*]\s*(\d+)/);
-    if(m)return {kind:"multiply",left:Number(m[1]),right:Number(m[2]),raw:m[0]};
+    let m=s.match(/(これのカウンターの数|これのパワー|自分の名前に「[^」]+」を含むモンスターの数|自分の場の\[[^\]]+\]の数|\d+)\s*[×x*]\s*(\d+)/);
+    if(m)return {kind:"multiply",left:/^\d+$/.test(m[1])?{kind:"constant",value:Number(m[1])}:{kind:m[1]==="これのカウンターの数"?"sourceCounters":m[1]==="これのパワー"?"sourcePower":m[1].includes("名前に")?"namedMonsterCount":"taggedBoardCount",raw:m[1]},right:Number(m[2]),raw:m[0]};
     m=s.match(/(?:これの)?(?:パワー|攻撃力)/);
     if(m)return {kind:"sourcePower",raw:m[0]};
     m=s.match(/これのカウンターの数/);
