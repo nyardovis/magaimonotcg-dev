@@ -1018,9 +1018,9 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   const target=[...own.monsters,...opp.monsters].find(mon=>mon.id!==sourceCard?.id&&!mon.effectsDisabled);
   if(target){target.effectsDisabled=true;const targetOwner=own.monsters.some(mon=>mon.id===target.id)?p:(p===1?2:1);if(targetOwner!==p&&onlinePlayerId)broadcastEffectDelta({target:"opponentDisable",cardId:target.id});handled=true;log("「"+target.name+"」の効果を無効にしました")}
  }
- const energyFromDeck=s.match(/自分のデッキから(?:(?:「([^」]+)」)の)?(?:\[([^\]]+)\]の)?エネルギー(\d+)枚までをタップして出す/);
- if(energyFromDeck){
-  const namePart=energyFromDeck[1]||"",tag=energyFromDeck[2]||"",max=Number(energyFromDeck[3]);
+ const energyFromDeckEffect=s.match(/自分のデッキから(?:(?:「([^」]+)」)の)?(?:\[([^\]]+)\]の)?エネルギー(\d+)枚までをタップして出す/);
+ if(energyFromDeckEffect){
+  const namePart=energyFromDeckEffect[1]||"",tag=energyFromDeckEffect[2]||"",max=Number(energyFromDeckEffect[3]);
   for(let n=0;n<max;n++){
    const index=own.deck.findIndex(card=>cardKind(card)==="energy"&&(!namePart||String(card.name||"").includes(namePart))&&(!tag||String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)));
    if(index<0)break;
@@ -1028,9 +1028,9 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   }
   if(handled)log("条件に合うエネルギーをタップして場に出しました");
  }
- const energyFromHand=s.match(/自分の手札から(?:(?:「([^」]+)」の)?\[([^\]]+)\]の)?エネルギー(\d+)枚までをタップして出す/);
- if(energyFromHand){
-  const namePart=energyFromHand[1]||"",tag=energyFromHand[2]||"",max=Number(energyFromHand[3]);
+ const energyFromHandEffect=s.match(/自分の手札から(?:(?:「([^」]+)」の)?\[([^\]]+)\]の)?エネルギー(\d+)枚までをタップして出す/);
+ if(energyFromHandEffect){
+  const namePart=energyFromHandEffect[1]||"",tag=energyFromHandEffect[2]||"",max=Number(energyFromHandEffect[3]);
   for(let n=0;n<max;n++){
    const index=own.hand.findIndex(card=>cardKind(card)==="energy"&&(!namePart||String(card.name||"").includes(namePart))&&(!tag||String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)));
    if(index<0)break;
