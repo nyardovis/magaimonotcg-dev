@@ -45,21 +45,70 @@
     for(const [type,pattern] of ACTIONS) if(pattern.test(text)) found.push(type);
     return found;
   }
+  function parseNumericExpression(text){
+    const s=String(text||"");
+    let m=s.match(/(\d+)\s*[×x*]\s*(\d+)/);
+    if(m)return {kind:"multiply",left:Number(m[1]),right:Number(m[2]),raw:m[0]};
+    m=s.match(/(?:これの)?(?:パワー|攻撃力)/);
+    if(m)return {kind:"sourcePower",raw:m[0]};
+    m=s.match(/これのカウンターの数/);
+    if(m)return {kind:"sourceCounters",raw:m[0]};
+    m=s.match(/自分の名前に「([^」]+)」を含むモンスターの数/);
+    if(m)return {kind:"namedMonsterCount",nameIncludes:m[1],owner:"自分",raw:m[0]};
+    m=s.match(/自分の場の\[([^\]]+)\]の数/);
+    if(m)return {kind:"taggedBoardCount",tag:m[1],owner:"自分",raw:m[0]};
+    m=s.match(/(\d+)/);
+    return m?{kind:"constant",value:Number(m[1]),raw:m[1]}:null;
+  }
+  function parseConditions(text){
+    const s=String(text||"");
+    const conditions=[];
+    const patterns=[
+      ["ownMonsterCount",/自分のモンスターが(\d+)体以上場にいる/,(m)=>({min:Number(m[1])})],
+      ["opponentMonsterCount",/相手のモンスターが(\d+)体以上場にいる/,(m)=>({min:Number(m[1])})],
+      ["ownHandCountAtLeast",/自分の手札が(\d+)枚以上/,(m)=>({min:Number(m[1])})],
+      ["ownHandCountAtMost",/自分の手札が(\d+)枚以下/,(m)=>({max:Number(m[1])})],
+      ["ownEnergyCountAtLeast",/自分のエネルギーが(\d+)枚以上場にある/,(m)=>({min:Number(m[1])})],
+      ["opponentDiscardCountAtLeast",/相手の捨て札が(\d+)枚以上ある/,(m)=>({min:Number(m[1])})],
+      ["ownDiscardCountAtLeast",/自分の捨て札が(\d+)枚以上ある/,(m)=>({min:Number(m[1])})],
+      ["ownLifeLowerThanOpponent",/自分のライフが相手より(\d+)以上低い/,(m)=>({difference:Number(m[1])})],
+      ["namedOwnMonster",/自分の名前に「([^」]+)」を含むモンスターが場にいる/,(m)=>({nameIncludes:m[1]})],
+      ["ownTagMonsterCount",/自分の\[([^\]]+)\]が(\d+)体以上場にいる/,(m)=>({tag:m[1],min:Number(m[2])})],
+      ["opponentTagMonsterCount",/相手の\[([^\]]+)\]が(\d+)体以上場にいる/,(m)=>({tag:m[1],min:Number(m[2])})],
+      ["sourceCounterCount",/これのカウンターが(\d+)個以上/,(m)=>({min:Number(m[1])})]
+    ];
+    for(const [type,re,make] of patterns){const m=s.match(re);if(m)conditions.push({type,...make(m),raw:m[0]});}
+    return conditions;
+  }
+  function parseTarget(text){
+    const s=String(text||"");
+    const ownerMatch=s.match(/(自分|相手|お互い)の/);
+    const zoneMatch=s.match(/(モンスター|魔法|罠|フィールド|エネルギー|手札|捨て札|デッキ|ライフ)/);
+    const countMatch=s.match(/(\d+)体|([一二三四五六七八九十])体|(\d+)枚|([一二三四五六七八九十])枚/);
+    const tagMatch=s.match(/\[([^\]]+)\]/);
+    const nameMatch=s.match(/[「『]([^」』]+)[」』]/);
+    const costMatch=s.match(/(\d+)コスト以下/);
+    return ownerMatch||zoneMatch||countMatch||tagMatch||nameMatch||costMatch?{
+      owner:ownerMatch?ownerMatch[1]:null,zone:zoneMatch?zoneMatch[1]:null,
+      count:countMatch?Number(countMatch[1]||({"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9,"十":10}[countMatch[2]]||countMatch[3]||({"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9,"十":10}[countMatch[4]])):null,
+      tag:tagMatch?tagMatch[1]:null,nameIncludes:nameMatch?nameMatch[1]:null,maxCost:costMatch?Number(costMatch[1]):null,
+      selection:/ランダム/.test(s)?"random":/選ぶ|選択/.test(s)?"player":"automatic"
+    }:null;
+  }
   function parseClause(raw,index){
     let text=String(raw||"").trim();
     const costMatch=text.match(COST);
     const costToken=costMatch?costMatch[1].replace(/\s+/g,""):null;
     if(costMatch) text=text.slice(costMatch[0].length).trim();
     const trigger=detectTrigger(text);
-    const conditionMatch=text.match(/(?:なら|場合|時に|ときに)(.*)$/);
-    const condition=conditionMatch?text.slice(0,conditionMatch.index+conditionMatch[0].length-conditionMatch[1].length).trim():null;
+    const conditions=parseConditions(text);
     const actions=detectActions(text);
-    const target=text.match(/(自分|相手|お互い)の(モンスター|魔法|罠|フィールド|エネルギー|手札|捨て札|デッキ|ライフ)/);
+    const target=parseTarget(text);
+    const numeric=parseNumericExpression(text);
     return {
       index,raw:String(raw||"").trim(),text,trigger,
       cost:costToken?{raw:costToken,kind:/^\d+$/.test(costToken)?"energy":costToken==="これをタップ"?"tap":costToken==="これを破壊"?"destroy":costToken.startsWith("カウンター")?"counter":costToken.startsWith("手札から")?"discard":"unknown",amount:(costToken.match(/\d+/)||[])[0]?Number(costToken.match(/\d+/)[0]):null}:null,
-      condition, target:target?{owner:target[1],zone:target[2]}:null,
-      actions,recognized:actions.length>0,
+      conditions,target,numeric,actions,recognized:actions.length>0,
       confidence:actions.length===1?"pattern":actions.length>1?"ambiguous":"unrecognized"
     };
   }
