@@ -90,7 +90,7 @@
     const costMatch=s.match(/(\d+)コスト以下/);
     return ownerMatch||zoneMatch||countMatch||tagMatch||nameMatch||costMatch?{
       owner:ownerMatch?ownerMatch[1]:null,zone:zoneMatch?zoneMatch[1]:null,
-      count:countMatch?Number(countMatch[1]||({"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9,"十":10}[countMatch[2]]||countMatch[3]||({"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9,"十":10}[countMatch[4]])):null,
+      count:countMatch?Number(countMatch[1]||({"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9,"十":10}[countMatch[2]]||countMatch[3]||({"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9,"十":10}[countMatch[4]]))):null,
       tag:tagMatch?tagMatch[1]:null,nameIncludes:nameMatch?nameMatch[1]:null,maxCost:costMatch?Number(costMatch[1]):null,
       selection:/ランダム/.test(s)?"random":/選ぶ|選択/.test(s)?"player":"automatic"
     }:null;
