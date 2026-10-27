@@ -897,7 +897,10 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const allMonstersDamage=s.match(/^モンスター全てに\s*(\d+)ダメージ/);
  if(allMonstersDamage){const amount=Number(allMonstersDamage[1]);for(const targetPlayer of [1,2]){state.players[targetPlayer].monsters.forEach(mon=>{mon.damage=(mon.damage||0)+amount;if(targetPlayer!==p)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:mon.id,delta:amount})});checkMonsterDestruction(targetPlayer,true)}handled=true}
  for(const m of s.matchAll(/相手のモンスター全てに\s*(\d+)ダメージ/g)){opp.monsters.forEach(mon=>{mon.damage=(mon.damage||0)+Number(m[1]);broadcastEffectDelta({target:"opponentMonsterDamage",cardId:mon.id,delta:Number(m[1])})});checkMonsterDestruction(p===1?2:1,true);handled=true}
- for(const m of s.matchAll(/これを\s*\+(\d+)/g)){if(sourceCard)sourceCard.modification=(sourceCard.modification||0)+Number(m[1]);handled=true}
+ /* Self power changes support both positive and negative values. */
+ for(const m of s.matchAll(/これを\s*([＋+\-−])\s*(\d+)/g)){
+  if(sourceCard){const delta=(m[1]==="-"||m[1]==="−"?-1:1)*Number(m[2]);const base=Number(sourceCard.power)||Number(cardDefinition(sourceCard)?.power)||0;sourceCard.modification=Math.max(-base,(Number(sourceCard.modification)||0)+delta);handled=true}
+ }
  const ownBuff=s.match(/自分のモンスター(?:全て|1体|1体まで)を\s*\+(\d+)/);
  if(ownBuff){const targets=/全て/.test(s)?own.monsters:[own.monsters[0]].filter(Boolean);targets.forEach(mon=>{mon.modification=(mon.modification||0)+Number(ownBuff[1])});if(targets.length)handled=true}
  /* Counter, formula, and tagged-monster effects. */
@@ -921,6 +924,12 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  if(opponentHandReveal){if(!onlinePlayerId){opp.hand.forEach(c=>{c.revealed=true;c.faceUp=true})}else broadcastEffectDelta({target:"opponentRevealHand"});handled=true;log(opp.name+"の手札を公開します")}
  const randomMonsterDestroy=/他のランダムなモンスター1体を破壊する/.test(s);
  if(randomMonsterDestroy){const candidates=[...own.monsters,...opp.monsters].filter(m=>m.id!==sourceCard?.id);if(candidates.length){const target=candidates[Math.floor(Math.random()*candidates.length)],owner=own.monsters.some(m=>m.id===target.id)?p:(p===1?2:1),zone=state.players[owner].monsters;state.players[owner].monsters=zone.filter(m=>m.id!==target.id);moveToDiscard(owner,target,"ランダム効果による破壊");if(!onlinePlayerId||owner===1)resolveCardTrigger(target,owner,"destroy");if(onlinePlayerId&&owner!==p)broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});handled=true;log("ランダムに「"+target.name+"」を破壊しました")}}
+ const randomOpponentDestroy=/ランダムな相手のモンスター1体(?:まで)?を破壊する/.test(s);
+ if(randomOpponentDestroy&&opp.monsters.length){const target=opp.monsters[Math.floor(Math.random()*opp.monsters.length)];if(!onlinePlayerId){opp.monsters=opp.monsters.filter(m=>m.id!==target.id);moveToDiscard(p===1?2:1,target,"ランダム効果による破壊");resolveCardTrigger(target,p===1?2:1,"destroy")}else broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});handled=true;log("ランダムに相手の「"+target.name+"」を破壊しました")}
+ const randomOpponentModifier=s.match(/ランダムな相手のモンスター1体を\s*([＋+\-−])\s*(\d+)/);
+ if(randomOpponentModifier&&opp.monsters.length){const target=opp.monsters[Math.floor(Math.random()*opp.monsters.length)],delta=(randomOpponentModifier[1]==="-"||randomOpponentModifier[1]==="−"?-1:1)*Number(randomOpponentModifier[2]);target.modification=(Number(target.modification)||0)+delta;if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterModifier",cardId:target.id,delta});handled=true;log("ランダムに相手の「"+target.name+"」のパワーを"+(delta>0?"+":"")+delta+"変更しました")}
+ const randomOpponentDamage=s.match(/ランダムな相手のモンスター1体に\s*(\d+)ダメージ/);
+ if(randomOpponentDamage&&opp.monsters.length){const target=opp.monsters[Math.floor(Math.random()*opp.monsters.length)],amount=Number(randomOpponentDamage[1]);target.damage=(Number(target.damage)||0)+amount;if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:amount});checkMonsterDestruction(p===1?2:1,true);handled=true;log("ランダムに相手の「"+target.name+"」へ"+amount+"ダメージ")}
  const counterAdd=s.match(/これにカウンター(\d+)個を乗せる/);
  if(counterAdd&&sourceCard){sourceCard.counters=(sourceCard.counters||0)+Number(counterAdd[1]);handled=true}
  if(/これのカウンターを0個にする/.test(s)&&sourceCard){sourceCard.counters=0;handled=true}
@@ -955,6 +964,10 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  if(opponentMill){const count=Number(opponentMill[1]);if(!onlinePlayerId){for(let i=0;i<count&&opp.deck.length;i++)opp.discard.push(opp.deck.shift())}broadcastEffectDelta({target:"opponentMill",count});handled=true}
  const ownMill=s.match(/自分のデッキの上(\d+)枚を捨てる/);
  if(ownMill){for(let i=0;i<Number(ownMill[1])&&own.deck.length;i++)own.discard.push(own.deck.shift());handled=true}
+ const namedMill=s.match(/自分のデッキから「([^」]+)」(\d+)枚(?:まで)?を捨てる/);
+ if(namedMill){for(let i=0;i<Number(namedMill[2]);i++){const index=own.deck.findIndex(card=>String(card.name||"")===namedMill[1]);if(index<0)break;own.discard.push(own.deck.splice(index,1)[0]);handled=true}if(handled)log("山札から「"+namedMill[1]+"」を捨て札に送りました")}
+ const tagMill=s.match(/自分のデッキから\[([^\]]+)\](\d+)枚(?:まで)?を捨てる/);
+ if(tagMill){for(let i=0;i<Number(tagMill[2]);i++){const index=own.deck.findIndex(card=>String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tagMill[1]));if(index<0)break;own.discard.push(own.deck.splice(index,1)[0]);handled=true}}
  if(/自分のフィールドカードを破壊|自分のフィールドを破壊/.test(s)&&own.field.length){moveToDiscard(p,own.field.shift(),"効果");handled=true}
  const returnMonsterToDeck=s.match(/(自分の|相手の)モンスター(?:1体|1体まで)をデッキの(?:一番)?下に戻す/);
  if(returnMonsterToDeck){
