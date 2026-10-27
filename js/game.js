@@ -673,7 +673,8 @@ function resolveCardTrigger(card,p,trigger){
   if(!data||!data.effect_text||card.effectsDisabled||!window.CardEffectEngine)return;
   const text=String(data.effect_text);
   const abilities=trigger==="spell"?CardEffectEngine.immediateAbilities(text):CardEffectEngine.forTrigger(text,trigger);
-  abilities.forEach(ability=>resolveEffectText(ability.body,p,card));
+  if(!abilities.length)debugLog("カード効果の発動条件に一致なし: "+card.name+" / "+trigger,"effect","skipped",{player:p,card:card.name,trigger});
+  abilities.forEach(ability=>{debugLog("カード効果を発動: "+card.name+" / "+trigger,"effect","info",{player:p,card:card.name,trigger,ability:ability.body});resolveEffectText(ability.body,p,card)});
 }
 function activateCardAbility(cardId,abilityIndex){
   if(state.phase!=="playing"||state.pendingDiscardPlayer!==null)return;
@@ -950,8 +951,8 @@ function resolveTrapTriggers(owner,trigger,eventCard=null){
   else if(trigger==="opponentDamagedMe")matches=part=>part.cost===null&&/^\s*\[\s*相手が自分にダメージを与えた時/.test(part.body);
   else if(trigger==="opponentOricaUse")matches=part=>part.cost===null&&/^\s*\[\s*相手のオリカの使用時/.test(part.body);
   else if(trigger==="ownLifeZero")matches=part=>part.cost===null&&/^\s*\[\s*自分のライフが0になった時/.test(part.body);
-  const startIndex=parts.findIndex(matches);if(startIndex<0)continue;
-  const first=parts[startIndex];if(!trapConditionMet(owner,trigger,first.body,eventCard))continue;
+  const startIndex=parts.findIndex(matches);if(startIndex<0){debugLog("罠の効果条件に一致なし: "+trap.name+" / "+trigger,"effect","skipped",{player:owner,card:trap.name,trigger});continue;}
+  const first=parts[startIndex];if(!trapConditionMet(owner,trigger,first.body,eventCard)){debugLog("罠の追加条件を満たさない: "+trap.name,"effect","skipped",{player:owner,card:trap.name,trigger,condition:first.body});continue;}
   const group=[first];for(let k=startIndex+1;k<parts.length;k++){if(/^\s*\[/.test(parts[k].body))break;group.push(parts[k])}
   const liveIndex=x.facedown.findIndex(c=>c.id===trap.id);if(liveIndex<0)continue;
   x.facedown.splice(liveIndex,1);trap.faceUp=true;trap.revealed=false;moveToDiscard(owner,trap,"罠の自動発動");
