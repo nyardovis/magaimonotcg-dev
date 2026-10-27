@@ -967,6 +967,12 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
    log("オンライン対戦中の相手モンスターをデッキに戻す同期は未対応です。手動で処理してください");
   }
  }
+ if(/自分と相手の捨て札全てをデッキに戻す/.test(s)){
+  own.deck.push(...own.discard.splice(0));
+  if(!onlinePlayerId){opp.deck.push(...opp.discard.splice(0));}
+  else log("オンライン対戦中の相手の捨て札を山札に戻す同期は未対応です");
+  handled=true;log("自分の捨て札を全て山札の下に戻しました"+(onlinePlayerId?"":"（相手の捨て札も戻しました）"));
+ }
  if(resolveSummonEffects(s,p,sourceCard))handled=true;
  /* Additional broadly reusable effect patterns. */
  const counterCount=Number(sourceCard?.counters)||0;
