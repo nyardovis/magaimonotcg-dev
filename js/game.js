@@ -991,6 +991,69 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const ownCardReduction=s.match(/これが受けるダメージ-(\d+)/);
  if(ownCardReduction&&sourceCard)sourceCard.damageReduction=Math.max(Number(sourceCard.damageReduction)||0,Number(ownCardReduction[1]));
 
+
+ /* Additional common effect families: group modifiers, effect suppression, and deck/energy operations. */
+ const groupPowerChange=s.match(/(自分の|相手の|お互いの)?モンスター全てを\s*([＋+\-−])\s*(\d+)/);
+ if(groupPowerChange){
+  const scope=groupPowerChange[1]||"自分の",delta=(groupPowerChange[2]==="-"||groupPowerChange[2]==="−"?-1:1)*Number(groupPowerChange[3]);
+  const owners=scope==="お互いの"?[p,p===1?2:1]:[scope==="相手の"?(p===1?2:1):p];
+  owners.forEach(owner=>state.players[owner].monsters.forEach(mon=>{
+   mon.modification=(Number(mon.modification)||0)+delta;
+   if(owner!==p&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterModifier",cardId:mon.id,delta});
+  }));
+  handled=true;log(scope+"モンスター全てのパワーを"+(delta>0?"+":"")+delta+"変更しました");
+ }
+ const enemyEffectsAll=/相手のモンスター全ての効果を消す/.test(s);
+ if(enemyEffectsAll){
+  opp.monsters.forEach(mon=>{mon.effectsDisabled=true;if(onlinePlayerId)broadcastEffectDelta({target:"opponentDisable",cardId:mon.id})});
+  handled=true;log("相手のモンスター全ての効果を無効にしました");
+ }
+ const enemyEffectOne=/相手のモンスター1体の効果を消す/.test(s);
+ if(enemyEffectOne){
+  const target=opp.monsters[0];
+  if(target){target.effectsDisabled=true;if(onlinePlayerId)broadcastEffectDelta({target:"opponentDisable",cardId:target.id});handled=true;log("「"+target.name+"」の効果を無効にしました")}
+ }
+ const ownEffectOne=/他のモンスター1体の効果を消す/.test(s);
+ if(ownEffectOne){
+  const target=[...own.monsters,...opp.monsters].find(mon=>mon.id!==sourceCard?.id&&!mon.effectsDisabled);
+  if(target){target.effectsDisabled=true;const targetOwner=own.monsters.some(mon=>mon.id===target.id)?p:(p===1?2:1);if(targetOwner!==p&&onlinePlayerId)broadcastEffectDelta({target:"opponentDisable",cardId:target.id});handled=true;log("「"+target.name+"」の効果を無効にしました")}
+ }
+ const energyFromDeck=s.match(/自分のデッキから(?:(?:「([^」]+)」)の)?(?:\[([^\]]+)\]の)?エネルギー(\d+)枚までをタップして出す/);
+ if(energyFromDeck){
+  const namePart=energyFromDeck[1]||"",tag=energyFromDeck[2]||"",max=Number(energyFromDeck[3]);
+  for(let n=0;n<max;n++){
+   const index=own.deck.findIndex(card=>cardKind(card)==="energy"&&(!namePart||String(card.name||"").includes(namePart))&&(!tag||String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)));
+   if(index<0)break;
+   const energy=own.deck.splice(index,1)[0];energy.tapped=true;own.energy.push(energy);handled=true;
+  }
+  if(handled)log("条件に合うエネルギーをタップして場に出しました");
+ }
+ const energyFromHand=s.match(/自分の手札から(?:(?:「([^」]+)」の)?\[([^\]]+)\]の)?エネルギー(\d+)枚までをタップして出す/);
+ if(energyFromHand){
+  const namePart=energyFromHand[1]||"",tag=energyFromHand[2]||"",max=Number(energyFromHand[3]);
+  for(let n=0;n<max;n++){
+   const index=own.hand.findIndex(card=>cardKind(card)==="energy"&&(!namePart||String(card.name||"").includes(namePart))&&(!tag||String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)));
+   if(index<0)break;
+   const energy=own.hand.splice(index,1)[0];energy.tapped=true;own.energy.push(energy);handled=true;
+  }
+  if(handled)log("手札からエネルギーをタップして場に出しました");
+ }
+ if(/(?:自分のデッキの向きを変える|デッキの向きを変える)/.test(s)){
+  own.deckHorizontal=!own.deckHorizontal;handled=true;log("自分のデッキの向きを変更しました");
+ }
+ const sourcePowerEqualsMax=s.match(/これのパワー\s*=\s*[（(]モンスターの最大パワー[）)]/);
+ if(sourcePowerEqualsMax&&sourceCard){
+  const maxPower=Math.max(0,...[...own.monsters,...opp.monsters].filter(mon=>mon.id!==sourceCard.id).map(mon=>attackPower(mon)));
+  sourceCard.modification=maxPower-(Number(sourceCard.power)||Number(cardDefinition(sourceCard)?.power)||0);handled=true;log("「"+sourceCard.name+"」のパワーを最大モンスターと同じ値にしました");
+ }
+ const ownTagPowerChange=s.match(/自分の\[([^\]]+)\]全てを\s*([＋+\-−])\s*(\d+)/);
+ if(ownTagPowerChange){
+  const delta=(ownTagPowerChange[2]==="-"||ownTagPowerChange[2]==="−"?-1:1)*Number(ownTagPowerChange[3]);
+  const targets=own.monsters.filter(mon=>String(cardDefinition(mon)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(ownTagPowerChange[1]));
+  targets.forEach(mon=>mon.modification=(Number(mon.modification)||0)+delta);
+  if(targets.length)handled=true;
+ }
+
  if(!handled)log("未対応の効果（手動で処理してください）: "+s.slice(0,90));
 }
 function resolveEffectText(text,p,sourceCard,eventCard=null){
