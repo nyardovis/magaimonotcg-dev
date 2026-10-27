@@ -610,7 +610,7 @@ function move(dest){
 
 function drawCards(n,p=1){if(!Number.isInteger(n)||n<=0)return log("ドロー枚数は1以上の整数にしてください");drawEffectCards(p,n);state.selected=null;render()}
 function ensureDiscardWarning(){if(document.querySelector("#discardWarning"))return;const e=document.createElement("div");e.id="discardWarning";e.hidden=true;e.style.cssText="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9999;background:#8b0000;color:#fff;padding:10px 18px;border:2px solid #f33;border-radius:6px;font-weight:700;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.45);";document.body.appendChild(e)}
-function startTurn(p,showLog=true){if(state.phase!=="playing")return;debugLog("ターン開始処理: "+(state.players[p]?.name||("プレイヤー"+p)),"state","info",{player:p,phase:state.phase});const x=state.players[p];x.energyPlacedThisTurn=false;x.extraEnergyPlacements=0;x.energyPool=0;if(p===1)broadcastEnergyPool();x.monsters.forEach(m=>{m.tapped=false;m.summonedThisTurn=false;m.canAttackOnSummon=false});x.energy.forEach(e=>e.tapped=false);if(x.deck.length===0){const winner=p===1?2:1;state.gameOver={winner,reason:"deck_empty"};state.phase="finished";render();log(x.name+"はターン開始時に山札が0枚だったため、"+state.players[winner].name+"の勝利です");return}if(x.deck.length&&x.hand.length>=MAX.hand){state.pendingDiscardPlayer=p;state.pendingDiscardReason="turn_start";state.pendingDrawCount=1;state.selected=null;render();log(x.name+"はドロー前に手札を1枚捨てる必要があります。手札のカードをクリックしてください");return}if(x.deck.length&&x.hand.length<MAX.hand)drawCards(1,p);resolveTurnTriggers(p,"start");render();if(showLog)log(x.name+" のターン開始")}
+function startTurn(p,showLog=true){if(state.phase!=="playing")return;debugLog("ターン開始処理: "+(state.players[p]?.name||("プレイヤー"+p)),"state","info",{player:p,phase:state.phase});const x=state.players[p];x.energyPlacedThisTurn=false;x.extraEnergyPlacements=0;x.energyPool=0;if(p===1)broadcastEnergyPool();x.monsters.forEach(m=>{m.tapped=false;m.summonedThisTurn=false;m.canAttackOnSummon=false;m.attacksThisTurn=0});x.energy.forEach(e=>e.tapped=false);if(x.deck.length===0){const winner=p===1?2:1;state.gameOver={winner,reason:"deck_empty"};state.phase="finished";render();log(x.name+"はターン開始時に山札が0枚だったため、"+state.players[winner].name+"の勝利です");return}if(x.deck.length&&x.hand.length>=MAX.hand){state.pendingDiscardPlayer=p;state.pendingDiscardReason="turn_start";state.pendingDrawCount=1;state.selected=null;render();log(x.name+"はドロー前に手札を1枚捨てる必要があります。手札のカードをクリックしてください");return}if(x.deck.length&&x.hand.length<MAX.hand)drawCards(1,p);resolveTurnTriggers(p,"start");render();if(showLog)log(x.name+" のターン開始")}
 function completePendingDiscard(p,id){if(p!==1)return false;if(state.pendingDiscardPlayer!==p)return false;const x=state.players[p],i=x.hand.findIndex(c=>c.id===id);if(i<0)return true;const discarded=x.hand.splice(i,1)[0],reason=state.pendingDiscardReason,remaining=state.pendingDrawCount;moveToDiscard(p,discarded,"手札上限による破棄");state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.selected=null;log(x.name+"は「"+discarded.name+"」を捨てました");if(reason==="effect_draw"){if(remaining>0)drawEffectCards(p,remaining);render();return true}if(x.deck.length&&x.hand.length<MAX.hand)drawCards(1,p);resolveTurnTriggers(p,"start");render();log(x.name+" のターン開始");return true}
 function processScheduledEndTurnEffects(p){const x=state.players[p];for(const card of [...x.monsters,...x.energy,...x.field]){if(!card.destroyAtTurnEnd)continue;card.destroyAtTurnEnd=false;for(const zone of ["monsters","energy","field"]){const i=x[zone].findIndex(c=>c.id===card.id);if(i>=0){x[zone].splice(i,1);moveToDiscard(p,card,"ターン終了時効果");if(zone==="monsters")resolveCardTrigger(card,p,"destroy");break}}}}
 function endTurn(){const localPlayer=1;if(state.turnPlayer!==localPlayer||state.pendingDiscardPlayer!==null||state.phase!=="playing")return;if(onlinePlayerId!==null&&!devLocalMode){if(!gameSocket||gameSocket.readyState!==WebSocket.OPEN)return log("オンラインサーバーに接続されていません");resolveTurnTriggers(1,"end");processScheduledEndTurnEffects(1);state.players[1].monsters.forEach(m=>{m.damage=0});render();gameSocket.send(JSON.stringify({type:"operation",action:"end_turn"}));return}const p=state.turnPlayer,x=state.players[p];resolveTurnTriggers(p,"end");processScheduledEndTurnEffects(p);x.monsters.forEach(m=>{m.damage=0});state.turnPlayer=p===1?2:1;startTurn(state.turnPlayer)}
@@ -935,6 +935,8 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  if(sourceCard&&s.includes("相手のモンスターはプレイヤーに攻撃できない"))own.opponentMonstersCannotAttackPlayer=true;
  const damageReductionMatch=s.match(/自分が受けるダメージ-(\d+)/);
  if(damageReductionMatch)own.damageReduction=Math.max(Number(own.damageReduction)||0,Number(damageReductionMatch[1]));
+ const ownCardReduction=s.match(/これが受けるダメージ-(\d+)/);
+ if(ownCardReduction&&sourceCard)sourceCard.damageReduction=Math.max(Number(sourceCard.damageReduction)||0,Number(ownCardReduction[1]));
 
  if(!handled)log("未対応の効果（手動で処理してください）: "+s.slice(0,90));
 }
@@ -953,11 +955,13 @@ function resolveEffectText(text,p,sourceCard,eventCard=null){
   debugLog("効果処理中に例外: "+cardName+" / "+String(error?.message||error),"effect","error",{traceId:trace.id,stack:error?.stack||""});throw error;
  }
 }
-function attackPower(card){const base=Number(card.power)||Number(cardDefinition(card)?.power)||0;return Math.max(0,base+(Number(card.modification)||0))}
+function attackPower(card){if(card?.combatPowerOverride!==undefined&&card?.combatPowerOverride!==null)return Math.max(0,Number(card.combatPowerOverride)||0);const base=Number(card.power)||Number(cardDefinition(card)?.power)||0;return Math.max(0,base+(Number(card.modification)||0))}
+function reduceIncomingDamage(target,amount){return Math.max(0,Number(amount||0)-Math.max(0,Number(target?.damageReduction)||0))}
 function declareAttack(cardId){
   if(state.phase!=="playing"||state.pendingDiscardPlayer!==null||state.turnPlayer!==1||state.gameOver)return;
   const card=state.players[1].monsters.find(c=>c.id===cardId);if(!card)return;
   if(card.tapped)return log("タップしているモンスターは攻撃できません");
+  if((Number(card.attacksThisTurn)||0)>=(Number(card.attacksPerTurn)||1))return log("このモンスターはこのターンに攻撃できる回数を使い切っています");
   if(card.cannotAttack||/(?:^|。)\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(String(cardDefinition(card)?.effect_text||"")))return log("このモンスターは効果により攻撃できません");
   if(card.summonedThisTurn&&!card.canAttackOnSummon&&!String(cardDefinition(card)?.effect_text||"").includes("場に出たターンでも攻撃できる"))return log("このターンに場に出たモンスターは攻撃できません");
   pendingAttack={cardId:card.id,name:card.name};state.selected={p:1,z:"monsters",id:card.id};
@@ -975,8 +979,10 @@ function resolveAttack(targetMonsterId){
   if(forcedTargets.length&&(!defender||!forcedTargets.some(c=>c.id===defender.id))){log("相手の効果により、指定されたモンスターにしか攻撃できません");return}
   if(defender&&(defender.cannotBeAttacked||/(?:^|。)\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(String(cardDefinition(defender)?.effect_text||"")))){log("そのモンスターは攻撃されません");return}
   if(!targetMonsterId&&state.players[2].opponentMonstersCannotAttackPlayer){log("相手の効果によりプレイヤーへの攻撃が禁止されています");return}
-  attacker.tapped=true;
-  debugLog("攻撃者をタップ: "+attacker.name,"combat","info",{attackerId:attacker.id});
+  const maxAttacks=Math.max(1,Number(attacker.attacksPerTurn)||1);
+  const attackNumber=(Number(attacker.attacksThisTurn)||0)+1;
+  attacker.tapped=attackNumber>=maxAttacks;
+  debugLog("攻撃宣言: "+attacker.name+"（"+attackNumber+"/"+maxAttacks+"回目）","combat","info",{attackerId:attacker.id,attackNumber,maxAttacks});
   const active=state.turnPlayer,nonActive=active===1?2:1;
   debugLog("攻撃側の罠効果を確認","effect","info",{player:active,trigger:"ownAttack"});
   resolveTrapTriggers(active,"ownAttack",attacker);
@@ -992,18 +998,21 @@ function resolveAttack(targetMonsterId){
   const attack=attackPower(attacker);
   debugLog("戦闘ダメージを計算","combat","info",{attacker:attacker.name,attackerPower:attack,defender:defender?.name||"プレイヤー",defenderPower:defender?attackPower(defender):null});
   if(defender&&state.players[2].monsters.some(c=>c.id===defender.id)){
-    const counter=attackPower(defender);
+    const counter=reduceIncomingDamage(attacker,attackPower(defender));
+    const defenderDamage=reduceIncomingDamage(defender,attack);
     attacker.damage=(Number(attacker.damage)||0)+counter;
-    defender.damage=(Number(defender.damage)||0)+attack;
-    log("「"+attacker.name+"」と「"+defender.name+"」が戦闘。"+attacker.name+"は"+counter+"ダメージ、"+defender.name+"は"+attack+"ダメージを受けました");
+    defender.damage=(Number(defender.damage)||0)+defenderDamage;
+    log("「"+attacker.name+"」と「"+defender.name+"」が戦闘。"+attacker.name+"は"+counter+"ダメージ、"+defender.name+"は"+defenderDamage+"ダメージを受けました");
     if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN){gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",target:"ownMonsterDamage",cardId:attacker.id,delta:counter}));gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",target:"opponentMonsterDamage",cardId:defender.id,delta:attack}))}
     checkMonsterDestruction(1);checkMonsterDestruction(2);
   }else if(!targetMonsterId){
-    state.players[2].life-=attack;
-    log(state.players[2].name+"は「"+attacker.name+"」の直接攻撃で"+attack+"ダメージを受けました");
-    if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",target:"opponentLife",delta:-attack}));
+    const playerDamage=reduceIncomingDamage(state.players[2],attack);
+    state.players[2].life-=playerDamage;
+    log(state.players[2].name+"は「"+attacker.name+"」の直接攻撃で"+playerDamage+"ダメージを受けました");
+    if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",target:"opponentLife",delta:-playerDamage}));
     checkLifeWinner(2);
   }
+  attacker.attacksThisTurn=(Number(attacker.attacksThisTurn)||0)+1;
   pendingAttack=null;state.selected=null;render();
 }
 function trapConditionMet(owner,trigger,abilityText,eventCard){
