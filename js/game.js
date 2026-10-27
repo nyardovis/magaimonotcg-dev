@@ -816,6 +816,16 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const own=state.players[p],opp=state.players[p===1?2:1];let s=String(text||"");let handled=false,revealedCardForEffect=null;
  const countNamed=(list,name)=>list.filter(c=>String(c.name||"").includes(name)).length;
  const countTag=(list,tag)=>list.filter(c=>String(cardDefinition(c)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)).length;
+ /* Random-choice effects must execute exactly one numbered branch, not every branch. */
+ if(/以下からランダムに1つ行う/.test(s)&&!s.includes("全て行う")){
+  const optionStart=s.indexOf("①");
+  if(optionStart>=0){
+   const prefix=s.slice(0,optionStart).replace(/以下からランダムに1つ行う[。、]?/,"");
+   const optionText=s.slice(optionStart);
+   const options=[...optionText.matchAll(/[①②③④⑤]([^①②③④⑤]+)/g)].map(m=>m[1].trim()).filter(Boolean);
+   if(options.length){const chosen=options[Math.floor(Math.random()*options.length)];s=prefix+chosen;log("ランダム効果の選択結果: "+chosen)}
+  }
+ }
  const extraPlacement=s.match(/(?:エネルギーを(?:手札から)?(?:追加で|さらに|もう一度)(\d*)枚?(?:置く|出す)|(?:追加で|さらに|もう一度)(\d*)枚?のエネルギーを(?:手札から)?(?:置く|出す)|エネルギーを(?:手札から)?(\d+)枚追加で(?:置く|出す))(?:ことができる|できる|してもよい|してよい)?/);
  if(extraPlacement){const amount=Math.max(1,Number(extraPlacement[1]||extraPlacement[2]||extraPlacement[3])||1);own.extraEnergyPlacements=(Number(own.extraEnergyPlacements)||0)+amount;log("このターン、手札から追加でエネルギーを"+amount+"回置けます");}
  const eventOwner=eventCard?[1,2].find(owner=>["monsters","energy","field","facedown","discard","hand"].some(zone=>state.players[owner]?.[zone]?.some(c=>c.id===eventCard.id))):null;
