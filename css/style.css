@@ -154,3 +154,8 @@
 /* Re-center the complete field-to-end-turn row after resizing the zones. */
 .player .other{justify-content:center!important}
 .player .other>button[data-end]{transform:none!important}
+
+
+/* Keep monster attack power visible on every face-up monster. */
+.card.zone-monsters{position:relative}
+.card.zone-monsters .monster-power{position:absolute;left:3px;bottom:3px;z-index:4;min-width:24px;padding:2px 4px;border-radius:4px;background:rgba(15,20,28,.92);border:1px solid #e7c66b;color:#fff2b2;font-size:12px;font-weight:800;line-height:1.15;text-align:center;pointer-events:none;text-shadow:0 1px 1px #000}
