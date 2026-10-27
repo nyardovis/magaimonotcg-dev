@@ -997,7 +997,7 @@ function resolveEffectText(text,p,sourceCard,eventCard=null){
  const cardName=sourceCard?.name||"不明なカード",summary=String(text||"").slice(0,180);
  const compiled=typeof CardEffectRuntime!=="undefined"?CardEffectRuntime.summarize(text):null;
  const before={life:state.players[p]?.life,hand:state.players[p]?.hand?.length,deck:state.players[p]?.deck?.length,discard:state.players[p]?.discard?.length,monsters:state.players[p]?.monsters?.length,energy:state.players[p]?.energy?.length,field:state.players[p]?.field?.length};
- const trace=debugLog("効果処理開始: "+cardName+" / "+summary,"effect","info",{player:p,sourceCard:cardName,eventCard:eventCard?.name||null,before,compiled:compiled?{clauseCount:compiled.clauseCount,recognizedCount:compiled.recognizedCount,unrecognizedCount:compiled.unrecognizedCount,ambiguousCount:compiled.ambiguousCount,clauses:compiled.clauses.map(c=>({index:c.index,trigger:c.trigger,cost:c.cost,condition:c.condition,target:c.target,actions:c.actions,confidence:c.confidence}))}:null});
+ const trace=debugLog("効果処理開始: "+cardName+" / "+summary,"effect","info",{player:p,sourceCard:cardName,eventCard:eventCard?.name||null,before,compiled:compiled?{clauseCount:compiled.clauseCount,recognizedCount:compiled.recognizedCount,unrecognizedCount:compiled.unrecognizedCount,ambiguousCount:compiled.ambiguousCount,clauses:compiled.clauses.map(c=>({index:c.index,trigger:c.trigger,cost:c.cost,conditions:c.conditions,target:c.target,numeric:c.numeric,actions:c.actions,confidence:c.confidence}))}:null});
  try{
   const result=resolveEffectTextCore(text,p,sourceCard,eventCard);
   const recent=debugLogEntries.filter(entry=>entry.id>trace.id);
