@@ -297,8 +297,8 @@ function connectGameServer(){
         else if(message.type==="error"){log("オンラインサーバー: "+message.message);if(message.message==="Room is full"){onlinePlayerId=null;currentRoom="";const url=new URL(location.href);url.searchParams.delete("room");history.replaceState(null,"",url);const lobby=document.querySelector("#roomLobby");if(lobby)lobby.hidden=false;const roomMessage=document.querySelector("#roomMessage");if(roomMessage)roomMessage.textContent="このルームは満員です。別のルームIDで参加してください";}}
       }catch{}
     };
-    gameSocket.onerror=()=>log("オンラインサーバーへの接続に失敗しました");
-    gameSocket.onclose=e=>{if(currentRoom){log("オンラインサーバーとの接続が切れました",false);resetToPreparation("接続が切れたため、対戦準備に戻りました。")}};
+    gameSocket.onerror=()=>{debugLog("WebSocket通信エラー","network","error",{room:currentRoom});log("オンラインサーバーへの接続に失敗しました")};
+    gameSocket.onclose=e=>{debugLog("WebSocket接続を終了","network","warning",{code:e.code,reason:e.reason||"",room:currentRoom});if(currentRoom){log("オンラインサーバーとの接続が切れました",false);resetToPreparation("接続が切れたため、対戦準備に戻りました。")}};
   }catch(e){console.error(e);log("オンラインサーバーへの接続を開始できませんでした")}
 }
 
@@ -855,8 +855,10 @@ function resolveEffectText(text,p,sourceCard,eventCard=null){
  const trace=debugLog("効果処理開始: "+cardName+" / "+summary,"effect","info",{player:p,sourceCard:cardName,eventCard:eventCard?.name||null,before});
  try{
   const result=resolveEffectTextCore(text,p,sourceCard,eventCard);
+  const recent=debugLogEntries.filter(entry=>entry.id>trace.id);
+  const resultStatus=recent.some(entry=>entry.status==="unimplemented")?"unimplemented":recent.some(entry=>entry.status==="skipped")?"skipped":"success";
   const after={life:state.players[p]?.life,hand:state.players[p]?.hand?.length,deck:state.players[p]?.deck?.length,discard:state.players[p]?.discard?.length,monsters:state.players[p]?.monsters?.length,energy:state.players[p]?.energy?.length,field:state.players[p]?.field?.length};
-  debugLog("効果処理終了: "+cardName,"effect","success",{traceId:trace.id,player:p,before,after,changed:JSON.stringify(before)!==JSON.stringify(after)});
+  debugLog("効果処理終了: "+cardName,"effect",resultStatus,{traceId:trace.id,player:p,before,after,changed:JSON.stringify(before)!==JSON.stringify(after)});
   return result;
  }catch(error){
   debugLog("効果処理中に例外: "+cardName+" / "+String(error?.message||error),"effect","error",{traceId:trace.id,stack:error?.stack||""});throw error;
