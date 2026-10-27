@@ -15,19 +15,25 @@
     ["attacked",["攻撃された時","攻撃されたとき","攻撃を受けた時","攻撃を受けたとき"]]
   ];
   const ACTIONS = [
-    ["draw",/(?:カードを)?(\d+)枚引く|カードを引く/],
-    ["heal",/(?:自分|相手|お互い)?(?:のライフを)?(\d+)回復|回復する/],
-    ["damage",/(?:に|へ)?\s*(\d+)ダメージ/],
-    ["destroy",/(?:破壊する|破壊することができる|破壊してもよい)/],
+    ["draw",/(?:カードを)?(?:\d+|[^。]{1,32})枚引く|カードを引く/],
+    ["heal",/(?:自分|相手|お互い)?(?:のライフを)?(?:\d+|[^。]{1,32})回復|回復する/],
+    ["damage",/(?:\d+|[^。]{1,40})ダメージ/],
+    ["destroy",/(?:破壊する|破壊することができる|破壊してもよい|破壊される)/],
     ["moveToHand",/(?:手札に加える|手札に戻す)/],
-    ["summon",/(?:場に出す|場に出してもよい|召喚する)/],
-    ["tap",/(?:タップする|タップさせる)/],
-    ["counter",/カウンターを?\s*(?:\+|乗せる|置く)|カウンター\s*\d+個/],
-    ["energy",/(?:エネルギー|マナ).*(?:置く|増やす|減らす|加える)/],
-    ["modifyPower",/(?:攻撃力|パワー).*(?:\+|−|-|上げる|下げる|にする)/],
+    ["summon",/(?:場に出す|場に出してもよい|召喚する|を出す)/],
+    ["tap",/(?:タップする|タップさせる|タップ状態にする)/],
+    ["counter",/カウンター.{0,24}(?:乗せる|置く|個|0にする|取り除く)/],
+    ["energy",/(?:エネルギー|マナ).{0,40}(?:置く|増やす|減らす|加える|使用できる)/],
+    ["modifyPower",/(?:攻撃力|パワー|これを).{0,45}(?:\+|＋|−|-|上げる|下げる|にする)/],
     ["reveal",/(?:公開する|見せる|公開してもよい)/],
-    ["discard",/(?:捨てる|捨て札に置く)/],
-    ["preventAttack",/(?:攻撃できない|攻撃できなくする|攻撃できる)/]
+    ["discard",/(?:捨てる|捨て札に置く|捨て札へ送る)/],
+    ["preventAttack",/(?:攻撃できない|攻撃できなくする|攻撃できる|攻撃されない|これにしか攻撃できない)/],
+    ["search",/(?:デッキ|捨て札|手札).{0,50}(?:探し|選び|選んで|検索|加える)/],
+    ["playCard",/(?:カード|魔法|罠).{0,30}(?:使用する|発動する)/],
+    ["disableEffect",/(?:効果|発動).{0,30}(?:発動しない|無効|使用できない|使えない)/],
+    ["preventDamage",/(?:ダメージを受けない|受けるダメージ.{0,12}(?:減|\-)|ダメージ.{0,12}軽減)/],
+    ["restriction",/(?:使用できず|使用できない|場に出せない|選ぶことができない|対象にならない)/],
+    ["passive",/(?:攻撃されない|ダメージ.{0,20}(?:受けない|減らす)|相手の.{0,20}できない)/]
   ];
   const COST = /^\s*[（(]\s*(\d+|これをタップ|これを破壊|カウンター\s*\d+|手札から\d+枚捨てる)\s*[）)]\s*/;
   function detectTrigger(text){
@@ -64,5 +70,19 @@
     const clauses=compile(text);
     return {clauseCount:clauses.length,recognizedCount:clauses.filter(x=>x.recognized).length,unrecognizedCount:clauses.filter(x=>!x.recognized).length,ambiguousCount:clauses.filter(x=>x.confidence==="ambiguous").length,clauses};
   }
-  root.CardEffectRuntime=Object.freeze({compile,parseClause,summarize,actions:ACTIONS.map(x=>x[0]),triggers:TRIGGERS.map(x=>x[0])});
+  function selfTest(){
+    const cases=[
+      {text:"場に出た時、カードを2枚引く。",trigger:"enter",action:"draw"},
+      {text:"攻撃時、相手に300ダメージ。",trigger:"attack",action:"damage"},
+      {text:"自分のデッキから魔法1枚までを手札に加える。",trigger:null,action:"moveToHand"},
+      {text:"相手のモンスターはこれにしか攻撃できない。",trigger:null,action:"preventAttack"}
+    ];
+    const failures=[];
+    for(const item of cases){
+      const clause=compile(item.text)[0];
+      if(!clause||clause.trigger!==item.trigger||!clause.actions.includes(item.action))failures.push({text:item.text,expected:item,actual:clause||null});
+    }
+    return {passed:cases.length-failures.length,total:cases.length,failures};
+  }
+  root.CardEffectRuntime=Object.freeze({compile,parseClause,summarize,selfTest,actions:ACTIONS.map(x=>x[0]),triggers:TRIGGERS.map(x=>x[0])});
 })(globalThis);
