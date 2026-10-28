@@ -969,7 +969,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  }
  const effectTypeMap={モンスター:"monster",魔法:"spell",罠:"trap",フィールド:"field",エネルギー:"energy"};
  const discardHand=s.match(/自分の手札から(?:(魔法|モンスター|罠|フィールド|エネルギー)\s*)?(\d+)枚(?:まで)?(?:を)?捨てる/);
- if(discardHand){const type=discardHand[1]||null,count=Number(discardHand[2]||1);for(let i=0;i<count;i++){const index=own.hand.findIndex(c=>!type||cardKind(c)===effectTypeMap[type]);if(index<0)break;const discarded=own.hand.splice(index,1)[0];moveToDiscard(p,discarded,"効果による手札の破棄");handled=true}}
+ if(discardHand){const type=discardHand[1]||null,count=Number(discardHand[2]||1);for(let i=0;i<count;i++){const eligible=own.hand.filter(c=>!type||cardKind(c)===effectTypeMap[type]);const discarded=chooseEffectTarget(eligible,"捨てる手札を選択してください（"+(i+1)+"/"+count+"）",p,sourceCard);if(!discarded)break;const index=own.hand.findIndex(c=>c.id===discarded.id);if(index<0)break;own.hand.splice(index,1);moveToDiscard(p,discarded,"効果による手札の破棄");handled=true}}
  const revealHand=s.match(/自分の手札から(?:(魔法|モンスター|罠|フィールド|エネルギー)\s*)?1枚を公開する/);
  if(revealHand){const type=revealHand[1]||null,card=chooseEffectTarget(own.hand.filter(c=>!type||cardKind(c)===effectTypeMap[type]),"公開する手札を選択してください",p,sourceCard);if(card){card.revealed=true;card.faceUp=true;revealedCardForEffect=card;handled=true;log(own.name+"は「"+card.name+"」を公開しました")}}
  const healMonster=s.match(/自分のモンスター(?:全て|1体|1体まで)を\s*(\d+)回復/);
@@ -1053,7 +1053,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const opponentDraw=s.match(/相手は(\d+)枚引く/);
  if(opponentDraw){const count=Number(opponentDraw[1]);if(!onlinePlayerId)drawEffectCards(p===1?2:1,count);else broadcastEffectDelta({target:"opponentDraw",count});handled=true;log(opp.name+"は"+count+"枚引きます")}
  const opponentDiscard=s.match(/相手の手札から(\d+)枚を捨てる/);
- if(opponentDiscard){const count=Number(opponentDiscard[1]);if(!onlinePlayerId){for(let i=0;i<count&&opp.hand.length;i++)moveToDiscard(p===1?2:1,opp.hand.splice(Math.floor(Math.random()*opp.hand.length),1)[0],"効果によるランダム破棄")}else broadcastEffectDelta({target:"opponentDiscard",count});handled=true}
+ if(opponentDiscard){const count=Number(opponentDiscard[1]);if(!onlinePlayerId){for(let i=0;i<count&&opp.hand.length;i++){const discarded=chooseEffectTarget(opp.hand,"相手が捨てる手札を選択してください（"+(i+1)+"/"+count+"）",p===1?2:1,sourceCard);if(!discarded)break;const index=opp.hand.findIndex(c=>c.id===discarded.id);if(index<0)break;opp.hand.splice(index,1);moveToDiscard(p===1?2:1,discarded,"効果による手札の破棄")}}else broadcastEffectDelta({target:"opponentDiscard",count});handled=true}
  const energyFromDeck=s.match(/自分のデッキから(?:(\d+)コスト以下の)?(?:\[([^\]]+)\]の)?エネルギー(\d+)枚までを(タップして)?出す/);
  if(energyFromDeck){const costLimit=energyFromDeck[1]===undefined?Infinity:Number(energyFromDeck[1]),tag=energyFromDeck[2]||"",count=Number(energyFromDeck[3]);for(let i=0;i<count&&own.energy.length<MAX.energy;i++){const idx=own.deck.findIndex(c=>cardKind(c)==="energy"&&cardCost(c)<=costLimit&&(!tag||String(cardDefinition(c)?.types||"").includes(tag)));if(idx<0)break;const energy=own.deck.splice(idx,1)[0];energy.tapped=!!energyFromDeck[4];own.energy.push(energy);handled=true}if(handled)log("山札からエネルギーを場に出しました")}
  const selfTurnEndDestroy=s.includes("自分のターン終了時、これを破壊する");
@@ -1065,13 +1065,13 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  if(/相手のモンスター全ての効果を消す/.test(s)){opp.monsters.forEach(mon=>{if(disableCardEffects(mon)&&onlinePlayerId)broadcastEffectDelta({target:"opponentDisable",cardId:mon.id})});handled=true}
  if(/(?:他の)?モンスター全てを破壊する/.test(s)){for(const targetPlayer of [p,p===1?2:1]){const targets=[...state.players[targetPlayer].monsters].filter(mon=>!(/他の/.test(s)&&sourceCard?.id===mon.id));for(const mon of targets){state.players[targetPlayer].monsters=state.players[targetPlayer].monsters.filter(c=>c.id!==mon.id);moveToDiscard(targetPlayer,mon,"効果による全体破壊");if(!onlinePlayerId||targetPlayer===1)resolveCardTrigger(mon,targetPlayer,"destroy");if(onlinePlayerId&&targetPlayer!==p)broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:mon.id})}}handled=true}
  const opponentMill=s.match(/相手のデッキの上(\d+)枚を捨てる/);
- if(opponentMill){const count=Number(opponentMill[1]);if(!onlinePlayerId){for(let i=0;i<count&&opp.deck.length;i++)opp.discard.push(opp.deck.shift())}broadcastEffectDelta({target:"opponentMill",count});handled=true}
+ if(opponentMill){const count=Number(opponentMill[1]);if(!onlinePlayerId){for(let i=0;i<count&&opp.deck.length;i++){const card=opp.deck.shift();resetGrantedCardInformation(card);opp.discard.push(card)}}broadcastEffectDelta({target:"opponentMill",count});handled=true}
  const ownMill=s.match(/自分のデッキの上(\d+)枚を捨てる/);
- if(ownMill){for(let i=0;i<Number(ownMill[1])&&own.deck.length;i++)own.discard.push(own.deck.shift());handled=true}
+ if(ownMill){for(let i=0;i<Number(ownMill[1])&&own.deck.length;i++){const card=own.deck.shift();resetGrantedCardInformation(card);own.discard.push(card)}handled=true}
  const namedMill=s.match(/自分のデッキから「([^」]+)」(\d+)枚(?:まで)?を捨てる/);
- if(namedMill){for(let i=0;i<Number(namedMill[2]);i++){const index=own.deck.findIndex(card=>String(card.name||"")===namedMill[1]);if(index<0)break;own.discard.push(own.deck.splice(index,1)[0]);handled=true}if(handled)log("山札から「"+namedMill[1]+"」を捨て札に送りました")}
+ if(namedMill){for(let i=0;i<Number(namedMill[2]);i++){const index=own.deck.findIndex(card=>String(card.name||"")===namedMill[1]);if(index<0)break;const card=own.deck.splice(index,1)[0];resetGrantedCardInformation(card);own.discard.push(card);handled=true}if(handled)log("山札から「"+namedMill[1]+"」を捨て札に送りました")}
  const tagMill=s.match(/自分のデッキから\[([^\]]+)\](\d+)枚(?:まで)?を捨てる/);
- if(tagMill){for(let i=0;i<Number(tagMill[2]);i++){const index=own.deck.findIndex(card=>String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tagMill[1]));if(index<0)break;own.discard.push(own.deck.splice(index,1)[0]);handled=true}}
+ if(tagMill){for(let i=0;i<Number(tagMill[2]);i++){const index=own.deck.findIndex(card=>String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tagMill[1]));if(index<0)break;const card=own.deck.splice(index,1)[0];resetGrantedCardInformation(card);own.discard.push(card);handled=true}}
  if(/自分のフィールドカードを破壊|自分のフィールドを破壊/.test(s)&&own.field.length){moveToDiscard(p,own.field.shift(),"効果");handled=true}
  const returnMonsterToDeck=s.match(/(自分の|相手の)モンスター(?:1体|1体まで)をデッキの(?:一番)?下に戻す/);
  if(returnMonsterToDeck){
