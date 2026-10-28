@@ -937,7 +937,8 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
    else{log(!known?"未対応の条件付き効果（手動で処理してください）: "+s.slice(0,90):"効果の条件を満たしていません");return}
   }
  }
- if(/共鳴召喚を行う/.test(s)){performResonanceSummon(p,sourceCard);handled=true}\n if(s.includes("場に出たターンでも攻撃できる"))own.monsters.forEach(m=>{if(m.summonedThisTurn)m.canAttackOnSummon=true});
+ if(/共鳴召喚を行う/.test(s)){performResonanceSummon(p,sourceCard);handled=true}
+ if(s.includes("場に出たターンでも攻撃できる"))own.monsters.forEach(m=>{if(m.summonedThisTurn)m.canAttackOnSummon=true});
   if(sourceCard&&/モンスターとの戦闘時、戦闘相手のパワーで戦闘する/.test(s))sourceCard.combatPowerUsesOpponent=true;
   if(sourceCard&&/モンスターとの戦闘時、これのパワーの代わりに0パワーで戦闘する/.test(s))sourceCard.combatPowerOverride=0;
  const manaChanges=[...s.matchAll(/(?:(自分の|相手の|お互いの))?マナ\s*([+-])\s*(\d+)/g)];
