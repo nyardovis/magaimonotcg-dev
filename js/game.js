@@ -841,20 +841,21 @@ function performResonanceSummon(p,sourceCard){
  if(answer===null)return false;
  const target=candidates[Number(answer)-1];if(!target){log("共鳴召喚の選択が無効です");return false}
  const text=String(cardDefinition(target)?.effect_text||"");
- const match=text.match(/共鳴召喚\s*[:：]\s*([\s\S]*?)(?=(?:場に出た時|場に出たとき|攻撃できない|相手の|自分のターン|破壊時|破壊された時|\(|（)|$)/);
+ const match=text.match(/共鳴召喚\s*[:：]\s*([\s\S]*?)(?=(?:場に出た時|場に出たとき|攻撃できない|相手の|自分のターン|破壊時|破壊された時|「場に出たターン|\(|（)|$)/);
  const reqText=(match?.[1]||"").trim();
  const requirements=[];
- const tokenRe=/\[([^\]]+)\](?:\s*[×xX＊*]\s*(\d+))?|「([^」]+)」(?:\s*[×xX＊*]\s*(\d+))?/g;
+ const tokenRe=/名前に「([^」]+)」を含む(?:モンスター|カード)?(?:\s*[×xX＊*]\s*(\d+))?|(?:(\d+)コスト以上の)?\[([^\]]+)\](?:の(モンスター|魔法|罠|フィールド|エネルギー))?(?:\s*[×xX＊*]\s*(\d+))?|「([^」]+)」(?:\s*[×xX＊*]\s*(\d+))?/g;
  let token;
  while((token=tokenRe.exec(reqText))){
-  const tag=token[1],name=token[3],count=Number(token[2]||token[4]||1);
-  for(let i=0;i<count;i++)requirements.push({tag:tag||null,name:name||null,label:name||("["+tag+"]")});
+  const includeName=token[1]||null,includeCount=Number(token[2]||1),minCost=Number(token[3]||0),tag=token[4]||null,kindWord=token[5]||null,tagCount=Number(token[6]||1),name=token[7]||null,nameCount=Number(token[8]||1);
+  const count=includeName?includeCount:tag?tagCount:name?nameCount:1;
+  for(let n=0;n<count;n++)requirements.push({tag:tag||null,name:name||null,includeName,minCost,kind:kindWord?({モンスター:"monster",魔法:"spell",罠:"trap",フィールド:"field",エネルギー:"energy"})[kindWord]:null,label:includeName?("名前に「"+includeName+"」を含む"):name||(tag?"["+tag+"]":"不明")});
  }
  if(!requirements.length){log("「"+target.name+"」の共鳴素材条件を解析できません: "+reqText);return false}
  if(own.monsters.length>=MAX.monsters){log("モンスターゾーンが満杯のため共鳴召喚できません");return false}
  const selected=[];
  for(const req of requirements){
-  const available=own.hand.filter(c=>c.id!==target.id&&!selected.some(v=>v.id===c.id)&&(!req.name||c.name===req.name)&&(!req.tag||String(cardDefinition(c)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(req.tag)));
+  const available=own.hand.filter(c=>c.id!==target.id&&!selected.some(v=>v.id===c.id)&&(!req.name||c.name===req.name)&&(!req.includeName||String(c.name||"").includes(req.includeName))&&(!req.tag||String(cardDefinition(c)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(req.tag))&&cardCost(c)>=req.minCost&&(!req.kind||cardKind(c)===req.kind));
   if(!available.length){log("共鳴素材「"+req.label+"」が手札にありません");return false}
   const materialMenu=available.map((c,i)=>(i+1)+". "+c.name).join("\n");
   const choice=window.prompt("共鳴素材「"+req.label+"」を手札から選んでください。\n"+materialMenu,"1");
