@@ -848,7 +848,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
     if(own.energy.length>=MAX.energy){log("エネルギーゾーンが満杯のため、エネルギーを出せません");continue}
     const energy=own.deck.splice(index,1)[0];resetGrantedCardInformation(energy);energy.tapped=true;energy.faceUp=true;own.energy.push(energy);
     log("尖晶石の少女の効果でエネルギー「"+energy.name+"」をタップして出しました");
-   }else resolveEffectTextCore(option,p,sourceCard,eventCard);
+   }else resolveEffectTextCore(option.replace(/[０-９]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0xFEE0)).replace(/ドローする/g,"引く"),p,sourceCard,eventCard);
   }
   return true;
  }
