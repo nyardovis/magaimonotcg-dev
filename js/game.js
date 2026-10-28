@@ -1170,21 +1170,25 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const energyFromDeckEffect=s.match(/自分のデッキから(?:(?:「([^」]+)」)の)?(?:\[([^\]]+)\]の)?エネルギー(\d+)枚までをタップして出す/);
  if(energyFromDeckEffect){
   const namePart=energyFromDeckEffect[1]||"",tag=energyFromDeckEffect[2]||"",max=Number(energyFromDeckEffect[3]);
-  for(let n=0;n<max;n++){
-   const index=own.deck.findIndex(card=>cardKind(card)==="energy"&&(!namePart||String(card.name||"").includes(namePart))&&(!tag||String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)));
-   if(index<0)break;
-   const energy=own.deck.splice(index,1)[0];energy.tapped=true;own.energy.push(energy);handled=true;
-  }
+   for(let n=0;n<max&&own.energy.length<MAX.energy;n++){
+    const eligible=own.deck.filter(card=>cardKind(card)==="energy"&&(!namePart||String(card.name||"").includes(namePart))&&(!tag||String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)));
+    const chosen=chooseEffectTarget(eligible,"場に出すエネルギーを山札から選んでください（"+(n+1)+"/"+max+"）",p,sourceCard);
+    if(!chosen)break;
+    const cardIndex=own.deck.findIndex(card=>card.id===chosen.id);if(cardIndex<0)break;
+    const energy=own.deck.splice(cardIndex,1)[0];resetGrantedCardInformation(energy);energy.tapped=true;energy.faceUp=true;own.energy.push(energy);handled=true;
+   }
   if(handled)log("条件に合うエネルギーをタップして場に出しました");
  }
  const energyFromHandEffect=s.match(/自分の手札から(?:(?:「([^」]+)」の)?\[([^\]]+)\]の)?エネルギー(\d+)枚までをタップして出す/);
  if(energyFromHandEffect){
   const namePart=energyFromHandEffect[1]||"",tag=energyFromHandEffect[2]||"",max=Number(energyFromHandEffect[3]);
-  for(let n=0;n<max;n++){
-   const index=own.hand.findIndex(card=>cardKind(card)==="energy"&&(!namePart||String(card.name||"").includes(namePart))&&(!tag||String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)));
-   if(index<0)break;
-   const energy=own.hand.splice(index,1)[0];energy.tapped=true;own.energy.push(energy);handled=true;
-  }
+   for(let n=0;n<max&&own.energy.length<MAX.energy;n++){
+    const eligible=own.hand.filter(card=>cardKind(card)==="energy"&&(!namePart||String(card.name||"").includes(namePart))&&(!tag||String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)));
+    const chosen=chooseEffectTarget(eligible,"場に出すエネルギーを手札から選んでください（"+(n+1)+"/"+max+"）",p,sourceCard);
+    if(!chosen)break;
+    const cardIndex=own.hand.findIndex(card=>card.id===chosen.id);if(cardIndex<0)break;
+    const energy=own.hand.splice(cardIndex,1)[0];resetGrantedCardInformation(energy);energy.tapped=true;energy.faceUp=true;own.energy.push(energy);handled=true;
+   }
   if(handled)log("手札からエネルギーをタップして場に出しました");
  }
  if(/(?:自分のデッキの向きを変える|デッキの向きを変える)/.test(s)){
