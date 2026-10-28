@@ -1219,7 +1219,7 @@ function forceEndTurnForTrap(owner){
 function resolveTrapTriggers(owner,trigger,eventCard=null){
  const x=state.players[owner];
  const opponent=state.players[owner===1?2:1];
- if(opponent.disableOpponentTraps){debugLog("相手の効果により罠の発動を禁止","effect","skipped",{player:owner,trigger});return}if(!x||!Array.isArray(x.facedown))return;
+ const activeTrapSuppressor=[...(opponent.monsters||[]),...(opponent.energy||[]),...(opponent.field||[])].some(card=>!card.effectsDisabled&&String(cardDefinition(card)?.effect_text||"").includes("相手の罠は発動しない"));if(activeTrapSuppressor){debugLog("相手の効果により罠の発動を禁止","effect","skipped",{player:owner,trigger});return}if(!x||!Array.isArray(x.facedown))return;
  const source=[...x.facedown];
  for(const trap of source){
   const currentIndex=x.facedown.findIndex(c=>c.id===trap.id);if(currentIndex<0)continue;
@@ -1232,6 +1232,8 @@ function resolveTrapTriggers(owner,trigger,eventCard=null){
   else if(trigger==="opponentAttack")matches=part=>part.cost===null&&/^\s*\[\s*相手/.test(part.body)&&/(攻撃時|攻撃した時|攻撃したとき)/.test(part.body);
   else if(trigger==="ownAttack")matches=part=>part.cost===null&&/^\s*\[\s*自分/.test(part.body)&&/(攻撃時|攻撃した時|攻撃したとき)/.test(part.body);
   else if(trigger==="opponentSpell")matches=part=>part.cost===null&&/^\s*\[\s*相手の魔法の使用時/.test(part.body);
+  else if(trigger==="ownCardUse")matches=part=>part.cost===null&&/^\s*\[\s*自分のカードの使用時/.test(part.body);
+  else if(trigger==="opponentCardUse")matches=part=>part.cost===null&&/^\s*\[\s*相手のカードの使用時/.test(part.body);
   else if(trigger==="opponentHeal")matches=part=>part.cost===null&&/^\s*\[\s*相手が回復した時/.test(part.body);
   else if(trigger==="opponentDamagedMe")matches=part=>part.cost===null&&/^\s*\[\s*相手が自分にダメージを与えた時/.test(part.body);
   else if(trigger==="opponentOricaUse")matches=part=>part.cost===null&&/^\s*\[\s*相手のオリカの使用時/.test(part.body);
@@ -1275,6 +1277,8 @@ function playCardFromHand(cardId){
  if(kind==="energy"&&x.energyPlacedThisTurn&&(Number(x.extraEnergyPlacements)||0)<=0)return log("手札からエネルギーを置けるのは1ターンに1回までです");
  if(kind==="trap"&&x.facedown.length>=MAX.facedown)return log("罠ゾーンが満杯です");
  if(["monster","spell","trap","field"].includes(kind)&&!useEnergyCost(1,cost))return;
+ if(!onlinePlayerId){resolveTrapTriggers(1,"ownCardUse",card);resolveTrapTriggers(2,"opponentCardUse",card);if(kind==="spell")resolveTrapTriggers(2,"opponentSpell",card);if(String(cardDefinition(card)?.tags||"").includes("#オリカ"))resolveTrapTriggers(2,"opponentOricaUse",card)}
+ if(!x.hand.some(c=>c.id===card.id)){render();return}
  x.hand.splice(idx,1);card.faceUp=true;card.revealed=false;
  if(kind==="monster"){card.power=Number(cardDefinition(card)?.power)||card.power||0;card.damage=0;card.modification=0;card.tapped=false;card.summonedThisTurn=true;card.canAttackOnSummon=String(cardDefinition(card)?.effect_text||"").includes("場に出たターンでも攻撃できる");x.monsters.push(card);log(x.name+"は「"+card.name+"」を使用しました（コスト"+cost+"）");resolveCardTrigger(card,1,"enter");resolveTrapTriggers(1,"ownEnter",card);if(!onlinePlayerId)resolveTrapTriggers(2,"opponentEnter",card)}
  else if(kind==="energy"){if((Number(x.extraEnergyPlacements)||0)>0)x.extraEnergyPlacements--;else x.energyPlacedThisTurn=true;card.tapped=String(cardDefinition(card)?.effect_text||"").includes("タップして場に出る");x.energy.push(card);log(x.name+"は「"+card.name+"」をエネルギーに置きました");resolveCardTrigger(card,1,"enter")}
