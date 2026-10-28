@@ -816,6 +816,22 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const own=state.players[p],opp=state.players[p===1?2:1];let s=String(text||"");let handled=false,revealedCardForEffect=null;
  const countNamed=(list,name)=>list.filter(c=>String(c.name||"").includes(name)).length;
  const countTag=(list,tag)=>list.filter(c=>String(cardDefinition(c)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)).length;
+ /* Owner-specified three-roll random effect: choose all outcomes first, then resolve in order. */
+ if(s.includes("未来を照らす")&&sourceCard?.name==="尖晶石の少女"){
+  const options=["相手は3枚ドローする","自分は3枚ドローする","相手に600ダメージ与える","自分に600ダメージ与える","自分のデッキからエネルギーを1つ選びタップして出す","これを+300"];
+  const rolls=Array.from({length:3},()=>options[Math.floor(Math.random()*options.length)]);
+  log("尖晶石の少女「未来を照らす」選択結果: "+rolls.map((v,i)=>(i+1)+". "+v).join(" / "));
+  for(const option of rolls){
+   if(option==="自分のデッキからエネルギーを1つ選びタップして出す"){
+    const index=own.deck.findIndex(c=>cardKind(c)==="energy");
+    if(index<0){log("山札に出せるエネルギーがありません");continue}
+    if(own.energy.length>=MAX.energy){log("エネルギーゾーンが満杯のため、エネルギーを出せません");continue}
+    const energy=own.deck.splice(index,1)[0];resetGrantedCardInformation(energy);energy.tapped=true;energy.faceUp=true;own.energy.push(energy);
+    log("尖晶石の少女の効果でエネルギー「"+energy.name+"」をタップして出しました");
+   }else resolveEffectTextCore(option,p,sourceCard,eventCard);
+  }
+  return true;
+ }
  /* Random-choice effects must execute exactly one numbered branch, not every branch. */
  if(/以下からランダムに1つ行う/.test(s)&&!s.includes("全て行う")){
   const optionStart=s.indexOf("①");
