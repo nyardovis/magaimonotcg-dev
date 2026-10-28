@@ -1162,13 +1162,11 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   const eligible=own.deck.filter(card=>cardKind(card)==="spell"&&cardCost(card)<=maxCost&&(!tag||String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)));
   const spell=chooseEffectTarget(eligible,"使用する魔法を山札から選んでください",p,sourceCard);
   if(spell){
-   if(useEnergyCost(p,effectiveCardCost(spell,p))){
-    const index=own.deck.findIndex(card=>card.id===spell.id);
-    if(index>=0){own.deck.splice(index,1);resetGrantedCardInformation(spell);moveToDiscard(p,spell,"デッキから魔法を使用");
-     log(own.name+"はデッキから魔法「"+spell.name+"」を使用しました");resolveCardTrigger(spell,p,"spell");
-     if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentSpell",spell);handled=true;
-    }
-   }else log("デッキから使用する魔法のエネルギーが不足しています");
+   const index=own.deck.findIndex(card=>card.id===spell.id);
+   if(index>=0){own.deck.splice(index,1);resetGrantedCardInformation(spell);moveToDiscard(p,spell,"効果による魔法の使用（コスト不要）");
+    log(own.name+"は効果でデッキから魔法「"+spell.name+"」をコストなしで使用しました");resolveCardTrigger(spell,p,"spell");
+    if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentSpell",spell);handled=true;
+   }
   }else log("条件に合う魔法がデッキにありません");
  }
  const energyFromDeckEffect=s.match(/自分のデッキから(?:(?:「([^」]+)」)の)?(?:\[([^\]]+)\]の)?エネルギー(\d+)枚までをタップして出す/);
