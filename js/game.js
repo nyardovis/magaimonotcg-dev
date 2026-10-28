@@ -900,11 +900,13 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   log("尖晶石の少女「未来を照らす」選択結果: "+rolls.map((v,i)=>(i+1)+". "+v).join(" / "));
   for(const option of rolls){
    if(option==="自分のデッキからエネルギーを1つ選びタップして出す"){
-    const index=own.deck.findIndex(c=>cardKind(c)==="energy");
-    if(index<0){log("山札に出せるエネルギーがありません");continue}
-    if(own.energy.length>=MAX.energy){log("エネルギーゾーンが満杯のため、エネルギーを出せません");continue}
-    const energy=own.deck.splice(index,1)[0];resetGrantedCardInformation(energy);energy.tapped=true;energy.faceUp=true;own.energy.push(energy);
-    log("尖晶石の少女の効果でエネルギー「"+energy.name+"」をタップして出しました");
+     if(own.energy.length>=MAX.energy){log("エネルギーゾーンが満杯のため、エネルギーを出せません");continue}
+     const eligible=own.deck.filter(c=>cardKind(c)==="energy");
+     const energy=chooseEffectTarget(eligible,"場に出すエネルギーを山札から選んでください",p,sourceCard);
+     if(!energy){log("山札に出せるエネルギーがありません");continue}
+     const cardIndex=own.deck.findIndex(c=>c.id===energy.id);if(cardIndex<0)continue;
+     const moved=own.deck.splice(cardIndex,1)[0];resetGrantedCardInformation(moved);moved.tapped=true;moved.faceUp=true;own.energy.push(moved);
+     log("尖晶石の少女の効果でエネルギー「"+moved.name+"」をタップして出しました");
    }else resolveEffectTextCore(option.replace(/[０-９]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0xFEE0)).replace(/ドローする/g,"引く"),p,sourceCard,eventCard);
   }
   return true;
