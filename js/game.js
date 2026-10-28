@@ -678,7 +678,10 @@ function finishMulligan(){
  render();
 }
 function useEnergyCost(p,cost){const x=state.players[p],available=Number(x.energyPool)||0;if(cost>available){log("使用可能エネルギーが不足しています（必要："+cost+"、使用可能："+available+"）");return false}x.energyPool=available-cost;if(p===1)broadcastEnergyPool();return true}
-function moveToDiscard(p,c,reason=""){const x=state.players[p];c.tapped=false;c.faceUp=true;c.revealed=false;c.damage=0;c.modification=0;c.counters=0;x.discard.push(c);if(reason)log("「"+c.name+"」を捨て札に置きました（"+reason+"）")}
+function resetGrantedCardInformation(c){if(!c)return;for(const key of ["effectsDisabled","cannotAttack","cannotAttackUntilTurnEnd","cannotBeAttacked","cannotBeAttackedWhileUntapped","mustBeAttacked","cannotBeChosenByOpponent","combatPowerUsesOpponent","combatPowerOverride","attacksPerTurn","damageReduction","grantedEffects","temporaryEffects","cannotAttackUntilOwnerTurnEnd"])delete c[key];c.summonedThisTurn=false;c.canAttackOnSummon=false;c.attacksThisTurn=0}
+function cardEffectCannotBeRemoved(c){return /この効果は消えない/.test(String(cardDefinition(c)?.effect_text||""))}
+function disableCardEffects(c){if(!c||cardEffectCannotBeRemoved(c))return false;c.effectsDisabled=true;return true}
+function moveToDiscard(p,c,reason=""){const x=state.players[p];resetGrantedCardInformation(c);c.tapped=false;c.faceUp=true;c.revealed=false;c.damage=0;c.modification=0;c.counters=0;x.discard.push(c);if(reason)log("「"+c.name+"」を捨て札に置きました（"+reason+"）")}
 function checkMonsterDestruction(p,triggerEffects=true){const x=state.players[p];for(const m of [...x.monsters]){const base=Number(m.power)||Number(cardDefinition(m)?.power)||0;if(base+(Number(m.modification)||0)-(Number(m.damage)||0)<=0){x.monsters=x.monsters.filter(v=>v.id!==m.id);moveToDiscard(p,m,"HPが0以下");if(triggerEffects){if(!onlinePlayerId||p===1){resolveCardTrigger(m,p,"destroy");resolveTrapTriggers(p,"ownDestroy")}if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentDestroy");else if(p===2)resolveTrapTriggers(1,"opponentDestroy")}log("「"+m.name+"」はHPが0以下になり破壊されました")}}}
 function drawEffectCards(p,n){const x=state.players[p],total=Math.max(0,Math.floor(n));for(let i=0;i<total;i++){if(!x.deck.length){const winner=p===1?2:1;state.gameOver={winner,reason:"deck_empty"};state.phase="finished";log(x.name+"は山札が0枚の状態でドローしようとしたため、"+state.players[winner].name+"の勝利です");break}if(x.hand.length>=MAX.hand){if(p===1){state.pendingDiscardPlayer=1;state.pendingDiscardReason="effect_draw";state.pendingDrawCount=total-i;state.selected=null;render();log(x.name+"は効果のドロー前に手札を1枚捨てる必要があります");return}const discarded=x.hand.shift();moveToDiscard(p,discarded,"手札上限による自動破棄")}x.hand.push(x.deck.shift())}}
 function resolveCardTrigger(card,p,trigger){
@@ -904,7 +907,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const eventModifier=s.match(/それを\s*([+-]\d+)/);
  if(eventModifier&&eventCard&&eventOwner){const delta=Number(eventModifier[1]);eventCard.modification=(Number(eventCard.modification)||0)+delta;if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentMonsterModifier",cardId:eventCard.id,delta});handled=true}
  if(/それが与えるダメージを0にする/.test(s)&&eventCard&&eventOwner){eventCard.nextAttackDamage=0;if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentAttackDamageZero",cardId:eventCard.id});handled=true;log("「"+eventCard.name+"」が与えるダメージを0にしました（戦闘の処理は手動）")}
- if(/それの効果を消す/.test(s)&&eventCard&&eventOwner){eventCard.effectsDisabled=true;if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentDisable",cardId:eventCard.id});handled=true}
+ if(/それの効果を消す/.test(s)&&eventCard&&eventOwner){if(disableCardEffects(eventCard)){if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentDisable",cardId:eventCard.id});handled=true}else log("「"+eventCard.name+"」は効果を消されません")}
  if(/それを打ち消す/.test(s)&&eventCard&&eventOwner){
   const targetState=state.players[eventOwner];let zone=null;
   for(const z of ["monsters","energy","field","facedown","hand","discard"]){const index=(targetState[z]||[]).findIndex(c=>c.id===eventCard.id);if(index>=0){targetState[z].splice(index,1);zone=z;break}}
@@ -985,7 +988,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  if(powerAsZero&&sourceCard){sourceCard.combatPowerOverride=0;handled=true}
  const attackTwice=s.match(/(\d+)ターンに(\d+)回攻撃できる/);
  if(attackTwice&&sourceCard){sourceCard.attacksPerTurn=Number(attackTwice[2]);handled=true}
- if(/相手のモンスター全ての効果を消す/.test(s)){opp.monsters.forEach(mon=>{mon.effectsDisabled=true;if(onlinePlayerId)broadcastEffectDelta({target:"opponentDisable",cardId:mon.id})});handled=true}
+ if(/相手のモンスター全ての効果を消す/.test(s)){opp.monsters.forEach(mon=>{if(disableCardEffects(mon)&&onlinePlayerId)broadcastEffectDelta({target:"opponentDisable",cardId:mon.id})});handled=true}
  if(/(?:他の)?モンスター全てを破壊する/.test(s)){for(const targetPlayer of [p,p===1?2:1]){const targets=[...state.players[targetPlayer].monsters].filter(mon=>!(/他の/.test(s)&&sourceCard?.id===mon.id));for(const mon of targets){state.players[targetPlayer].monsters=state.players[targetPlayer].monsters.filter(c=>c.id!==mon.id);moveToDiscard(targetPlayer,mon,"効果による全体破壊");if(!onlinePlayerId||targetPlayer===1)resolveCardTrigger(mon,targetPlayer,"destroy");if(onlinePlayerId&&targetPlayer!==p)broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:mon.id})}}handled=true}
  const opponentMill=s.match(/相手のデッキの上(\d+)枚を捨てる/);
  if(opponentMill){const count=Number(opponentMill[1]);if(!onlinePlayerId){for(let i=0;i<count&&opp.deck.length;i++)opp.discard.push(opp.deck.shift())}broadcastEffectDelta({target:"opponentMill",count});handled=true}
@@ -1064,7 +1067,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  }
  const enemyEffectsAll=/相手のモンスター全ての効果を消す/.test(s);
  if(enemyEffectsAll){
-  opp.monsters.forEach(mon=>{mon.effectsDisabled=true;if(onlinePlayerId)broadcastEffectDelta({target:"opponentDisable",cardId:mon.id})});
+  opp.monsters.forEach(mon=>{if(disableCardEffects(mon)&&onlinePlayerId)broadcastEffectDelta({target:"opponentDisable",cardId:mon.id})});
   handled=true;log("相手のモンスター全ての効果を無効にしました");
  }
  const enemyEffectOne=/相手のモンスター1体の効果を消す/.test(s);
