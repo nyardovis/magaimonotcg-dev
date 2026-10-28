@@ -1080,6 +1080,19 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   const target=[...own.monsters,...opp.monsters].find(mon=>mon.id!==sourceCard?.id&&!mon.effectsDisabled);
   if(target){if(disableCardEffects(target)){const targetOwner=own.monsters.some(mon=>mon.id===target.id)?p:(p===1?2:1);if(targetOwner!==p&&onlinePlayerId)broadcastEffectDelta({target:"opponentDisable",cardId:target.id});handled=true;log("「"+target.name+"」の効果を無効にしました")}else log("「"+target.name+"」は効果を消されません")}
  }
+ const useSpellFromDeck=s.match(/自分のデッキから(?:(\d+)コスト以下の)?(?:\[([^\]]+)\]の)?魔法1枚までを使用する/);
+ if(useSpellFromDeck){
+  const maxCost=useSpellFromDeck[1]===undefined?Infinity:Number(useSpellFromDeck[1]),tag=useSpellFromDeck[2]||"";
+  const index=own.deck.findIndex(card=>cardKind(card)==="spell"&&cardCost(card)<=maxCost&&(!tag||String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)));
+  if(index>=0){
+   const spell=own.deck[index];
+   if(useEnergyCost(p,effectiveCardCost(spell,p))){
+    own.deck.splice(index,1);resetGrantedCardInformation(spell);moveToDiscard(p,spell,"デッキから魔法を使用");
+    log(own.name+"はデッキから魔法「"+spell.name+"」を使用しました");resolveCardTrigger(spell,p,"spell");
+    if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentSpell",spell);handled=true;
+   }else log("デッキから使用する魔法のエネルギーが不足しています");
+  }else log("条件に合う魔法がデッキにありません");
+ }
  const energyFromDeckEffect=s.match(/自分のデッキから(?:(?:「([^」]+)」)の)?(?:\[([^\]]+)\]の)?エネルギー(\d+)枚までをタップして出す/);
  if(energyFromDeckEffect){
   const namePart=energyFromDeckEffect[1]||"",tag=energyFromDeckEffect[2]||"",max=Number(energyFromDeckEffect[3]);
