@@ -769,6 +769,7 @@ function resolveSummonEffects(text,p,sourceCard){
     const index=source.findIndex(card=>{
      const data=cardDefinition(card),kind=cardKind(card);
      if(!data||kind==="unknown"||kind==="spell"&&unit==="体")return false;
+     if(kind==="monster"&&/これは使わずに場に出せない/.test(String(data.effect_text||"")))return false;
      if(requiredKind&&kind!==requiredKind)return false;
      if(cardCost(card)>costLimit)return false;
      const types=String(data.types||"").split(/[,、]/).map(v=>v.trim()).filter(Boolean);
@@ -787,7 +788,7 @@ function resolveSummonEffects(text,p,sourceCard){
    if(candidateKind==="energy"&&own.energy.length>=MAX.energy)break;
    if(candidateKind==="trap"&&own.facedown.length>=MAX.facedown)break;
    const card=selectedSource.splice(selectedIndex,1)[0],kind=candidateKind;
-   card.faceUp=kind!=="trap";card.revealed=false;card.tapped=false;
+   resetGrantedCardInformation(card);card.faceUp=kind!=="trap";card.revealed=false;card.tapped=false;
    if(kind==="monster"){
     card.power=Number(cardDefinition(card)?.power)||card.power||0;card.damage=0;card.modification=0;card.summonedThisTurn=true;card.canAttackOnSummon=String(cardDefinition(card)?.effect_text||"").includes("場に出たターンでも攻撃できる");own.monsters.push(card);
     log(own.name+"は効果で「"+card.name+"」を場に出しました");
