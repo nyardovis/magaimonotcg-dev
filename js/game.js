@@ -678,6 +678,22 @@ function finishMulligan(){
  render();
 }
 function useEnergyCost(p,cost){const x=state.players[p],available=Number(x.energyPool)||0;if(cost>available){log("使用可能エネルギーが不足しています（必要："+cost+"、使用可能："+available+"）");return false}x.energyPool=available-cost;if(p===1)broadcastEnergyPool();return true}
+function effectCannotChooseZone(player,zone){
+ const zoneNames={discard:"捨て札",deck:"山札",hand:"手札",monsters:"モンスター",energy:"エネルギー",field:"フィールド",facedown:"罠"};
+ const label=zoneNames[zone]||zone;
+ for(const owner of [1,2]){
+  const sources=[...(state.players[owner].monsters||[]),...(state.players[owner].energy||[]),...(state.players[owner].field||[])];
+  for(const card of sources){
+   if(card.effectsDisabled)continue;
+   const text=String(cardDefinition(card)?.effect_text||"");
+   if(!text.includes(label)||!/選べない|選ぶことができない|選択できない/.test(text))continue;
+   if(/相手/.test(text)&&player!==owner)return true;
+   if(/自分/.test(text)&&player===owner)return true;
+   if(!/相手|自分/.test(text))return true;
+  }
+ }
+ return false;
+}
 function resetGrantedCardInformation(c){if(!c)return;for(const key of ["effectsDisabled","cannotAttack","cannotAttackUntilTurnEnd","cannotBeAttacked","cannotBeAttackedWhileUntapped","mustBeAttacked","cannotBeChosenByOpponent","combatPowerUsesOpponent","combatPowerOverride","attacksPerTurn","damageReduction","grantedEffects","temporaryEffects","cannotAttackUntilOwnerTurnEnd"])delete c[key];c.summonedThisTurn=false;c.canAttackOnSummon=false;c.attacksThisTurn=0}
 function cardEffectCannotBeRemoved(c){return /この効果は消えない/.test(String(cardDefinition(c)?.effect_text||""))}
 function disableCardEffects(c){if(!c||cardEffectCannotBeRemoved(c))return false;c.effectsDisabled=true;return true}
@@ -761,7 +777,7 @@ function resolveSummonEffects(text,p,sourceCard){
   const kindWord=qualifier.match(/(モンスター|エネルギー|魔法|罠|フィールド)/)?.[1]||null;
   const kindMap={モンスター:"monster",エネルギー:"energy",魔法:"spell",罠:"trap",フィールド:"field"};
   const requiredKind=kindWord?kindMap[kindWord]:(unit==="体"?"monster":null);
-  const sources=sourceNames.map(name=>name==="手札"?own.hand:name==="デッキ"?own.deck:own.discard);
+  const sources=sourceNames.map(name=>name==="手札"?own.hand:name==="デッキ"?own.deck:(effectCannotChooseZone(p,"discard")?[]:own.discard));
   let summoned=0;
   for(let i=0;i<limit;i++){
    if(requiredKind==="monster"&&own.monsters.length>=MAX.monsters)break;
@@ -970,7 +986,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  if(singleDamage){const targetPlayer=singleDamage[1].startsWith("相手")?(p===1?2:1):singleDamage[1].startsWith("自分")?p:(opp.monsters.length?(p===1?2:1):p);const target=state.players[targetPlayer].monsters[0];if(target){target.damage=(target.damage||0)+Number(singleDamage[2]);if(targetPlayer!==p)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:Number(singleDamage[2])});checkMonsterDestruction(targetPlayer,targetPlayer===p);handled=true}}
  if(/相手のモンスター1体を破壊|相手のモンスター1体までを破壊/.test(s)){const target=opp.monsters[0];if(target){opp.monsters=opp.monsters.filter(m=>m.id!==target.id);moveToDiscard(p===1?2:1,target,"効果による破壊");broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});if(!onlinePlayerId)resolveCardTrigger(target,p===1?2:1,"destroy");resolveTrapTriggers(p,"opponentDestroy");handled=true}}
  const search=s.match(/自分の(デッキ|捨て札)から(?:(\d+)コスト以下の)?(?:\[([^\]]+)\]の)?(モンスター|魔法|罠|フィールド|エネルギー)?(\d+)枚までを手札に加える/);
- if(search){const source=search[1]==="デッキ"?own.deck:own.discard,max=Number(search[5]),costLimit=search[2]===undefined?Infinity:Number(search[2]),type=search[4],element=search[3];for(let i=0;i<max;i++){const idx=source.findIndex(c=>{const d=cardDefinition(c);if(!d||cardCost(c)>costLimit)return false;if(type&&!String(d.tags||"").includes(({モンスター:"#モンスターカード",魔法:"#魔法カード",罠:"#罠カード",フィールド:"#フィールドカード",エネルギー:"#エネルギーカード"})[type]))return false;if(element&&!String(d.types||"").includes(element))return false;return true});if(idx<0||own.hand.length>=MAX.hand)break;{const moved=source.splice(idx,1)[0];resetGrantedCardInformation(moved);own.hand.push(moved)};handled=true}if(handled)log(own.name+"は効果で"+(search[1]==="デッキ"?"山札":"捨て札")+"からカードを手札に加えました")}
+ if(search&&!(search[1]==="捨て札"&&effectCannotChooseZone(p,"discard"))){const source=search[1]==="デッキ"?own.deck:own.discard,max=Number(search[5]),costLimit=search[2]===undefined?Infinity:Number(search[2]),type=search[4],element=search[3];for(let i=0;i<max;i++){const idx=source.findIndex(c=>{const d=cardDefinition(c);if(!d||cardCost(c)>costLimit)return false;if(type&&!String(d.tags||"").includes(({モンスター:"#モンスターカード",魔法:"#魔法カード",罠:"#罠カード",フィールド:"#フィールドカード",エネルギー:"#エネルギーカード"})[type]))return false;if(element&&!String(d.types||"").includes(element))return false;return true});if(idx<0||own.hand.length>=MAX.hand)break;{const moved=source.splice(idx,1)[0];resetGrantedCardInformation(moved);own.hand.push(moved)};handled=true}if(handled)log(own.name+"は効果で"+(search[1]==="デッキ"?"山札":"捨て札")+"からカードを手札に加えました")}
  const sameNameSearch=s.match(/自分のデッキか捨て札からそれと同名のカード(\d+)枚までを手札に加える/);
  if(sameNameSearch&&revealedCardForEffect){for(let i=0;i<Number(sameNameSearch[1]);i++){let source=own.deck,idx=source.findIndex(c=>c.name===revealedCardForEffect.name);if(idx<0){source=own.discard;idx=source.findIndex(c=>c.name===revealedCardForEffect.name)}if(idx<0||own.hand.length>=MAX.hand)break;{const moved=source.splice(idx,1)[0];resetGrantedCardInformation(moved);own.hand.push(moved)};handled=true}}
  const namedSearch=s.match(/自分の(デッキ|捨て札)から「([^」]+)」(\d+)枚までを手札に加える/);
