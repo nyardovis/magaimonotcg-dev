@@ -971,7 +971,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const discardHand=s.match(/自分の手札から(?:(魔法|モンスター|罠|フィールド|エネルギー)\s*)?(\d+)枚(?:まで)?(?:を)?捨てる/);
  if(discardHand){const type=discardHand[1]||null,count=Number(discardHand[2]||1);for(let i=0;i<count;i++){const index=own.hand.findIndex(c=>!type||cardKind(c)===effectTypeMap[type]);if(index<0)break;const discarded=own.hand.splice(index,1)[0];moveToDiscard(p,discarded,"効果による手札の破棄");handled=true}}
  const revealHand=s.match(/自分の手札から(?:(魔法|モンスター|罠|フィールド|エネルギー)\s*)?1枚を公開する/);
- if(revealHand){const type=revealHand[1]||null,card=own.hand.find(c=>!type||cardKind(c)===effectTypeMap[type]);if(card){card.revealed=true;card.faceUp=true;revealedCardForEffect=card;handled=true;log(own.name+"は「"+card.name+"」を公開しました")}}
+ if(revealHand){const type=revealHand[1]||null,card=chooseEffectTarget(own.hand.filter(c=>!type||cardKind(c)===effectTypeMap[type]),"公開する手札を選択してください",p,sourceCard);if(card){card.revealed=true;card.faceUp=true;revealedCardForEffect=card;handled=true;log(own.name+"は「"+card.name+"」を公開しました")}}
  const healMonster=s.match(/自分のモンスター(?:全て|1体|1体まで)を\s*(\d+)回復/);
  if(healMonster){const targets=/全て/.test(s)?own.monsters:[chooseEffectTarget(own.monsters.filter(c=>(Number(c.damage)||0)>0),"回復する自分のモンスターを選択してください",p,sourceCard)].filter(Boolean);targets.forEach(c=>c.damage=Math.max(0,(Number(c.damage)||0)-Number(healMonster[1])));if(targets.length)handled=true}
  const healSource=s.match(/これを\s*(\d+)回復/);
@@ -1039,7 +1039,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  if(/これのカウンターを0個にする/.test(s)&&sourceCard){sourceCard.counters=0;handled=true}
  if(/\(これをタップ\)/.test(s)&&sourceCard){sourceCard.tapped=true;handled=true}
  if(/相手のモンスター全てをタップ/.test(s)){opp.monsters.forEach(mon=>{mon.tapped=true;broadcastEffectDelta({target:"opponentMonsterTap",cardId:mon.id})});handled=true}
- if(/相手のモンスター(?:1体|1体まで)をタップ/.test(s)){const target=opp.monsters.find(m=>!m.tapped);if(target){target.tapped=true;broadcastEffectDelta({target:"opponentMonsterTap",cardId:target.id});handled=true;log("「"+target.name+"」をタップしました")}}
+ if(/相手のモンスター(?:1体|1体まで)をタップ/.test(s)){const target=chooseEffectTarget(opp.monsters.filter(m=>!m.tapped),"タップする相手のモンスターを選択してください",p,sourceCard);if(target){target.tapped=true;broadcastEffectDelta({target:"opponentMonsterTap",cardId:target.id});handled=true;log("「"+target.name+"」をタップしました")}}
  const singleDamage=s.match(/(相手のモンスター|自分のモンスター|モンスター)(?:1体|1体まで)に\s*(\d+)ダメージ/);
  if(singleDamage){const targetPlayer=singleDamage[1].startsWith("相手")?(p===1?2:1):singleDamage[1].startsWith("自分")?p:(opp.monsters.length?(p===1?2:1):p);const target=chooseEffectTarget(state.players[targetPlayer].monsters,"ダメージを与えるモンスターを選択してください",p,sourceCard);if(target){target.damage=(target.damage||0)+Number(singleDamage[2]);if(targetPlayer!==p)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:Number(singleDamage[2])});checkMonsterDestruction(targetPlayer,targetPlayer===p);handled=true}}
  if(/相手のモンスター1体を破壊|相手のモンスター1体までを破壊/.test(s)){const target=chooseEffectTarget(opp.monsters,"破壊する相手のモンスターを選択してください",p,sourceCard);if(target){opp.monsters=opp.monsters.filter(m=>m.id!==target.id);moveToDiscard(p===1?2:1,target,"効果による破壊");broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});if(!onlinePlayerId)resolveCardTrigger(target,p===1?2:1,"destroy");resolveTrapTriggers(p,"opponentDestroy");handled=true}}
@@ -1102,9 +1102,9 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const formulaPowerDamage=s.match(/相手に\s*[（(]これのパワー[）)]\s*ダメージ/);
  if(formulaPowerDamage&&sourceCard){const amount=attackPower(sourceCard);opp.life-=amount;broadcastEffectDelta({target:"opponentLife",delta:-amount});checkLifeWinner(p===1?2:1);handled=true;log(opp.name+"にパワー分の"+amount+"ダメージ")}
  const formulaTagDamage=s.match(/モンスター1体に\s*[（(]自分の名前に「([^」]+)」を含むモンスターの数\s*[×x*]\s*(\d+)\s*[）)]\s*ダメージ/);
- if(formulaTagDamage){const amount=countNamed(own.monsters,formulaTagDamage[1])*Number(formulaTagDamage[2]);const targetMonster=opp.monsters[0]||own.monsters[0];if(targetMonster){const targetOwner=opp.monsters.includes(targetMonster)?(p===1?2:1):p;targetMonster.damage=(Number(targetMonster.damage)||0)+amount;if(targetOwner!==p)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:targetMonster.id,delta:amount});checkMonsterDestruction(targetOwner,true);handled=true}}
- if(/自分のモンスター1体を破壊する/.test(s)){const targetMonster=own.monsters[0];if(targetMonster){own.monsters=own.monsters.filter(c=>c.id!==targetMonster.id);moveToDiscard(p,targetMonster,"効果による破壊");resolveCardTrigger(targetMonster,p,"destroy");resolveTrapTriggers(p,"ownDestroy");handled=true}}
- if(/自分の(?:種別を持つ)?エネルギー1枚を破壊する/.test(s)){const targetEnergy=own.energy.find(c=>!/種別を持つ/.test(s)||String(cardDefinition(c)?.types||"").trim().length>0);if(targetEnergy){own.energy=own.energy.filter(c=>c.id!==targetEnergy.id);moveToDiscard(p,targetEnergy,"効果による破壊");handled=true}}
+ if(formulaTagDamage){const amount=countNamed(own.monsters,formulaTagDamage[1])*Number(formulaTagDamage[2]);const targetMonster=chooseEffectTarget([...opp.monsters,...own.monsters],"ダメージを与えるモンスターを選択してください",p,sourceCard);if(targetMonster){const targetOwner=opp.monsters.includes(targetMonster)?(p===1?2:1):p;targetMonster.damage=(Number(targetMonster.damage)||0)+amount;if(targetOwner!==p)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:targetMonster.id,delta:amount});checkMonsterDestruction(targetOwner,true);handled=true}}
+ if(/自分のモンスター1体を破壊する/.test(s)){const targetMonster=chooseEffectTarget(own.monsters,"破壊する自分のモンスターを選択してください",p,sourceCard);if(targetMonster){own.monsters=own.monsters.filter(c=>c.id!==targetMonster.id);moveToDiscard(p,targetMonster,"効果による破壊");resolveCardTrigger(targetMonster,p,"destroy");resolveTrapTriggers(p,"ownDestroy");handled=true}}
+ if(/自分の(?:種別を持つ)?エネルギー1枚を破壊する/.test(s)){const targetEnergy=chooseEffectTarget(own.energy.filter(c=>!/種別を持つ/.test(s)||String(cardDefinition(c)?.types||"").trim().length>0),"破壊する自分のエネルギーを選択してください",p,sourceCard);if(targetEnergy){own.energy=own.energy.filter(c=>c.id!==targetEnergy.id);moveToDiscard(p,targetEnergy,"効果による破壊");handled=true}}
  if(/自分のエネルギー全てを破壊する/.test(s)){for(const targetEnergy of [...own.energy])moveToDiscard(p,targetEnergy,"効果による破壊");own.energy=[];handled=true}
  const genericSearch=s.match(/自分の(デッキ|捨て札)(?:か(デッキ|捨て札))?から(?:種別を持つ)?(?:(\d+)コスト以下の)?(?:名前に「([^」]+)」を含む)?(?:\[([^\]]+)\])?(カード|モンスター|魔法|罠|フィールド|エネルギー)?(\d+)枚までを手札に加える/);
  if(genericSearch&&!search&&!namedSearch){
@@ -1146,7 +1146,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  }
  const enemyEffectOne=/相手のモンスター1体の効果を消す/.test(s);
  if(enemyEffectOne){
-  const target=opp.monsters.find(mon=>!mon.effectsDisabled);
+  const target=chooseEffectTarget(opp.monsters.filter(mon=>!mon.effectsDisabled),"効果を無効にする相手のモンスターを選択してください",p,sourceCard);
   if(target){if(disableCardEffects(target)){if(onlinePlayerId)broadcastEffectDelta({target:"opponentDisable",cardId:target.id});handled=true;log("「"+target.name+"」の効果を無効にしました")}else log("「"+target.name+"」は効果を消されません")}
  }
  const ownEffectOne=/他のモンスター1体の効果を消す/.test(s);
