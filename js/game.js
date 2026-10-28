@@ -832,6 +832,47 @@ function resolveSummonEffects(text,p,sourceCard){
  return matched;
 }
 
+function performResonanceSummon(p,sourceCard){
+ const own=state.players[p];
+ const candidates=own.hand.filter(c=>/共鳴召喚\s*[:：]/.test(String(cardDefinition(c)?.effect_text||"")));
+ if(!candidates.length){log("共鳴召喚できるカードが手札にありません");return false}
+ const menu=candidates.map((c,i)=>(i+1)+". "+c.name+"（"+String(cardDefinition(c)?.effect_text||"").match(/共鳴召喚\s*[:：]\s*([^。]+)/)?.[1]+"）").join("\n");
+ const answer=window.prompt("共鳴召喚するカードを番号で選んでください。キャンセルで中止します。\n"+menu,"1");
+ if(answer===null)return false;
+ const target=candidates[Number(answer)-1];if(!target){log("共鳴召喚の選択が無効です");return false}
+ const text=String(cardDefinition(target)?.effect_text||"");
+ const match=text.match(/共鳴召喚\s*[:：]\s*([\s\S]*?)(?=(?:場に出た時|場に出たとき|攻撃できない|相手の|自分のターン|破壊時|破壊された時|\(|（)|$)/);
+ const reqText=(match?.[1]||"").trim();
+ const requirements=[];
+ const tokenRe=/\[([^\]]+)\](?:\s*[×xX＊*]\s*(\d+))?|「([^」]+)」(?:\s*[×xX＊*]\s*(\d+))?/g;
+ let token;
+ while((token=tokenRe.exec(reqText))){
+  const tag=token[1],name=token[3],count=Number(token[2]||token[4]||1);
+  for(let i=0;i<count;i++)requirements.push({tag:tag||null,name:name||null,label:name||("["+tag+"]")});
+ }
+ if(!requirements.length){log("「"+target.name+"」の共鳴素材条件を解析できません: "+reqText);return false}
+ const selected=[];
+ for(const req of requirements){
+  const available=own.hand.filter(c=>c.id!==target.id&&!selected.some(v=>v.id===c.id)&&(!req.name||c.name===req.name)&&(!req.tag||String(cardDefinition(c)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(req.tag)));
+  if(!available.length){log("共鳴素材「"+req.label+"」が手札にありません");return false}
+  const materialMenu=available.map((c,i)=>(i+1)+". "+c.name).join("\n");
+  const choice=window.prompt("共鳴素材「"+req.label+"」を手札から選んでください。\n"+materialMenu,"1");
+  if(choice===null)return false;
+  const material=available[Number(choice)-1];if(!material){log("共鳴素材の選択が無効です");return false}
+  selected.push(material);
+ }
+ const handIndex=own.hand.findIndex(c=>c.id===target.id);if(handIndex<0)return false;
+ own.hand.splice(handIndex,1);
+ for(const material of selected){const i=own.hand.findIndex(c=>c.id===material.id);if(i>=0){own.hand.splice(i,1);moveToDiscard(p,material,"共鳴召喚の素材")}}
+ resetGrantedCardInformation(target);target.faceUp=true;target.revealed=false;target.tapped=false;
+ target.power=Number(cardDefinition(target)?.power)||target.power||0;target.damage=0;target.modification=0;target.summonedThisTurn=true;
+ target.canAttackOnSummon=text.includes("場に出たターンでも攻撃できる");
+ if(own.monsters.length>=MAX.monsters){log("モンスターゾーンが満杯のため共鳴召喚できません");own.hand.push(target);return false}
+ own.monsters.push(target);log(own.name+"は共鳴召喚で「"+target.name+"」を場に出しました");
+ resolveCardTrigger(target,p,"enter");resolveTrapTriggers(p,"ownEnter",target);
+ if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentEnter",target);
+ return true;
+}
 function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const own=state.players[p],opp=state.players[p===1?2:1];let s=String(text||"");let handled=false,revealedCardForEffect=null;
  const countNamed=(list,name)=>list.filter(c=>String(c.name||"").includes(name)).length;
@@ -896,7 +937,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
    else{log(!known?"未対応の条件付き効果（手動で処理してください）: "+s.slice(0,90):"効果の条件を満たしていません");return}
   }
  }
- if(s.includes("場に出たターンでも攻撃できる"))own.monsters.forEach(m=>{if(m.summonedThisTurn)m.canAttackOnSummon=true});
+ if(/共鳴召喚を行う/.test(s)){performResonanceSummon(p,sourceCard);handled=true}\n if(s.includes("場に出たターンでも攻撃できる"))own.monsters.forEach(m=>{if(m.summonedThisTurn)m.canAttackOnSummon=true});
   if(sourceCard&&/モンスターとの戦闘時、戦闘相手のパワーで戦闘する/.test(s))sourceCard.combatPowerUsesOpponent=true;
   if(sourceCard&&/モンスターとの戦闘時、これのパワーの代わりに0パワーで戦闘する/.test(s))sourceCard.combatPowerOverride=0;
  const manaChanges=[...s.matchAll(/(?:(自分の|相手の|お互いの))?マナ\s*([+-])\s*(\d+)/g)];
