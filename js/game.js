@@ -694,7 +694,7 @@ function effectCannotChooseZone(player,zone){
  }
  return false;
 }
-function resetGrantedCardInformation(c){if(!c)return;for(const key of ["effectsDisabled","cannotAttack","cannotAttackUntilTurnEnd","cannotBeAttacked","cannotBeAttackedWhileUntapped","mustBeAttacked","cannotBeChosenByOpponent","combatPowerUsesOpponent","combatPowerOverride","attacksPerTurn","damageReduction","grantedEffects","temporaryEffects","cannotAttackUntilOwnerTurnEnd"])delete c[key];c.summonedThisTurn=false;c.canAttackOnSummon=false;c.attacksThisTurn=0}
+function resetGrantedCardInformation(c){if(!c)return;for(const key of ["effectsDisabled","cannotAttack","cannotAttackUntilTurnEnd","cannotAttackUntilPlayerTurnEnd","cannotBeAttacked","cannotBeAttackedWhileUntapped","mustBeAttacked","cannotBeChosenByOpponent","combatPowerUsesOpponent","combatPowerOverride","attacksPerTurn","damageReduction","grantedEffects","temporaryEffects","cannotAttackUntilOwnerTurnEnd"])delete c[key];c.summonedThisTurn=false;c.canAttackOnSummon=false;c.attacksThisTurn=0}
 function cardEffectCannotBeRemoved(c){return /この効果は消えない/.test(String(cardDefinition(c)?.effect_text||""))}
 function disableCardEffects(c){if(!c||cardEffectCannotBeRemoved(c))return false;c.effectsDisabled=true;return true}
 function moveToDiscard(p,c,reason=""){const x=state.players[p];resetGrantedCardInformation(c);c.tapped=false;c.faceUp=true;c.revealed=false;c.damage=0;c.modification=0;c.counters=0;x.discard.push(c);if(reason)log("「"+c.name+"」を捨て札に置きました（"+reason+"）")}
@@ -851,6 +851,7 @@ function performResonanceSummon(p,sourceCard){
   for(let i=0;i<count;i++)requirements.push({tag:tag||null,name:name||null,label:name||("["+tag+"]")});
  }
  if(!requirements.length){log("「"+target.name+"」の共鳴素材条件を解析できません: "+reqText);return false}
+ if(own.monsters.length>=MAX.monsters){log("モンスターゾーンが満杯のため共鳴召喚できません");return false}
  const selected=[];
  for(const req of requirements){
   const available=own.hand.filter(c=>c.id!==target.id&&!selected.some(v=>v.id===c.id)&&(!req.name||c.name===req.name)&&(!req.tag||String(cardDefinition(c)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(req.tag)));
@@ -867,7 +868,6 @@ function performResonanceSummon(p,sourceCard){
  resetGrantedCardInformation(target);target.faceUp=true;target.revealed=false;target.tapped=false;
  target.power=Number(cardDefinition(target)?.power)||target.power||0;target.damage=0;target.modification=0;target.summonedThisTurn=true;
  target.canAttackOnSummon=text.includes("場に出たターンでも攻撃できる");
- if(own.monsters.length>=MAX.monsters){log("モンスターゾーンが満杯のため共鳴召喚できません");own.hand.push(target);return false}
  own.monsters.push(target);log(own.name+"は共鳴召喚で「"+target.name+"」を場に出しました");
  resolveCardTrigger(target,p,"enter");resolveTrapTriggers(p,"ownEnter",target);
  if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentEnter",target);
