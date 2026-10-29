@@ -1247,13 +1247,13 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const graveSummon=s.match(/自分の捨て札から(?:(?:「([^」]+)」)(以外の)?|名前に「([^」]+)」を含む)?(?:(\d+)コスト以下の)?(?:(\d+)コスト以上の)?(?:(\d+)パワー以下の)?(?:\[([^\]]+)\](?:か\[([^\]]+)\])?)?(?:の)?(?:「([^」]+)」を持つ)?(モンスター|体)?(\d+)体?(?:まで)?を出す/);
  if(graveSummon){
   const excludedName=graveSummon[1]&&graveSummon[2]?graveSummon[1]:null;
+  const requiredAbility=graveSummon[9]||(graveSummon[1]&&s.includes("「"+graveSummon[1]+"」を持つ")?graveSummon[1]:null);
   const requiredName=graveSummon[3]||(graveSummon[1]&&!excludedName&&!requiredAbility?graveSummon[1]:null);
   const maxCost=graveSummon[4]!==undefined?Number(graveSummon[4]):null;
   const minCost=graveSummon[5]!==undefined?Number(graveSummon[5]):null;
   const maxPower=graveSummon[6]!==undefined?Number(graveSummon[6]):null;
   const tagText=graveSummon[7]||"",orTag=graveSummon[8]||"";
   const maxCount=Math.max(1,Number(graveSummon[11])||1);
-  const requiredAbility=graveSummon[9]||(graveSummon[1]&&s.includes("「"+graveSummon[1]+"」を持つ")?graveSummon[1]:null);
   if(effectCannotChooseZone(p,"discard")){log("効果により捨て札を対象に選べないため、捨て札からの召喚はできません")}
   else{
    let summoned=0;
