@@ -1028,6 +1028,39 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  if(allOwnTagCounters){own.monsters.filter(m=>String(cardDefinition(m)?.types||"").includes(allOwnTagCounters[1])).forEach(m=>m.counters=(Number(m.counters)||0)+Number(allOwnTagCounters[2]));handled=true}
  const opponentHandReveal=/相手の手札全てを公開する/.test(s);
  if(opponentHandReveal){if(!onlinePlayerId){opp.hand.forEach(c=>{c.revealed=true;c.faceUp=true})}else broadcastEffectDelta({target:"opponentRevealHand"});handled=true;log(opp.name+"の手札を公開します")}
+ /* 「誤射」: choose one monster to spare, then destroy every other monster on both sides. */
+ if(/モンスターを1体選び、選ばれなかったモンスターをすべて破壊する/.test(s)){
+  const all=[...own.monsters.map(card=>({card,owner:p})),...opp.monsters.map(card=>({card,owner:p===1?2:1}))];
+  const spared=chooseEffectTarget(all.map(x=>x.card),"破壊せずに残すモンスターを1体選択してください",p,sourceCard);
+  if(spared){
+   for(const entry of all){
+    if(entry.card.id===spared.id)continue;
+    const zone=state.players[entry.owner].monsters;
+    if(!zone.some(card=>card.id===entry.card.id))continue;
+    state.players[entry.owner].monsters=zone.filter(card=>card.id!==entry.card.id);
+    moveToDiscard(entry.owner,entry.card,"誤射の効果による破壊");
+    if(onlinePlayerId&&entry.owner!==p)broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:entry.card.id});
+    if(!onlinePlayerId||entry.owner===1){resolveCardTrigger(entry.card,entry.owner,"destroy");resolveTrapTriggers(entry.owner,"ownDestroy")}
+    if(entry.owner!==p)resolveTrapTriggers(p,"opponentDestroy");
+   }
+   handled=true;log("誤射の効果で「"+spared.name+"」以外のモンスターを破壊しました");
+  }
+ }
+ /* Destroy all opponent traps (face-down zone cards). */
+ if(/相手の罠全てを破壊する|相手の罠を全て破壊する/.test(s)){
+  const traps=[...opp.facedown];
+  for(const trap of traps){
+   opp.facedown=opp.facedown.filter(card=>card.id!==trap.id);
+   moveToDiscard(p===1?2:1,trap,"効果による罠の破壊");
+   if(onlinePlayerId)broadcastEffectDelta({target:"opponentCardCounter",cardId:trap.id,zone:"facedown"});
+  }
+  handled=true;log("相手の罠を"+traps.length+"枚破壊しました");
+ }
+ if(/自分の罠全てを破壊する|自分の罠を全て破壊する/.test(s)){
+  const traps=[...own.facedown];
+  for(const trap of traps){own.facedown=own.facedown.filter(card=>card.id!==trap.id);moveToDiscard(p,trap,"効果による罠の破壊");}
+  handled=true;log("自分の罠を"+traps.length+"枚破壊しました");
+ }
  const randomMonsterDestroy=/他のランダムなモンスター1体を破壊する/.test(s);
  if(randomMonsterDestroy){const candidates=[...own.monsters,...opp.monsters].filter(m=>m.id!==sourceCard?.id);if(candidates.length){const target=candidates[Math.floor(Math.random()*candidates.length)],owner=own.monsters.some(m=>m.id===target.id)?p:(p===1?2:1),zone=state.players[owner].monsters;state.players[owner].monsters=zone.filter(m=>m.id!==target.id);moveToDiscard(owner,target,"ランダム効果による破壊");if(!onlinePlayerId||owner===1)resolveCardTrigger(target,owner,"destroy");if(onlinePlayerId&&owner!==p)broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});handled=true;log("ランダムに「"+target.name+"」を破壊しました")}}
  const randomOpponentDestroy=/ランダムな相手のモンスター1体(?:まで)?を破壊する/.test(s);
