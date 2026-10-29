@@ -1035,7 +1035,11 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const ownBuff=s.match(/自分のモンスター(?:全て|1体|1体まで)を\s*\+(\d+)/);
  if(ownBuff){const targets=/全て/.test(s)?own.monsters:[chooseEffectTarget(own.monsters,"パワーを上げる自分のモンスターを選択してください",p,sourceCard)].filter(Boolean);targets.forEach(mon=>{mon.modification=(mon.modification||0)+Number(ownBuff[1])});if(targets.length)handled=true}
  /* Counter, formula, and tagged-monster effects. */
- const taggedAllBuff=s.match(/自分の\[([^\]]+)\]全てを\s*\+(\d+)/);
+ const multiTaggedAllBuff=s.match(/自分の\[([^\]]+)\](?:と|か)\[([^\]]+)\]全てを\s*\+(\d+)/);
+  if(multiTaggedAllBuff){const tags=[multiTaggedAllBuff[1],multiTaggedAllBuff[2]],targets=own.monsters.filter(mon=>tags.some(tag=>String(cardDefinition(mon)?.types||"").includes(tag)));targets.forEach(mon=>mon.modification=(Number(mon.modification)||0)+Number(multiTaggedAllBuff[3]));if(targets.length)handled=true}
+  const commaTaggedBuff=s.match(/自分の\[([^\]]+,[^\]]+)\]1体を\s*\+(\d+)/);
+  if(commaTaggedBuff){const tags=commaTaggedBuff[1].split(/[,、]/).map(t=>t.trim()),target=chooseEffectTarget(own.monsters.filter(mon=>tags.some(tag=>String(cardDefinition(mon)?.types||"").includes(tag))),"強化するモンスターを選択してください",p,sourceCard);if(target){target.modification=(Number(target.modification)||0)+Number(commaTaggedBuff[2]);handled=true}}
+const taggedAllBuff=s.match(/自分の\[([^\]]+)\]全てを\s*\+(\d+)/);
   if(taggedAllBuff){const targets=own.monsters.filter(mon=>String(cardDefinition(mon)?.types||"").includes(taggedAllBuff[1]));targets.forEach(mon=>mon.modification=(Number(mon.modification)||0)+Number(taggedAllBuff[2]));if(targets.length)handled=true}
   const taggedChoiceBuff=s.match(/(?:自分の)?\[([^\]]+)\](?:か|または)\[([^\]]+)\]1体を\s*\+(\d+)/);
   if(taggedChoiceBuff){const tags=[taggedChoiceBuff[1],taggedChoiceBuff[2]],target=chooseEffectTarget(own.monsters.filter(mon=>tags.some(tag=>String(cardDefinition(mon)?.types||"").includes(tag))),"強化するモンスターを選択してください",p,sourceCard);if(target){target.modification=(Number(target.modification)||0)+Number(taggedChoiceBuff[3]);handled=true}}
@@ -1219,7 +1223,9 @@ const opponentTap=s.match(/相手のモンスター1体をタップする/);
   }));
   handled=true;log(scope+"モンスター全てのパワーを"+(delta>0?"+":"")+delta+"変更しました");
  }
- const enemyEffectsAll=/相手のモンスター全ての効果を消す/.test(s);
+ const anyEffectsAll=/(?:相手の|自分の|お互いの)?モンスター全ての効果を消す/.test(s);
+  if(anyEffectsAll){const scope=(s.match(/(?:相手の|自分の|お互いの)?モンスター全ての効果を消す/)||[])[0]||"相手のモンスター全ての効果を消す";const owners=scope.startsWith("お互い")?[p,p===1?2:1]:scope.startsWith("自分")?[p]:[p===1?2:1];for(const owner of owners)state.players[owner].monsters.forEach(mon=>{if(disableCardEffects(mon)&&onlinePlayerId&&owner!==p)broadcastEffectDelta({target:"opponentDisable",cardId:mon.id})});handled=true}
+  const enemyEffectsAll=/相手のモンスター全ての効果を消す/.test(s);
  if(enemyEffectsAll){
   opp.monsters.forEach(mon=>{if(disableCardEffects(mon)&&onlinePlayerId)broadcastEffectDelta({target:"opponentDisable",cardId:mon.id})});
   handled=true;log("相手のモンスター全ての効果を無効にしました");
@@ -1229,7 +1235,9 @@ const opponentTap=s.match(/相手のモンスター1体をタップする/);
   const target=chooseEffectTarget(opp.monsters.filter(mon=>!mon.effectsDisabled),"効果を無効にする相手のモンスターを選択してください",p,sourceCard);
   if(target){if(disableCardEffects(target)){if(onlinePlayerId)broadcastEffectDelta({target:"opponentDisable",cardId:target.id});handled=true;log("「"+target.name+"」の効果を無効にしました")}else log("「"+target.name+"」は効果を消されません")}
  }
- const ownEffectOne=/他のモンスター1体の効果を消す/.test(s);
+ const anyMonsterEffectOne=/モンスター1体の効果を消す/.test(s)&&!/(相手の|自分の|他の)モンスター1体の効果を消す/.test(s);
+  if(anyMonsterEffectOne){const target=chooseEffectTarget([...own.monsters,...opp.monsters].filter(mon=>!mon.effectsDisabled),"効果を消すモンスターを選択してください",p,sourceCard);if(target){if(disableCardEffects(target)){const owner=own.monsters.some(mon=>mon.id===target.id)?p:(p===1?2:1);if(onlinePlayerId&&owner!==p)broadcastEffectDelta({target:"opponentDisable",cardId:target.id});handled=true;log("「"+target.name+"」の効果を無効にしました")}else log("「"+target.name+"」は効果を消されません")}}
+  const ownEffectOne=/他のモンスター1体の効果を消す/.test(s);
  if(ownEffectOne){
   const target=[...own.monsters,...opp.monsters].find(mon=>mon.id!==sourceCard?.id&&!mon.effectsDisabled);
   if(target){if(disableCardEffects(target)){const targetOwner=own.monsters.some(mon=>mon.id===target.id)?p:(p===1?2:1);if(targetOwner!==p&&onlinePlayerId)broadcastEffectDelta({target:"opponentDisable",cardId:target.id});handled=true;log("「"+target.name+"」の効果を無効にしました")}else log("「"+target.name+"」は効果を消されません")}
