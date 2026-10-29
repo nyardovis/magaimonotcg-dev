@@ -1035,11 +1035,21 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const ownBuff=s.match(/自分のモンスター(?:全て|1体|1体まで)を\s*\+(\d+)/);
  if(ownBuff){const targets=/全て/.test(s)?own.monsters:[chooseEffectTarget(own.monsters,"パワーを上げる自分のモンスターを選択してください",p,sourceCard)].filter(Boolean);targets.forEach(mon=>{mon.modification=(mon.modification||0)+Number(ownBuff[1])});if(targets.length)handled=true}
  /* Counter, formula, and tagged-monster effects. */
- const ownMonsterCounter=s.match(/自分の(?:\[([^\]]+)\])?モンスター1体にカウンター(\d+)個を乗せる/);
+ const taggedAllBuff=s.match(/自分の\[([^\]]+)\]全てを\s*\+(\d+)/);
+  if(taggedAllBuff){const targets=own.monsters.filter(mon=>String(cardDefinition(mon)?.types||"").includes(taggedAllBuff[1]));targets.forEach(mon=>mon.modification=(Number(mon.modification)||0)+Number(taggedAllBuff[2]));if(targets.length)handled=true}
+  const taggedChoiceBuff=s.match(/(?:自分の)?\[([^\]]+)\](?:か|または)\[([^\]]+)\]1体を\s*\+(\d+)/);
+  if(taggedChoiceBuff){const tags=[taggedChoiceBuff[1],taggedChoiceBuff[2]],target=chooseEffectTarget(own.monsters.filter(mon=>tags.some(tag=>String(cardDefinition(mon)?.types||"").includes(tag))),"強化するモンスターを選択してください",p,sourceCard);if(target){target.modification=(Number(target.modification)||0)+Number(taggedChoiceBuff[3]);handled=true}}
+  const costLimitedBuff=s.match(/自分の(\d+)コスト以下のモンスター全てを\s*\+(\d+)/);
+  if(costLimitedBuff){const targets=own.monsters.filter(mon=>cardCost(mon)<=Number(costLimitedBuff[1]));targets.forEach(mon=>mon.modification=(Number(mon.modification)||0)+Number(costLimitedBuff[2]));if(targets.length)handled=true}
+  const ownTagDouble=s.match(/自分の\[([^\]]+)\]1体を×\s*(\d+)/);
+  if(ownTagDouble){const target=chooseEffectTarget(own.monsters.filter(mon=>String(cardDefinition(mon)?.types||"").includes(ownTagDouble[1])),"パワーを倍増するモンスターを選択してください",p,sourceCard);if(target){target.modification=Math.max(-(Number(target.power)||Number(cardDefinition(target)?.power)||0),attackPower(target)*(Number(ownTagDouble[2])-1));handled=true}}
+const ownMonsterCounter=s.match(/自分の(?:\[([^\]]+)\])?モンスター1体にカウンター(\d+)個を乗せる/);
  if(ownMonsterCounter){const tag=ownMonsterCounter[1]||"",target=chooseEffectTarget(own.monsters.filter(m=>!tag||String(cardDefinition(m)?.types||"").includes(tag)),"カウンターを乗せるモンスターを選択してください",p,sourceCard);if(target){target.counters=(Number(target.counters)||0)+Number(ownMonsterCounter[2]);handled=true;log("「"+target.name+"」にカウンター"+ownMonsterCounter[2]+"個を乗せました")}}
  const ownTagHeal=s.match(/自分の\[([^\]]+)\]1体を全回復/);
  if(ownTagHeal){const target=chooseEffectTarget(own.monsters.filter(m=>String(cardDefinition(m)?.types||"").includes(ownTagHeal[1])),"全回復するモンスターを選択してください",p,sourceCard);if(target){target.damage=0;handled=true}}
- const opponentTap=s.match(/相手のモンスター1体をタップする/);
+ const opponentSingleModifier=s.match(/相手のモンスター1体を\s*([＋+\-−])\s*(\d+)/);
+  if(opponentSingleModifier){const target=chooseEffectTarget(opp.monsters,"パワーを変更する相手モンスターを選択してください",p,sourceCard);if(target){const delta=(opponentSingleModifier[1]==="-"||opponentSingleModifier[1]==="−"?-1:1)*Number(opponentSingleModifier[2]);target.modification=(Number(target.modification)||0)+delta;if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterModifier",cardId:target.id,delta});handled=true}}
+const opponentTap=s.match(/相手のモンスター1体をタップする/);
  if(opponentTap){const target=chooseEffectTarget(opp.monsters.filter(m=>!m.tapped),"タップする相手のモンスターを選択してください",p,sourceCard);if(target){target.tapped=true;if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterTap",cardId:target.id});handled=true}}
  const opponentTempCantAttack=s.match(/相手のモンスター1体は「([^」]+)」(?:を持つ)?/);
  if(opponentTempCantAttack&&/攻撃できない/.test(opponentTempCantAttack[1])){const target=chooseEffectTarget(opp.monsters,"効果を付与する相手のモンスターを選択してください",p,sourceCard);if(target){target.cannotAttackUntilPlayerTurnEnd=p;handled=true}}
