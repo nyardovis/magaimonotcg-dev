@@ -1244,16 +1244,17 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   if(!handled)log("使用条件に合うカードが"+zoneName+"にありません");
  }
  /* General graveyard-to-field summon: supports name, tag, cost, power, and multi-card limits. */
- const graveSummon=s.match(/自分の捨て札から(?:(?:「([^」]+)」)(以外の)?|名前に「([^」]+)」を含む)?(?:(\d+)コスト以下の)?(?:(\d+)コスト以上の)?(?:(\d+)パワー以下の)?(?:\[([^\]]+)\](?:か\[([^\]]+)\])?)?(?:の)?(?:「([^」]+)」を持つ)?(モンスター|体)?(\d+)体?(?:まで)?を出す/);
+ const graveSummon=s.match(/自分の捨て札から(?:(?:「([^」]+)」)(以外の)?|名前に「([^」]+)」を含む)?(?:(\d+)コスト以下の)?(?:(\d+)コスト以上の)?(?:(?:(\d+)パワー以下の)|(?:パワー(\d+)の))?(?:\[([^\]]+)\](?:か\[([^\]]+)\])?)?(?:の)?(?:「([^」]+)」を持つ)?(モンスター|体)?(\d+)(?:体|枚)?(?:まで)?を出す/);
  if(graveSummon){
   const excludedName=graveSummon[1]&&graveSummon[2]?graveSummon[1]:null;
-  const requiredAbility=graveSummon[9]||(graveSummon[1]&&s.includes("「"+graveSummon[1]+"」を持つ")?graveSummon[1]:null);
+  const requiredAbility=graveSummon[10]||(graveSummon[1]&&s.includes("「"+graveSummon[1]+"」を持つ")?graveSummon[1]:null);
   const requiredName=graveSummon[3]||(graveSummon[1]&&!excludedName&&!requiredAbility?graveSummon[1]:null);
   const maxCost=graveSummon[4]!==undefined?Number(graveSummon[4]):null;
   const minCost=graveSummon[5]!==undefined?Number(graveSummon[5]):null;
   const maxPower=graveSummon[6]!==undefined?Number(graveSummon[6]):null;
-  const tagText=graveSummon[7]||"",orTag=graveSummon[8]||"";
-  const maxCount=Math.max(1,Number(graveSummon[11])||1);
+  const exactPower=graveSummon[7]!==undefined?Number(graveSummon[7]):null;
+  const tagText=graveSummon[8]||"",orTag=graveSummon[9]||"";
+  const maxCount=Math.max(1,Number(graveSummon[12])||1);
   if(effectCannotChooseZone(p,"discard")){log("効果により捨て札を対象に選べないため、捨て札からの召喚はできません")}
   else{
    let summoned=0;
@@ -1266,6 +1267,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
      if(maxCost!==null&&cardCost(card)>maxCost)return false;
      if(minCost!==null&&cardCost(card)<minCost)return false;
      if(maxPower!==null&&(Number(def.power)||0)>maxPower)return false;
+     if(exactPower!==null&&(Number(def.power)||0)!==exactPower)return false;
      if(tagText){const requiredTags=tagText.split(/[,、]/).map(v=>v.trim());const matches=requiredTags.every(tag=>types.includes(tag));const alternativeMatches=orTag&&orTag.split(/[,、]/).map(v=>v.trim()).some(tag=>types.includes(tag));if(!matches&&!alternativeMatches)return false;}
      if(requiredAbility&&!String(def.effect_text||"").includes(requiredAbility))return false;
      return true;
