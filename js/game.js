@@ -1244,7 +1244,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   if(!handled)log("使用条件に合うカードが"+zoneName+"にありません");
  }
  /* General graveyard-to-field summon: supports name, tag, cost, power, and multi-card limits. */
- const graveSummon=s.match(/自分の捨て札から(?:(?:「([^」]+)」)(以外の)?|名前に「([^」]+)」を含む)?(?:(\d+)コスト以下の)?(?:(\d+)コスト以上の)?(?:(\d+)パワー以下の)?(?:\[([^\]]+)\](?:か\[([^\]]+)\])?)?(?:の)?(モンスター|体)?(\d+)体?(?:まで)?を出す/);
+ const graveSummon=s.match(/自分の捨て札から(?:(?:「([^」]+)」)(以外の)?|名前に「([^」]+)」を含む)?(?:(\d+)コスト以下の)?(?:(\d+)コスト以上の)?(?:(\d+)パワー以下の)?(?:\[([^\]]+)\](?:か\[([^\]]+)\])?)?(?:の)?(?:を持つ)?(モンスター|体)?(\d+)体?(?:まで)?を出す/);
  if(graveSummon){
   const excludedName=graveSummon[1]&&graveSummon[2]?graveSummon[1]:null;
   const requiredName=graveSummon[3]||(graveSummon[1]&&!excludedName?graveSummon[1]:null);
@@ -1267,7 +1267,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
      if(minCost!==null&&cardCost(card)<minCost)return false;
      if(maxPower!==null&&(Number(def.power)||0)>maxPower)return false;
      if(tagText){const requiredTags=tagText.split(/[,、]/).map(v=>v.trim());const matches=requiredTags.every(tag=>types.includes(tag));const alternativeMatches=orTag&&orTag.split(/[,、]/).map(v=>v.trim()).some(tag=>types.includes(tag));if(!matches&&!alternativeMatches)return false;}
-     if(requiredAbility&&!String(def.effect_text||"").includes("「"+requiredAbility+"」"))return false;
+     if(requiredAbility&&!String(def.effect_text||"").includes(requiredAbility))return false;
      return true;
     });
     const chosen=chooseEffectTarget(eligible,"場に出すモンスターを捨て札から選択してください（"+(n+1)+"/"+maxCount+"）",p,sourceCard);
