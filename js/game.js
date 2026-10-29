@@ -245,7 +245,10 @@ function connectGameServer(){
           if(message.playerId!==onlinePlayerId&&state.turnPlayer===1)endTurn();
         }
         else if(message.type==="operation"&&message.action==="attack_declared"&&!devLocalMode){
-          if(message.playerId!==onlinePlayerId){const attacker=state.players[2].monsters.find(c=>c.id===message.cardId);if(attacker)attacker.tapped=true;const defender=message.targetCardId?state.players[1].monsters.find(c=>c.id===message.targetCardId):null;resolveTrapTriggers(1,"opponentAttack",attacker||null);if(defender)resolveCardTrigger(defender,1,"attack");render();}
+          if(message.playerId!==onlinePlayerId){const attacker=state.players[2].monsters.find(c=>c.id===message.cardId);if(attacker)attacker.tapped=true;const defender=message.targetCardId?state.players[1].monsters.find(c=>c.id===message.targetCardId):null;resolveTrapTriggers(1,"opponentAttack",attacker||null);if(defender)resolveCardTrigger(defender,1,"attack");if(gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"attack_effects_resolved",cardId:message.cardId,targetCardId:message.targetCardId||null}));render();}
+        }
+        else if(message.type==="operation"&&message.action==="attack_effects_resolved"&&!devLocalMode){
+          if(message.playerId!==onlinePlayerId&&pendingAttack?.awaitingResponse&&pendingAttack.cardId===message.cardId){const attacker=state.players[1].monsters.find(c=>c.id===message.cardId);const defender=pendingAttack.targetMonsterId?state.players[2].monsters.find(c=>c.id===pendingAttack.targetMonsterId):null;if(attacker)applyPendingAttackDamage(attacker,defender);}
         }
         else if(message.type==="public_state"&&!devLocalMode){
           applyPublicState(message.playerId,message.state);
@@ -1435,11 +1438,13 @@ function resolveAttack(targetMonsterId){
   if(targetMonsterId&&!defender)return;
   const forcedTargets=state.players[2].monsters.filter(c=>c.mustBeAttacked||String(cardDefinition(c)?.effect_text||"").includes("相手のモンスターはこれにしか攻撃できない"));
   if(forcedTargets.length&&(!defender||!forcedTargets.some(c=>c.id===defender.id))){log("相手の効果により、指定されたモンスターにしか攻撃できません");return}
-  if(defender&&(defender.cannotBeAttacked||(!defender.tapped&&(defender.cannotBeAttackedWhileUntapped||/アンタップ中は攻撃されない/.test(String(cardDefinition(defender)?.effect_text||""))))||/(?:^|。)\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(String(cardDefinition(defender)?.effect_text||"")))){log("そのモンスターは攻撃されません");return}
+  if(defender&&(defender.cannotBeAttacked||(!defender.tapped&&(defender.cannotBeAttackedWhileUntapped||/アンタップ中は攻撃されない/.test(String(cardDefinition(defender)?.effect_text||""))))||/(?:^|。)\\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(String(cardDefinition(defender)?.effect_text||"")))){log("そのモンスターは攻撃されません");return}
   if(!targetMonsterId&&state.players[2].opponentMonstersCannotAttackPlayer){log("相手の効果によりプレイヤーへの攻撃が禁止されています");return}
   const maxAttacks=Math.max(1,Number(attacker.attacksPerTurn)||1);
   const attackNumber=(Number(attacker.attacksThisTurn)||0)+1;
   attacker.tapped=attackNumber>=maxAttacks;
+  pendingAttack.targetMonsterId=defender?.id||null;
+  pendingAttack.awaitingResponse=false;
   debugLog("攻撃宣言: "+attacker.name+"（"+attackNumber+"/"+maxAttacks+"回目）","combat","info",{attackerId:attacker.id,attackNumber,maxAttacks});
   const active=state.turnPlayer,nonActive=active===1?2:1;
   debugLog("攻撃側の罠効果を確認","effect","info",{player:active,trigger:"ownAttack"});
@@ -1447,12 +1452,18 @@ function resolveAttack(targetMonsterId){
   debugLog("攻撃側モンスターの攻撃時効果を確認","effect","info",{player:active,card:attacker.name});
   resolveCardTrigger(attacker,active,"attack");
   if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN){
+    pendingAttack.awaitingResponse=true;
     gameSocket.send(JSON.stringify({type:"operation",action:"attack_declared",cardId:attacker.id,targetCardId:defender?.id||null}));
-  }else{
-    debugLog("防御側の罠効果を確認","effect","info",{player:nonActive,trigger:"opponentAttack"});
-    resolveTrapTriggers(nonActive,"opponentAttack",attacker);
-    if(defender){debugLog("防御側モンスターの効果を確認","effect","info",{player:nonActive,card:defender.name});resolveCardTrigger(defender,nonActive,"attack")}
+    log("攻撃時の相手の効果を処理しています…");
+    render();return;
   }
+  debugLog("防御側の罠効果を確認","effect","info",{player:nonActive,trigger:"opponentAttack"});
+  resolveTrapTriggers(nonActive,"opponentAttack",attacker);
+  if(defender){debugLog("防御側モンスターの効果を確認","effect","info",{player:nonActive,card:defender.name});resolveCardTrigger(defender,nonActive,"attack")}
+  applyPendingAttackDamage(attacker,defender);
+}
+function applyPendingAttackDamage(attacker,defender){
+  if(!pendingAttack||!attacker)return;
   const attack=attacker.nextAttackDamage===0?0:(attacker.combatPowerUsesOpponent&&defender?attackPower(defender):attackPower(attacker));
   debugLog("戦闘ダメージを計算","combat","info",{attacker:attacker.name,attackerPower:attack,defender:defender?.name||"プレイヤー",defenderPower:defender?attackPower(defender):null});
   if(defender&&state.players[2].monsters.some(c=>c.id===defender.id)){
@@ -1463,9 +1474,9 @@ function resolveAttack(targetMonsterId){
     attacker.damage=(Number(attacker.damage)||0)+counter;
     defender.damage=(Number(defender.damage)||0)+defenderDamage;
     log("「"+attacker.name+"」と「"+defender.name+"」が戦闘。"+attacker.name+"は"+counter+"ダメージ、"+defender.name+"は"+defenderDamage+"ダメージを受けました");
-    if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN){gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",target:"ownMonsterDamage",cardId:attacker.id,delta:counter}));gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",target:"opponentMonsterDamage",cardId:defender.id,delta:attack}))}
+    if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN){gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",target:"ownMonsterDamage",cardId:attacker.id,delta:counter}));gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",target:"opponentMonsterDamage",cardId:defender.id,delta:defenderDamage}))}
     checkMonsterDestruction(1);checkMonsterDestruction(2);
-  }else if(!targetMonsterId){
+  }else if(!pendingAttack.targetMonsterId){
     const playerDamage=reduceIncomingDamage(state.players[2],attack);
     state.players[2].life-=playerDamage;
     log(state.players[2].name+"は「"+attacker.name+"」の直接攻撃で"+playerDamage+"ダメージを受けました");
