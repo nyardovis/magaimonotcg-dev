@@ -1032,7 +1032,9 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  for(const m of s.matchAll(/これを\s*([＋+\-−])\s*(\d+)/g)){
   if(sourceCard){const delta=(m[1]==="-"||m[1]==="−"?-1:1)*Number(m[2]);const base=Number(sourceCard.power)||Number(cardDefinition(sourceCard)?.power)||0;sourceCard.modification=Math.max(-base,(Number(sourceCard.modification)||0)+delta);handled=true}
  }
- const ownBuff=s.match(/自分のモンスター(?:全て|1体|1体まで)を\s*\+(\d+)/);
+ const dualTagAllBuff=s.match(/自分の\[([^\]]+)\]と\[([^\]]+)\]全てを\s*\+(\d+)/);
+  if(dualTagAllBuff){const tags=[dualTagAllBuff[1],dualTagAllBuff[2]],targets=own.monsters.filter(mon=>tags.some(tag=>String(cardDefinition(mon)?.types||"").includes(tag)));targets.forEach(mon=>mon.modification=(Number(mon.modification)||0)+Number(dualTagAllBuff[3]));if(targets.length)handled=true}
+  const ownBuff=s.match(/自分のモンスター(?:全て|1体|1体まで)を\s*\+(\d+)/);
  if(ownBuff){const targets=/全て/.test(s)?own.monsters:[chooseEffectTarget(own.monsters,"パワーを上げる自分のモンスターを選択してください",p,sourceCard)].filter(Boolean);targets.forEach(mon=>{mon.modification=(mon.modification||0)+Number(ownBuff[1])});if(targets.length)handled=true}
  /* Counter, formula, and tagged-monster effects. */
  const multiTaggedAllBuff=s.match(/自分の\[([^\]]+)\](?:と|か)\[([^\]]+)\]全てを\s*\+(\d+)/);
