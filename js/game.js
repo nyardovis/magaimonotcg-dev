@@ -729,6 +729,7 @@ function resolveCardTrigger(card,p,trigger){
 }
 function activateCardAbility(cardId,abilityIndex){
   if(state.phase!=="playing"||state.pendingDiscardPlayer!==null)return;
+  if(state.turnPlayer!==1)return log("相手のターン中はカードの能力を使用できません");
   const selected=state.selected;
   if(!selected||selected.p!==1||!["monsters","energy","field","facedown","discard"].includes(selected.z))return;
   const card=find(1,selected.z,cardId);if(!card)return;
@@ -1465,7 +1466,9 @@ function resolveTurnTriggers(p,when){
  resolveTrapTriggers(p,when);
 }
 function playCardFromHand(cardId){
- if(state.phase!=="playing"||state.pendingDiscardPlayer!==null)return;const x=state.players[1],idx=x.hand.findIndex(c=>c.id===cardId);if(idx<0)return;
+ if(state.phase!=="playing"||state.pendingDiscardPlayer!==null)return;
+ if(state.turnPlayer!==1)return log("相手のターン中はカードを使用できません");
+ const x=state.players[1],idx=x.hand.findIndex(c=>c.id===cardId);if(idx<0)return;
  const card=x.hand[idx],kind=cardKind(card),cost=effectiveCardCost(card,1),effect=String(cardDefinition(card)?.effect_text||"");
  if(effect.includes("これは使わずに場に出せない"))return log("このカードは通常の手札使用では場に出せません");
   if(/自分のデッキが縦向きの時使用できず場に出せない/.test(effect)&&!x.deckHorizontal)return log("自分のデッキが横向きの時だけ使用できます");
