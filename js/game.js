@@ -1156,18 +1156,49 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   const target=[...own.monsters,...opp.monsters].find(mon=>mon.id!==sourceCard?.id&&!mon.effectsDisabled);
   if(target){if(disableCardEffects(target)){const targetOwner=own.monsters.some(mon=>mon.id===target.id)?p:(p===1?2:1);if(targetOwner!==p&&onlinePlayerId)broadcastEffectDelta({target:"opponentDisable",cardId:target.id});handled=true;log("「"+target.name+"」の効果を無効にしました")}else log("「"+target.name+"」は効果を消されません")}
  }
- const useSpellFromDeck=s.match(/自分のデッキから(?:(\d+)コスト以下の)?(?:\[([^\]]+)\]の)?魔法1枚までを使用する/);
- if(useSpellFromDeck){
-  const maxCost=useSpellFromDeck[1]===undefined?Infinity:Number(useSpellFromDeck[1]),tag=useSpellFromDeck[2]||"";
-  const eligible=own.deck.filter(card=>cardKind(card)==="spell"&&cardCost(card)<=maxCost&&(!tag||String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)));
-  const spell=chooseEffectTarget(eligible,"使用する魔法を山札から選んでください",p,sourceCard);
-  if(spell){
-   const index=own.deck.findIndex(card=>card.id===spell.id);
-   if(index>=0){own.deck.splice(index,1);resetGrantedCardInformation(spell);moveToDiscard(p,spell,"効果による魔法の使用（コスト不要）");
-    log(own.name+"は効果でデッキから魔法「"+spell.name+"」をコストなしで使用しました");resolveCardTrigger(spell,p,"spell");
-    if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentSpell",spell);handled=true;
+ /* 「使用する」は効果による使用なので、通常のエネルギーコストを支払わない。対象の種類に応じて使用処理を共通化する。 */
+ const genericUse=s.match(/自分の(デッキか捨て札|デッキ|捨て札|手札)から(?:(\d+|[（(]自分のマナの数[）)])コスト以下の)?(?:名前に「([^」]+)」を含む)?(?:「([^」]+)」以外の)?(?:「([^」]+)」)?(?:\[([^\]]+)\](?:の)?)?(モンスター|魔法|罠|フィールド|エネルギー)?(\d+)(枚|体)までを使用する/);
+ const topCardUse=s.match(/自分のデッキの上(\d+)枚を公開し、(?:それが([^、]+)なら、)?(?:それ)?1枚までを使用する/);
+ if(genericUse||topCardUse){
+  const zoneName=genericUse?genericUse[1]:"デッキ",sourceZone=zoneName==="デッキか捨て札"?"both":zoneName==="デッキ"?"deck":zoneName==="捨て札"?"discard":"hand";
+  const costText=genericUse?genericUse[2]:null,maxCost=costText===null?Infinity:costText.includes("自分のマナ")?(Number(own.energyPool)||0):Number(costText);
+  const namePart=genericUse?(genericUse[3]||""):"",excludedName=genericUse?(genericUse[4]||""):"",exactName=genericUse?(genericUse[5]||""):"",tag=genericUse?(genericUse[6]||""):"",kindWord=genericUse?(genericUse[7]||""):"",max=topCardUse?1:Number(genericUse[8]);
+  const kindByWord={モンスター:"monster",魔法:"spell",罠:"trap",フィールド:"field",エネルギー:"energy"};
+  const source=sourceZone==="both"?(effectCannotChooseZone(p,"discard")?[...own.deck]:[...own.deck,...own.discard]):sourceZone==="discard"&&effectCannotChooseZone(p,"discard")?[]:own[sourceZone];
+  if(topCardUse&&source[0]){source[0].faceUp=true;source[0].revealed=true;log("山札の一番上を公開しました: "+source[0].name)}
+  const topCondition=topCardUse?(topCardUse[2]&&topCardUse[2].includes("5コスト以下")?5:Infinity):Infinity;
+  for(let n=0;n<max;n++){
+   const eligible=source.filter((card,index)=>(!topCardUse||index===0)&&cardCost(card)<=maxCost&&(!topCardUse||cardCost(card)<=topCondition||!cardDefinition(card)?.cost)&&(!namePart||String(card.name||"").includes(namePart))&&(!exactName||String(card.name||"")===exactName)&&(!excludedName||String(card.name||"")!==excludedName)&&(!tag||String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag))&&(!kindByWord[kindWord]||cardKind(card)===kindByWord[kindWord])&&cardKind(card)!=="unknown");
+   const chosen=chooseEffectTarget(eligible,"効果で使用するカードを"+zoneName+"から選んでください",p,sourceCard);
+   if(!chosen)break;
+   const sourceArray=[own.deck,own.discard,own.hand].find(list=>list.some(card=>card.id===chosen.id));if(!sourceArray)break;
+   const idx=sourceArray.findIndex(card=>card.id===chosen.id);if(idx<0)break;
+   const used=sourceArray.splice(idx,1)[0],kind=cardKind(used);
+   if(topCardUse)s=s.replace(/異なるなら、自分は1枚引く/,"");
+   resetGrantedCardInformation(used);used.faceUp=true;used.revealed=false;used.tapped=false;
+   if(kind==="spell"){
+    moveToDiscard(p,used,"効果による魔法の使用（コスト不要）");
+    resolveCardTrigger(used,p,"spell");
+    if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentSpell",used);
+   }else if(kind==="monster"){
+    if(own.monsters.length>=MAX.monsters){sourceArray.push(used);log("モンスターゾーンが満杯のため使用できません");break}
+    used.power=Number(cardDefinition(used)?.power)||used.power||0;used.damage=0;used.modification=0;used.summonedThisTurn=true;
+    used.canAttackOnSummon=String(cardDefinition(used)?.effect_text||"").includes("場に出たターンでも攻撃できる");own.monsters.push(used);
+    resolveCardTrigger(used,p,"enter");resolveTrapTriggers(p,"ownEnter",used);
+    if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentEnter",used);
+   }else if(kind==="field"){
+    if(own.field.length)moveToDiscard(p,own.field.shift(),"効果によるフィールド置換");
+    own.field.push(used);resolveCardTrigger(used,p,"enter");
+   }else if(kind==="trap"){
+    if(own.facedown.length>=MAX.facedown){sourceArray.push(used);log("罠ゾーンが満杯のため使用できません");break}
+    used.faceUp=false;own.facedown.push(used);
+   }else if(kind==="energy"){
+    if(own.energy.length>=MAX.energy){sourceArray.push(used);log("エネルギーゾーンが満杯のため使用できません");break}
+    own.energy.push(used);resolveCardTrigger(used,p,"enter");
    }
-  }else log("条件に合う魔法がデッキにありません");
+   handled=true;log(own.name+"は効果で"+zoneName+"から「"+used.name+"」をコストなしで使用しました");
+  }
+  if(!handled)log("使用条件に合うカードが"+zoneName+"にありません");
  }
  const energyFromDeckEffect=s.match(/自分のデッキから(?:(?:「([^」]+)」)の)?(?:\[([^\]]+)\]の)?エネルギー(\d+)枚までをタップして出す/);
  if(energyFromDeckEffect){
