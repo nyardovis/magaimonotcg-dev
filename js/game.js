@@ -1046,6 +1046,9 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
    handled=true;log("誤射の効果で「"+spared.name+"」以外のモンスターを破壊しました");
   }
  }
+ /* Dynamic draw counts based on the number of traps in play. */
+ const trapCountDraw=s.match(/自分は\s*[（(]罠全ての数[）)]\s*枚引く/);
+ if(trapCountDraw){const count=own.facedown.length+opp.facedown.length;if(count>0)drawEffectCards(p,count);handled=true;log("場の罠の数（"+count+"枚）に応じてカードを引きます");}
  /* Destroy all opponent traps (face-down zone cards). */
  if(/相手の罠全てを破壊する|相手の罠を全て破壊する/.test(s)){
   const traps=[...opp.facedown];
@@ -1055,6 +1058,13 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
    if(onlinePlayerId)broadcastEffectDelta({target:"opponentCardCounter",cardId:trap.id,zone:"facedown"});
   }
   handled=true;log("相手の罠を"+traps.length+"枚破壊しました");
+ }
+ if(/罠全てを破壊する|罠を全て破壊する/.test(s)&&!/(?:相手の|自分の)罠/.test(s)){
+  for(const owner of [p,p===1?2:1]){
+   const player=state.players[owner],traps=[...player.facedown];
+   for(const trap of traps){player.facedown=player.facedown.filter(card=>card.id!==trap.id);moveToDiscard(owner,trap,"効果による罠の破壊");if(onlinePlayerId&&owner!==p)broadcastEffectDelta({target:"opponentCardCounter",cardId:trap.id,zone:"facedown"});}
+  }
+  handled=true;log("場の罠をすべて破壊しました");
  }
  if(/自分の罠全てを破壊する|自分の罠を全て破壊する/.test(s)){
   const traps=[...own.facedown];
