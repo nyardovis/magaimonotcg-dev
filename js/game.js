@@ -1273,7 +1273,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
     summonedCard.tapped=false;summonedCard.faceUp=true;summonedCard.damage=0;summonedCard.modification=0;summonedCard.counters=0;
     summonedCard.summonedThisTurn=true;summonedCard.canAttackOnSummon=String(cardDefinition(summonedCard)?.effect_text||"").includes("場に出たターンでも攻撃できる");
     own.monsters.push(summonedCard);summoned++;
-    if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",target:"ownSummonFromDiscard",cardId:summonedCard.id}));
+    if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"move_card",zone:"discard",dest:"monsters",cardId:summonedCard.id}));
     log("効果で捨て札から「"+summonedCard.name+"」を場に出しました");
     resolveCardTrigger(summonedCard,p,"enter");
    }
