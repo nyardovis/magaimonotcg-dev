@@ -1224,7 +1224,7 @@ const opponentTap=s.match(/相手のモンスター1体をタップする/);
   handled=true;log(scope+"モンスター全てのパワーを"+(delta>0?"+":"")+delta+"変更しました");
  }
  const anyEffectsAll=/(?:相手の|自分の|お互いの)?モンスター全ての効果を消す/.test(s);
-  if(anyEffectsAll){const scope=(s.match(/(?:相手の|自分の|お互いの)?モンスター全ての効果を消す/)||[])[0]||"相手のモンスター全ての効果を消す";const owners=scope.startsWith("お互い")?[p,p===1?2:1]:scope.startsWith("自分")?[p]:[p===1?2:1];for(const owner of owners)state.players[owner].monsters.forEach(mon=>{if(disableCardEffects(mon)&&onlinePlayerId&&owner!==p)broadcastEffectDelta({target:"opponentDisable",cardId:mon.id})});handled=true}
+  if(anyEffectsAll){const scope=(s.match(/(?:相手の|自分の|お互いの)?モンスター全ての効果を消す/)||[])[0]||"相手のモンスター全ての効果を消す";const owners=scope.startsWith("お互い")||scope==="モンスター全ての効果を消す"?[1,2]:scope.startsWith("自分")?[p]:[p===1?2:1];for(const owner of owners)state.players[owner].monsters.forEach(mon=>{if(disableCardEffects(mon)&&onlinePlayerId&&owner!==p)broadcastEffectDelta({target:"opponentDisable",cardId:mon.id})});handled=true}
   const enemyEffectsAll=/相手のモンスター全ての効果を消す/.test(s);
  if(enemyEffectsAll){
   opp.monsters.forEach(mon=>{if(disableCardEffects(mon)&&onlinePlayerId)broadcastEffectDelta({target:"opponentDisable",cardId:mon.id})});
