@@ -1243,6 +1243,43 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   }
   if(!handled)log("使用条件に合うカードが"+zoneName+"にありません");
  }
+ /* General graveyard-to-field summon: supports name, tag, cost, power, and multi-card limits. */
+ const graveSummon=s.match(/自分の捨て札から(?:(?:「([^」]+)」)(以外の)?|名前に「([^」]+)」を含む)?(?:(\d+)コスト以下の)?(?:(\d+)パワー以下の)?(?:\[([^\]]+)\])?(?:の)?(モンスター|体)?(\d+)体?(?:まで)?を出す/);
+ if(graveSummon){
+  const excludedName=graveSummon[1]&&graveSummon[2]?graveSummon[1]:null;
+  const requiredName=graveSummon[3]||(graveSummon[1]&&!excludedName?graveSummon[1]:null);
+  const maxCost=graveSummon[4]!==undefined?Number(graveSummon[4]):null;
+  const maxPower=graveSummon[5]!==undefined?Number(graveSummon[5]):null;
+  const tagText=graveSummon[6]||"";
+  const maxCount=Math.max(1,Number(graveSummon[8])||1);
+  if(effectCannotChooseZone(p,"discard")){log("効果により捨て札を対象に選べないため、捨て札からの召喚はできません")}
+  else{
+   let summoned=0;
+   for(let n=0;n<maxCount&&own.monsters.length<MAX.monsters;n++){
+    const eligible=own.discard.filter(card=>{
+     if(cardKind(card)!=="monster")return false;
+     const def=cardDefinition(card)||{},name=String(card.name||""),types=String(def.types||"").split(/[,、]/).map(v=>v.trim());
+     if(excludedName&&name.includes(excludedName))return false;
+     if(requiredName&&!name.includes(requiredName))return false;
+     if(maxCost!==null&&cardCost(card)>maxCost)return false;
+     if(maxPower!==null&&(Number(def.power)||0)>maxPower)return false;
+     if(tagText&&!tagText.split(/[,、]/).map(v=>v.trim()).every(tag=>types.includes(tag)))return false;
+     return true;
+    });
+    const chosen=chooseEffectTarget(eligible,"場に出すモンスターを捨て札から選択してください（"+(n+1)+"/"+maxCount+"）",p,sourceCard);
+    if(!chosen)break;
+    const index=own.discard.findIndex(card=>card.id===chosen.id);if(index<0)break;
+    const summonedCard=own.discard.splice(index,1)[0];resetGrantedCardInformation(summonedCard);
+    summonedCard.tapped=false;summonedCard.faceUp=true;summonedCard.damage=0;summonedCard.modification=0;summonedCard.counters=0;
+    summonedCard.summonedThisTurn=true;summonedCard.canAttackOnSummon=String(cardDefinition(summonedCard)?.effect_text||"").includes("場に出たターンでも攻撃できる");
+    own.monsters.push(summonedCard);summoned++;
+    if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",target:"ownSummonFromDiscard",cardId:summonedCard.id}));
+    log("効果で捨て札から「"+summonedCard.name+"」を場に出しました");
+    resolveCardTrigger(summonedCard,p,"enter");
+   }
+   if(summoned){handled=true;log("捨て札から"+summoned+"体を場に出しました")}
+  }
+ }
  const energyFromDeckEffect=s.match(/自分のデッキから(?:(?:「([^」]+)」)の)?(?:\[([^\]]+)\]の)?エネルギー(\d+)枚までをタップして出す/);
  if(energyFromDeckEffect){
   const namePart=energyFromDeckEffect[1]||"",tag=energyFromDeckEffect[2]||"",max=Number(energyFromDeckEffect[3]);
