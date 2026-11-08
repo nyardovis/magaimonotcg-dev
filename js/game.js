@@ -1189,7 +1189,7 @@ const opponentTap=s.match(/相手のモンスター1体をタップする/);
  const formulaOwnTagBuff=s.match(/これを\s*[＋+]\s*[（(]自分の場の\[([^\]]+)\]の数\s*[×x*]\s*(\d+)\s*[）)]/);
  if(formulaOwnTagBuff&&sourceCard){const amount=countTag([...own.monsters,...own.energy,...own.field],formulaOwnTagBuff[1])*Number(formulaOwnTagBuff[2]);sourceCard.modification=(Number(sourceCard.modification)||0)+amount;handled=true;log("場の["+formulaOwnTagBuff[1]+"]の数に応じて「"+sourceCard.name+"」を+"+amount)}
  const isKingdomArcher=cardDefinition(sourceCard)?.id==="card_0079";
- const formulaMonsterPowerDamage=s.match(/相手のモンスター\\s*1体に\\s*[（(]これのパワー[）)]\\s*ダメージ/);
+ const formulaMonsterPowerDamage=s.match(/相手のモンスター\s*1体に\s*[（(]これのパワー[）)]\s*ダメージ/);
  if((formulaMonsterPowerDamage||isKingdomArcher)&&sourceCard){
   const target=chooseEffectTarget(opp.monsters,"ダメージを与える相手モンスターを選択してください",p,sourceCard);
   if(target){
@@ -1429,7 +1429,7 @@ function declareAttack(cardId){
   const card=state.players[1].monsters.find(c=>c.id===cardId);if(!card)return;
   if(card.tapped)return log("タップしているモンスターは攻撃できません");
   if((Number(card.attacksThisTurn)||0)>=(Number(card.attacksPerTurn)||1))return log("このモンスターはこのターンに攻撃できる回数を使い切っています");
-  if(card.cannotAttack||card.cannotAttackUntilTurnEnd||card.cannotAttackUntilPlayerTurnEnd!==undefined||/(?:^|。)\\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(String(cardDefinition(card)?.effect_text||"")))return log("このモンスターは効果により攻撃できません");
+  if(card.cannotAttack||card.cannotAttackUntilTurnEnd||card.cannotAttackUntilPlayerTurnEnd!==undefined||/(?:^|。)\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(String(cardDefinition(card)?.effect_text||"")))return log("このモンスターは効果により攻撃できません");
   if(card.summonedThisTurn&&!card.canAttackOnSummon&&!String(cardDefinition(card)?.effect_text||"").includes("場に出たターンでも攻撃できる"))return log("このターンに場に出たモンスターは攻撃できません");
   pendingAttack={cardId:card.id,name:card.name};state.selected={p:1,z:"monsters",id:card.id};
   log("「"+card.name+"」の攻撃を宣言しました。相手のモンスターかプレイヤー名をクリックして対象を選んでください");
@@ -1444,7 +1444,7 @@ function resolveAttack(targetMonsterId){
   if(targetMonsterId&&!defender)return;
   const forcedTargets=state.players[2].monsters.filter(c=>c.mustBeAttacked||String(cardDefinition(c)?.effect_text||"").includes("相手のモンスターはこれにしか攻撃できない"));
   if(forcedTargets.length&&(!defender||!forcedTargets.some(c=>c.id===defender.id))){log("相手の効果により、指定されたモンスターにしか攻撃できません");return}
-  if(defender&&(defender.cannotBeAttacked||(!defender.tapped&&(defender.cannotBeAttackedWhileUntapped||/アンタップ中は攻撃されない/.test(String(cardDefinition(defender)?.effect_text||""))))||/(?:^|。)\\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(String(cardDefinition(defender)?.effect_text||"")))){log("そのモンスターは攻撃されません");return}
+  if(defender&&(defender.cannotBeAttacked||(!defender.tapped&&(defender.cannotBeAttackedWhileUntapped||/アンタップ中は攻撃されない/.test(String(cardDefinition(defender)?.effect_text||""))))||/(?:^|。)\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(String(cardDefinition(defender)?.effect_text||"")))){log("そのモンスターは攻撃されません");return}
   if(!targetMonsterId&&state.players[2].opponentMonstersCannotAttackPlayer){log("相手の効果によりプレイヤーへの攻撃が禁止されています");return}
   const maxAttacks=Math.max(1,Number(attacker.attacksPerTurn)||1);
   const attackNumber=(Number(attacker.attacksThisTurn)||0)+1;
