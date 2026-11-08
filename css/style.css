@@ -178,3 +178,5 @@
 .debug-log-detail{max-height:20vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#111419;border:1px solid #424852;border-radius:4px;padding:7px;font-size:10px;color:#dce2eb}
 .side-tabs{gap:3px!important}
 .side-tabs .side-tab{font-size:10px!important;padding:5px 3px!important}
+
+.card.effect-targetable{outline:3px solid #f3c85b;outline-offset:2px;cursor:crosshair;filter:brightness(1.12)}
