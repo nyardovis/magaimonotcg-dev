@@ -1188,16 +1188,22 @@ const opponentTap=s.match(/相手のモンスター1体をタップする/);
  if(formulaCounterDraw){drawEffectCards(p,counterCount);handled=true;log("カウンター数に応じて"+counterCount+"枚引きます")}
  const formulaOwnTagBuff=s.match(/これを\s*[＋+]\s*[（(]自分の場の\[([^\]]+)\]の数\s*[×x*]\s*(\d+)\s*[）)]/);
  if(formulaOwnTagBuff&&sourceCard){const amount=countTag([...own.monsters,...own.energy,...own.field],formulaOwnTagBuff[1])*Number(formulaOwnTagBuff[2]);sourceCard.modification=(Number(sourceCard.modification)||0)+amount;handled=true;log("場の["+formulaOwnTagBuff[1]+"]の数に応じて「"+sourceCard.name+"」を+"+amount)}
- const formulaMonsterPowerDamage=s.match(/相手のモンスター1体に\s*[（(]これのパワー[）)]\s*ダメージ/);
- if(formulaMonsterPowerDamage&&sourceCard){
+ const isKingdomArcher=cardDefinition(sourceCard)?.id==="card_0079";
+ const formulaMonsterPowerDamage=s.match(/相手のモンスター\\s*1体に\\s*[（(]これのパワー[）)]\\s*ダメージ/);
+ if((formulaMonsterPowerDamage||isKingdomArcher)&&sourceCard){
   const target=chooseEffectTarget(opp.monsters,"ダメージを与える相手モンスターを選択してください",p,sourceCard);
   if(target){
+   const targetOwner=p===1?2:1;
    const amount=attackPower(sourceCard);
    target.damage=(Number(target.damage)||0)+amount;
    if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:amount});
-   checkMonsterDestruction(p===1?2:1,true);
+   checkMonsterDestruction(targetOwner,true);
    handled=true;
    log("「"+sourceCard.name+"」の効果で相手の「"+target.name+"」に"+amount+"ダメージ");
+  }else if(isKingdomArcher){
+   // The activated ability was recognized; canceling target selection is not an unsupported effect.
+   handled=true;
+   log("王国の弓騎士の効果は対象が選択されなかったため中断しました");
   }
  }
  const formulaKnightCountDamage=s.match(/相手のモンスター1体に\s*[（(]自分のモンスターの数\s*[×x*]\s*(\d+)\s*[）)]\s*ダメージ/);
