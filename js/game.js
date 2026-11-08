@@ -11,6 +11,7 @@ let devLocalMode=false;
 let devToolsOpenDuringMulligan=false;
 let cardChoiceHiddenFor=null;
 let pendingAttack=null;
+let pendingEffectTarget=null;
 let rematchStateResetPending=false;
 
 function getPublicState(){
@@ -492,10 +493,11 @@ function cardEl(p,z,c,visible){
   const e=document.createElement("div");
   e.className="card zone-"+z+(c.tapped?" tapped":"")+(state.selected?.id===c.id?" selected":"");if(c.tapped){e.style.transformOrigin="center center";e.style.transform="rotate(-15deg)"}
   if(!visible||c.faceUp===false)e.classList.add("back");
-  else{e.appendChild(createCardFace(c.name,z==="energy"?"horizontal":"portrait"));const def=cardDefinition(c);if(z!=="energy"&&def&&def.cost!==undefined&&def.cost!==null&&String(def.cost).trim()!==""){const cost=document.createElement("span");cost.className="card-cost";cost.textContent=String(def.cost);e.appendChild(cost)}if(z==="monsters"){const power=document.createElement("span");power.className="monster-power";const adjustment=(Number(c.modification)||0)-(Number(c.damage)||0);power.textContent=String(attackPower(c))+(adjustment?" ("+(adjustment>0?"+":"")+adjustment+")":"");e.appendChild(power)}if(c.counters)e.insertAdjacentHTML("beforeend",'<span class="counter">' +c.counters+"</span>")}
+  else{e.appendChild(createCardFace(c.name,z==="energy"?"horizontal":"portrait"));const def=cardDefinition(c);if(z!=="energy"&&def&&def.cost!==undefined&&def.cost!==null&&String(def.cost).trim()!==""){const cost=document.createElement("span");cost.className="card-cost";cost.textContent=String(def.cost);e.appendChild(cost)}if(z==="monsters"){const power=document.createElement("span");power.className="monster-power";power.textContent=String(Math.max(0,attackPower(c)-(Number(c.damage)||0)));e.appendChild(power)}if(c.counters)e.insertAdjacentHTML("beforeend",'<span class="counter">' +c.counters+"</span>")}
   if(c.revealed){const mark=document.createElement("span");mark.className="revealed-marker";mark.textContent="!";e.appendChild(mark)}
   e.dataset.player=String(p);e.dataset.zone=z;e.dataset.cardId=c.id;
   if(state.pendingDiscardPlayer!==null){if(state.pendingDiscardPlayer===1&&p===1&&z==="hand")e.onclick=()=>completePendingDiscard(1,c.id);else e.onclick=null}
+  else if(pendingEffectTarget){if(p===2&&z==="monsters"){e.classList.add("effect-targetable");e.onclick=()=>resolvePendingEffectTarget(c.id)}else e.onclick=null}
   else if(pendingAttack&&p===2&&z==="monsters")e.onclick=()=>resolveAttack(c.id)
   else if(p===1&&z==="energy")e.onclick=()=>{state.selected={p,z,id:c.id};if(!c.tapped){c.tapped=true;state.players[1].energyPool=(state.players[1].energyPool||0)+1;broadcastEnergyPool();log("エネルギー「"+c.name+"」をタップしました（使用可能エネルギー +1）")}render()}
   else e.onclick=()=>select(p,z,c.id);
@@ -756,9 +758,29 @@ function activateCardAbility(cardId,abilityIndex){
     log("未対応の能力コストです："+(ability.costToken||"不明"));return;
   }
   log("「"+card.name+"」の能力を使用"+(ability.costKind==="energy"?"（コスト"+(ability.costValue||0)+"）":"（コスト："+(ability.costToken||"不明")+"）"));
+  if(cardDefinition(card)?.id==="card_0079"&&/相手のモンスター\\s*1体に\\s*[（(]これのパワー[）)]\\s*ダメージ/.test(ability.body)){
+    pendingEffectTarget={sourceCard:card};
+    log("ダメージを与える相手モンスターを盤面からクリックしてください");
+    render();
+    return;
+  }
   resolveEffectText(ability.body,1,card);
   checkMonsterDestruction(1);
   state.selected={p:1,z:selected.z,id:card.id};render();
+}
+function resolvePendingEffectTarget(cardId){
+ if(!pendingEffectTarget)return;
+ const target=state.players[2].monsters.find(card=>card.id===cardId);
+ if(!target)return;
+ const sourceCard=pendingEffectTarget.sourceCard;
+ const amount=attackPower(sourceCard);
+ target.damage=(Number(target.damage)||0)+amount;
+ if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:amount});
+ pendingEffectTarget=null;
+ checkMonsterDestruction(2,true);
+ log("「"+sourceCard.name+"」の効果で相手の「"+target.name+"」に"+amount+"ダメージ");
+ state.selected={p:1,z:"monsters",id:sourceCard.id};
+ render();
 }
 function resolveSummonEffects(text,p,sourceCard){
  const own=state.players[p],sourcePattern=/自分の(手札かデッキか捨て札|手札かデッキ|デッキか捨て札|手札か捨て札|手札|デッキ|捨て札)から([\s\S]*?)(\d+)(体|枚)(?:まで)?(?:を場に|を)出す/g;
