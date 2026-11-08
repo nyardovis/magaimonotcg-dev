@@ -1324,6 +1324,23 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   if(targets.length)handled=true;
  }
 
+ // 王国の弓騎士: タップ能力で相手モンスター1体に自身のパワー分のダメージ。
+ const kingdomArcherDamage=cardDefinition(sourceCard)?.id==="card_0079"
+  &&/相手のモンスター\s*1体に\s*[（(]これのパワー[）)]\s*ダメージ/.test(s);
+ if(kingdomArcherDamage){
+  const target=chooseEffectTarget(opp.monsters,"ダメージを与える相手モンスターを選択してください",p,sourceCard);
+  if(target){
+   const amount=attackPower(sourceCard);
+   target.damage=(Number(target.damage)||0)+amount;
+   if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:amount});
+   checkMonsterDestruction(p===1?2:1,true);
+   handled=true;
+   log("「"+sourceCard.name+"」の効果で相手の「"+target.name+"」に"+amount+"ダメージ");
+  }else{
+   handled=true;
+   log("王国の弓騎士の効果は対象が選択されなかったため中断しました");
+  }
+ }
  if(!handled)log("未対応の効果（手動で処理してください）: "+s.slice(0,90));
 }
 function resolveEffectText(text,p,sourceCard,eventCard=null){
@@ -1349,7 +1366,7 @@ function declareAttack(cardId){
   const card=state.players[1].monsters.find(c=>c.id===cardId);if(!card)return;
   if(card.tapped)return log("タップしているモンスターは攻撃できません");
   if((Number(card.attacksThisTurn)||0)>=(Number(card.attacksPerTurn)||1))return log("このモンスターはこのターンに攻撃できる回数を使い切っています");
-  if(card.cannotAttack||card.cannotAttackUntilTurnEnd||card.cannotAttackUntilPlayerTurnEnd!==undefined||/(?:^|。)\\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(String(cardDefinition(card)?.effect_text||"")))return log("このモンスターは効果により攻撃できません");
+  if(card.cannotAttack||card.cannotAttackUntilTurnEnd||card.cannotAttackUntilPlayerTurnEnd!==undefined||/(?:^|。)\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(String(cardDefinition(card)?.effect_text||"")))return log("このモンスターは効果により攻撃できません");
   if(card.summonedThisTurn&&!card.canAttackOnSummon&&!String(cardDefinition(card)?.effect_text||"").includes("場に出たターンでも攻撃できる"))return log("このターンに場に出たモンスターは攻撃できません");
   pendingAttack={cardId:card.id,name:card.name};state.selected={p:1,z:"monsters",id:card.id};
   log("「"+card.name+"」の攻撃を宣言しました。相手のモンスターかプレイヤー名をクリックして対象を選んでください");
