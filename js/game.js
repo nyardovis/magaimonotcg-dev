@@ -1324,6 +1324,23 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   if(targets.length)handled=true;
  }
 
+ // 王国の弓騎士: タップ能力で相手モンスター1体に自身のパワー分のダメージ。
+ const kingdomArcherDamage=cardDefinition(sourceCard)?.id==="card_0079"
+  &&/相手のモンスター\\s*1体に\\s*[（(]これのパワー[）)]\\s*ダメージ/.test(s);
+ if(kingdomArcherDamage){
+  const target=chooseEffectTarget(opp.monsters,"ダメージを与える相手モンスターを選択してください",p,sourceCard);
+  if(target){
+   const amount=attackPower(sourceCard);
+   target.damage=(Number(target.damage)||0)+amount;
+   if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:amount});
+   checkMonsterDestruction(p===1?2:1,true);
+   handled=true;
+   log("「"+sourceCard.name+"」の効果で相手の「"+target.name+"」に"+amount+"ダメージ");
+  }else{
+   handled=true;
+   log("王国の弓騎士の効果は対象が選択されなかったため中断しました");
+  }
+ }
  if(!handled)log("未対応の効果（手動で処理してください）: "+s.slice(0,90));
 }
 function resolveEffectText(text,p,sourceCard,eventCard=null){
