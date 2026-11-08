@@ -88,12 +88,12 @@ function resetMatchState(phase="waiting"){
   state.turnPlayer=1;state.selected=null;state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;
   state.gameOver=null;state.phase=phase;state.mulligan={1:{count:0,done:false},2:{count:0,done:false}};
   state.deckInspectId=null;state.discardInspectId=null;state.discardInspectPlayer=1;state.deckInspectPlayer=1;
-  state._previousOpponentMonsters=[];pendingAttack=null;rematchRequested=false;lastPublicState=null;hasReceivedOpponentPublicState=false;
+  state._previousOpponentMonsters=[];pendingAttack=null;pendingEffectTarget=null;rematchRequested=false;lastPublicState=null;hasReceivedOpponentPublicState=false;
 }
 function resetToPreparation(message=""){
   if(gameSocket){gameSocket.onclose=null;try{gameSocket.close()}catch{}gameSocket=null}
   const savedName=state.players[1]?.name||"プレイヤー1";
-  onlinePlayerId=null;roomPlayerCount=0;currentRoom="";preparationCompleted=false;lastPublicState=null;hasReceivedOpponentPublicState=false;applyingPublicState=false;devLocalMode=false;pendingAttack=null;rematchRequested=false;
+  onlinePlayerId=null;roomPlayerCount=0;currentRoom="";preparationCompleted=false;lastPublicState=null;hasReceivedOpponentPublicState=false;applyingPublicState=false;devLocalMode=false;pendingAttack=null;pendingEffectTarget=null;rematchRequested=false;
   state.players[1]=buildFreshPlayer(savedName,"p1");state.players[2]=newPlayer("プレイヤー2","p2");
   state.turnPlayer=1;state.selected=null;state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.gameOver=null;state.phase="waiting";state.mulligan={1:{count:0,done:false},2:{count:0,done:false}};
   state.deckInspectId=null;state.discardInspectId=null;state.discardInspectPlayer=1;state.deckInspectPlayer=1;state._previousOpponentMonsters=[];cardChoiceHiddenFor=null;devToolsOpenDuringMulligan=false;
