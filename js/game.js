@@ -497,7 +497,7 @@ function cardEl(p,z,c,visible){
   if(c.revealed){const mark=document.createElement("span");mark.className="revealed-marker";mark.textContent="!";e.appendChild(mark)}
   e.dataset.player=String(p);e.dataset.zone=z;e.dataset.cardId=c.id;
   if(state.pendingDiscardPlayer!==null){if(state.pendingDiscardPlayer===1&&p===1&&z==="hand")e.onclick=()=>completePendingDiscard(1,c.id);else e.onclick=null}
-  else if(pendingEffectTarget){if(p===2&&z==="monsters"){e.classList.add("effect-targetable");e.onclick=()=>resolvePendingEffectTarget(c.id)}else e.onclick=null}
+  else if(pendingEffectTarget){if(p===2&&z==="monsters"&&!c.cannotBeChosenByOpponent){e.classList.add("effect-targetable");e.onclick=()=>resolvePendingEffectTarget(c.id)}else e.onclick=null}
   else if(pendingAttack&&p===2&&z==="monsters")e.onclick=()=>resolveAttack(c.id)
   else if(p===1&&z==="energy")e.onclick=()=>{state.selected={p,z,id:c.id};if(!c.tapped){c.tapped=true;state.players[1].energyPool=(state.players[1].energyPool||0)+1;broadcastEnergyPool();log("エネルギー「"+c.name+"」をタップしました（使用可能エネルギー +1）")}render()}
   else e.onclick=()=>select(p,z,c.id);
@@ -758,7 +758,9 @@ function activateCardAbility(cardId,abilityIndex){
     log("未対応の能力コストです："+(ability.costToken||"不明"));return;
   }
   log("「"+card.name+"」の能力を使用"+(ability.costKind==="energy"?"（コスト"+(ability.costValue||0)+"）":"（コスト："+(ability.costToken||"不明")+"）"));
-  if(cardDefinition(card)?.id==="card_0079"&&/相手のモンスター\\s*1体に\\s*[（(]これのパワー[）)]\\s*ダメージ/.test(ability.body)){
+  if(cardDefinition(card)?.id==="card_0079"&&/相手のモンスター\s*1体に\s*[（(]これのパワー[）)]\s*ダメージ/.test(ability.body)){
+    if(!state.players[2].monsters.some(target=>!target.cannotBeChosenByOpponent)){log("選択できる相手モンスターがいません");return}
+
     pendingEffectTarget={sourceCard:card};
     log("ダメージを与える相手モンスターを盤面からクリックしてください");
     render();
@@ -771,7 +773,7 @@ function activateCardAbility(cardId,abilityIndex){
 function resolvePendingEffectTarget(cardId){
  if(!pendingEffectTarget)return;
  const target=state.players[2].monsters.find(card=>card.id===cardId);
- if(!target)return;
+ if(!target||target.cannotBeChosenByOpponent)return;
  const sourceCard=pendingEffectTarget.sourceCard;
  const amount=attackPower(sourceCard);
  target.damage=(Number(target.damage)||0)+amount;
