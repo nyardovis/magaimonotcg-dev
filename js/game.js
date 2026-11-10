@@ -551,11 +551,11 @@ function selection(){
   if(state.pendingDiscardPlayer!==null){if(s.p===1&&s.z==="hand"&&s.p===state.pendingDiscardPlayer){add("このカードを捨てる",()=>completePendingDiscard(1,s.id));return}op.textContent="カードを捨てるまで操作できません";return}
   if(!visible){op.textContent="裏向きのカード";return}
   if(s.p!==1){op.textContent="相手のカード";return}
-  if(["monsters","energy","field","facedown","discard"].includes(s.z)&&state.phase==="playing"){
+  if(["monsters","energy","field","facedown","discard"].includes(s.z)&&state.phase==="playing"&&state.turnPlayer===1&&state.pendingDiscardPlayer===null&&!state.gameOver){
     CardEffectEngine.activatedAbilities(cardDefinition(c)?.effect_text||"").forEach((ability,index)=>add("✦ 効果発動（コスト"+ability.cost+"）",()=>activateCardAbility(c.id,index)));
   }
   if(s.z==="monsters"&&state.phase==="playing"&&state.turnPlayer===1&&state.pendingDiscardPlayer===null&&!state.gameOver&&!c.tapped&&(!c.summonedThisTurn||c.canAttackOnSummon||String(cardDefinition(c)?.effect_text||"").includes("場に出たターンでも攻撃できる")))add("⚔ 攻撃を宣言",()=>declareAttack(c.id));
-  if(s.z==="hand"&&state.phase==="playing")add("○ カードを使用 / セット",()=>playCardFromHand(c.id));
+  if(s.z==="hand"&&state.phase==="playing"&&state.turnPlayer===1&&state.pendingDiscardPlayer===null&&!state.gameOver)add("○ カードを使用 / セット",()=>playCardFromHand(c.id));
 }
 function openMonsterAdjust(c){const modal=document.querySelector("#monsterAdjustModal"),input=document.querySelector("#monsterAdjustInput");modal.hidden=false;input.value="";input.focus();const close=()=>{modal.hidden=true};const apply=(action)=>{const raw=input.value.trim();if(!raw){close();return}const n=Number(raw);if(!Number.isInteger(n)){log("ダメージ／回復の変更をキャンセルしました");close();return}const amount=Math.abs(n);if(action==="cancel"){close();return}if(action==="damage")c.damage+=amount;if(action==="heal")c.damage=Math.max(0,c.damage-amount);if(action==="change")c.modification=amount+c.damage;checkMonsterDestruction(1);state.selected={p:1,z:"monsters",id:c.id};render();close()};modal.querySelectorAll("[data-monster-action]").forEach(b=>b.onclick=()=>apply(b.dataset.monsterAction));input.onkeydown=ev=>{if(ev.key!=="Enter")return;ev.preventDefault();const raw=input.value.trim();if(!raw)return;const n=Number(raw);if(!Number.isInteger(n)){log("ダメージ／回復の変更をキャンセルしました");close();return}apply(n>0&&raw.startsWith("+")?"heal":"damage")}}
 function openMonsterStatusAdjust(c){const modal=document.querySelector("#monsterStatusModal"),input=document.querySelector("#monsterStatusInput");modal.hidden=false;input.value="";input.focus();const close=()=>{modal.hidden=true};const apply=(action)=>{const raw=input.value.trim();if(!raw){close();return}const n=Number(raw);if(!Number.isInteger(n)){log("ステータス修正の変更をキャンセルしました");close();return}const amount=Math.abs(n);if(action==="cancel"){close();return}if(action==="increase")c.modification+=amount;if(action==="decrease")c.modification-=amount;if(action==="change")c.modification=amount+c.damage;checkMonsterDestruction(1);state.selected={p:1,z:"monsters",id:c.id};render();close()};modal.querySelectorAll("[data-monster-status-action]").forEach(b=>b.onclick=()=>apply(b.dataset.monsterStatusAction));input.onkeydown=ev=>{if(ev.key!=="Enter")return;ev.preventDefault();const raw=input.value.trim();if(!raw)return;const n=Number(raw);if(!Number.isInteger(n)){log("ステータス修正の変更をキャンセルしました");close();return}apply(n>0&&raw.startsWith("+")?"increase":"decrease")}}
@@ -731,6 +731,7 @@ function resolveCardTrigger(card,p,trigger){
 }
 function activateCardAbility(cardId,abilityIndex){
   if(state.phase!=="playing"||state.pendingDiscardPlayer!==null)return;
+  if(state.turnPlayer!==1)return log("自分のターン以外はカードの効果を発動できません");
   const selected=state.selected;
   if(!selected||selected.p!==1||!["monsters","energy","field","facedown","discard"].includes(selected.z))return;
   const card=find(1,selected.z,cardId);if(!card)return;
@@ -1506,7 +1507,8 @@ function resolveTurnTriggers(p,when){
  resolveTrapTriggers(p,when);
 }
 function playCardFromHand(cardId){
- if(state.phase!=="playing"||state.pendingDiscardPlayer!==null)return;const x=state.players[1],idx=x.hand.findIndex(c=>c.id===cardId);if(idx<0)return;
+ if(state.phase!=="playing"||state.pendingDiscardPlayer!==null)return;
+ if(state.turnPlayer!==1)return log("自分のターン以外は手札のカードを使用できません");const x=state.players[1],idx=x.hand.findIndex(c=>c.id===cardId);if(idx<0)return;
  const card=x.hand[idx],kind=cardKind(card),cost=effectiveCardCost(card,1),effect=String(cardDefinition(card)?.effect_text||"");
  if(effect.includes("これは使わずに場に出せない"))return log("このカードは通常の手札使用では場に出せません");
   if(/自分のデッキが縦向きの時使用できず場に出せない/.test(effect)&&!x.deckHorizontal)return log("自分のデッキが横向きの時だけ使用できます");
