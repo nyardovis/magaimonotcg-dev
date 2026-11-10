@@ -1047,8 +1047,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  if(ownTaggedMonsterBuff){
   const tag=ownTaggedMonsterBuff[1],amount=Number(ownTaggedMonsterBuff[2]);
   const candidates=own.monsters.filter(mon=>String(cardDefinition(mon)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag));
-  if(candidates.length===1){const target=candidates[0];target.modification=(Number(target.modification)||0)+amount;handled=true;log("「"+target.name+"」のパワーを+"+amount+"しました")}
-  else if(candidates.length>1){pendingEffectTarget={kind:"taggedMonsterBuff",player:p,sourceCard,candidates:candidates.map(card=>({id:card.id})),amount};log("パワーを+"+amount+"する自分の["+tag+"]モンスターを盤面からクリックしてください");handled=true;render()}
+  if(candidates.length){pendingEffectTarget={kind:"taggedMonsterBuff",player:p,sourceCard,candidates:candidates.map(card=>({id:card.id})),amount};log("パワーを+"+amount+"する自分の["+tag+"]モンスターを盤面からクリックしてください");handled=true;render()}
   else log("効果の対象となる["+tag+"]モンスターがいないため、パワー上昇を行えませんでした");
  }
  /* Counter, formula, and tagged-monster effects. */
