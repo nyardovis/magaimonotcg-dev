@@ -1034,6 +1034,13 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  }
  const ownBuff=s.match(/自分のモンスター(?:全て|1体|1体まで)を\s*\+(\d+)/);
  if(ownBuff){const targets=/全て/.test(s)?own.monsters:[chooseEffectTarget(own.monsters,"パワーを上げる自分のモンスターを選択してください",p,sourceCard)].filter(Boolean);targets.forEach(mon=>{mon.modification=(mon.modification||0)+Number(ownBuff[1])});if(targets.length)handled=true}
+ const ownTaggedMonsterBuff=s.match(/自分の\[([^\]]+)\]\s*1体を\s*[＋+](\d+)/);
+ if(ownTaggedMonsterBuff){
+  const tag=ownTaggedMonsterBuff[1],amount=Number(ownTaggedMonsterBuff[2]);
+  const target=chooseEffectTarget(own.monsters.filter(mon=>String(cardDefinition(mon)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)),"+"+amount+"する自分の["+tag+"]モンスターを選択してください",p,sourceCard);
+  if(target){target.modification=(Number(target.modification)||0)+amount;handled=true;log("「"+target.name+"」のパワーを+"+amount+"しました")}
+  else log("効果の対象となる["+tag+"]モンスターがいないため、パワー上昇を行えませんでした");
+ }
  /* Counter, formula, and tagged-monster effects. */
  const ownMonsterCounter=s.match(/自分の(?:\[([^\]]+)\])?モンスター1体にカウンター(\d+)個を乗せる/);
  if(ownMonsterCounter){const tag=ownMonsterCounter[1]||"",target=chooseEffectTarget(own.monsters.filter(m=>!tag||String(cardDefinition(m)?.types||"").includes(tag)),"カウンターを乗せるモンスターを選択してください",p,sourceCard);if(target){target.counters=(Number(target.counters)||0)+Number(ownMonsterCounter[2]);handled=true;log("「"+target.name+"」にカウンター"+ownMonsterCounter[2]+"個を乗せました")}}
