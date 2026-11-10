@@ -497,7 +497,7 @@ function cardEl(p,z,c,visible){
   if(c.revealed){const mark=document.createElement("span");mark.className="revealed-marker";mark.textContent="!";e.appendChild(mark)}
   e.dataset.player=String(p);e.dataset.zone=z;e.dataset.cardId=c.id;
   if(state.pendingDiscardPlayer!==null){if(state.pendingDiscardPlayer===1&&p===1&&z==="hand")e.onclick=()=>completePendingDiscard(1,c.id);else e.onclick=null}
-  else if(pendingEffectTarget){if(p===2&&z==="monsters"&&!c.cannotBeChosenByOpponent){e.classList.add("effect-targetable");e.onclick=()=>resolvePendingEffectTarget(c.id)}else e.onclick=null}
+  else if(pendingEffectTarget){if(z==="monsters"&&pendingEffectTarget.candidates.some(card=>card.id===c.id)&&!(p!==1&&c.cannotBeChosenByOpponent)){e.classList.add("effect-targetable");e.onclick=()=>resolvePendingEffectTarget(c.id)}else e.onclick=null}
   else if(pendingAttack&&p===2&&z==="monsters")e.onclick=()=>resolveAttack(c.id)
   else if(p===1&&z==="energy")e.onclick=()=>{state.selected={p,z,id:c.id};if(!c.tapped){c.tapped=true;state.players[1].energyPool=(state.players[1].energyPool||0)+1;broadcastEnergyPool();log("エネルギー「"+c.name+"」をタップしました（使用可能エネルギー +1）")}render()}
   else e.onclick=()=>select(p,z,c.id);
@@ -773,16 +773,25 @@ function activateCardAbility(cardId,abilityIndex){
 }
 function resolvePendingEffectTarget(cardId){
  if(!pendingEffectTarget)return;
- const target=state.players[2].monsters.find(card=>card.id===cardId);
- if(!target||target.cannotBeChosenByOpponent)return;
- const sourceCard=pendingEffectTarget.sourceCard;
- const amount=attackPower(sourceCard);
- target.damage=(Number(target.damage)||0)+amount;
- if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:amount});
+ const pending=pendingEffectTarget;
+ const owner=pending.player||2;
+ const target=state.players[owner].monsters.find(card=>card.id===cardId);
+ if(!target||!pending.candidates.some(card=>card.id===cardId))return;
+ if(owner!==1&&target.cannotBeChosenByOpponent)return;
  pendingEffectTarget=null;
- checkMonsterDestruction(2,true);
- log("「"+sourceCard.name+"」の効果で相手の「"+target.name+"」に"+amount+"ダメージ");
- state.selected={p:1,z:"monsters",id:sourceCard.id};
+ if(pending.kind==="taggedMonsterBuff"){
+  target.modification=(Number(target.modification)||0)+pending.amount;
+  if(owner===2&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterModifier",cardId:target.id,delta:pending.amount});
+  log("「"+target.name+"」のパワーを+"+pending.amount+"しました");
+  state.selected={p:1,z:"monsters",id:pending.sourceCard.id};
+ }else{
+  const sourceCard=pending.sourceCard,amount=attackPower(sourceCard);
+  target.damage=(Number(target.damage)||0)+amount;
+  if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:amount});
+  checkMonsterDestruction(owner,true);
+  log("「"+sourceCard.name+"」の効果で相手の「"+target.name+"」に"+amount+"ダメージ");
+  state.selected={p:1,z:"monsters",id:sourceCard.id};
+ }
  render();
 }
 function resolveSummonEffects(text,p,sourceCard){
@@ -1037,8 +1046,9 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const ownTaggedMonsterBuff=s.match(/自分の\[([^\]]+)\]\s*1体を\s*[＋+](\d+)/);
  if(ownTaggedMonsterBuff){
   const tag=ownTaggedMonsterBuff[1],amount=Number(ownTaggedMonsterBuff[2]);
-  const target=chooseEffectTarget(own.monsters.filter(mon=>String(cardDefinition(mon)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)),"+"+amount+"する自分の["+tag+"]モンスターを選択してください",p,sourceCard);
-  if(target){target.modification=(Number(target.modification)||0)+amount;handled=true;log("「"+target.name+"」のパワーを+"+amount+"しました")}
+  const candidates=own.monsters.filter(mon=>String(cardDefinition(mon)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag));
+  if(candidates.length===1){const target=candidates[0];target.modification=(Number(target.modification)||0)+amount;handled=true;log("「"+target.name+"」のパワーを+"+amount+"しました")}
+  else if(candidates.length>1){pendingEffectTarget={kind:"taggedMonsterBuff",player:p,sourceCard,candidates:candidates.map(card=>({id:card.id})),amount};log("パワーを+"+amount+"する自分の["+tag+"]モンスターを盤面からクリックしてください");handled=true;render()}
   else log("効果の対象となる["+tag+"]モンスターがいないため、パワー上昇を行えませんでした");
  }
  /* Counter, formula, and tagged-monster effects. */
