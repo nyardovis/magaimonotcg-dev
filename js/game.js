@@ -762,7 +762,8 @@ function activateCardAbility(cardId,abilityIndex){
   if(cardDefinition(card)?.id==="card_0079"&&/相手のモンスター\s*1体に\s*[（(]これのパワー[）)]\s*ダメージ/.test(ability.body)){
     if(!state.players[2].monsters.some(target=>!target.cannotBeChosenByOpponent)){log("選択できる相手モンスターがいません");return}
 
-    pendingEffectTarget={sourceCard:card};
+    const candidates=state.players[2].monsters.filter(target=>!target.cannotBeChosenByOpponent);
+    pendingEffectTarget={kind:"kingdomArcherDamage",player:2,sourceCard:card,candidates:candidates.map(target=>({id:target.id}))};
     log("ダメージを与える相手モンスターを盤面からクリックしてください");
     render();
     return;
