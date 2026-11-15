@@ -499,7 +499,7 @@ function cardEl(p,z,c,visible){
   if(c.revealed){const mark=document.createElement("span");mark.className="revealed-marker";mark.textContent="!";e.appendChild(mark)}
   e.dataset.player=String(p);e.dataset.zone=z;e.dataset.cardId=c.id;
   if(state.pendingDiscardPlayer!==null){if(state.pendingDiscardPlayer===1&&p===1&&z==="hand")e.onclick=()=>completePendingDiscard(1,c.id);else e.onclick=null}
-  else if(pendingEffectTarget){if(z===(pendingEffectTarget.zone||"monsters")&&p===(pendingEffectTarget.player||2)&&pendingEffectTarget.candidates.some(card=>card.id===c.id)&&!(p!==1&&c.cannotBeChosenByOpponent)){e.classList.add("effect-targetable");e.onclick=()=>resolvePendingEffectTarget(c.id)}else e.onclick=null}
+  else if(pendingEffectTarget){const allowedOwner=pendingEffectTarget.players?pendingEffectTarget.players.includes(p):p===(pendingEffectTarget.player||2);if(z===(pendingEffectTarget.zone||"monsters")&&allowedOwner&&pendingEffectTarget.candidates.some(card=>card.id===c.id&&(!card.owner||card.owner===p))&&!(p!==1&&c.cannotBeChosenByOpponent)){e.classList.add("effect-targetable");e.onclick=()=>resolvePendingEffectTarget(c.id)}else e.onclick=null}
   else if(pendingAttack&&p===2&&z==="monsters")e.onclick=()=>resolveAttack(c.id)
   else if(p===1&&z==="energy")e.onclick=()=>{state.selected={p,z,id:c.id};if(!c.tapped){c.tapped=true;state.players[1].energyPool=(state.players[1].energyPool||0)+1;broadcastEnergyPool();log("エネルギー「"+c.name+"」をタップしました（使用可能エネルギー +1）")}render()}
   else e.onclick=()=>select(p,z,c.id);
@@ -741,6 +741,11 @@ function activateCardAbility(cardId,abilityIndex){
   const ability=abilities[abilityIndex];if(!ability)return;
   const isKingdomArcherDamage=cardDefinition(card)?.id==="card_0079"&&/相手のモンスター\s*1体に\s*[（(]これのパワー[）)]\s*ダメージ/.test(ability.body);
   const kingdomArcherCandidates=isKingdomArcherDamage?state.players[2].monsters.filter(target=>!target.cannotBeChosenByOpponent):[];
+  const abilityDestroyMatch=ability.body.match(/「([^」]+)」を持つモンスター1体を破壊する/);
+  const abilityDestroyCandidates=abilityDestroyMatch?[...state.players[1].monsters.map(target=>({target,owner:1})),...state.players[2].monsters.map(target=>({target,owner:2}))].filter(entry=>{
+   const definition=cardDefinition(entry.target),required=abilityDestroyMatch[1];
+   return (String(definition?.effect_text||"").includes(required)||(required==="攻撃されない。"&&entry.target.cannotBeAttacked===true))&&(entry.owner===1||!entry.target.cannotBeChosenByOpponent);
+  }):[];
   if(ability.costKind==="energy"){
     if(!useEnergyCost(1,ability.costValue||0))return;
   }else if(ability.costKind==="tap"){
@@ -775,6 +780,13 @@ function activateCardAbility(cardId,abilityIndex){
     render();
     return;
   }
+  if(abilityDestroyMatch){
+    if(!abilityDestroyCandidates.length){log("「"+abilityDestroyMatch[1]+"」を持つ破壊可能なモンスターがいないため、能力を使用できません");state.selected={p:1,z:selected.z,id:card.id};render();return}
+    pendingEffectTarget={kind:"abilityDestroy",player:1,players:[1,2],zone:"monsters",sourceCard:card,requiredAbility:abilityDestroyMatch[1],candidates:abilityDestroyCandidates.map(entry=>({id:entry.target.id,owner:entry.owner}))};
+    log("「"+abilityDestroyMatch[1]+"」を持つモンスターを盤面からクリックしてください");
+    render();
+    return;
+  }
   resolveEffectText(ability.body,1,card);
   checkMonsterDestruction(1);
   state.selected={p:1,z:selected.z,id:card.id};render();
@@ -782,9 +794,10 @@ function activateCardAbility(cardId,abilityIndex){
 function resolvePendingEffectTarget(cardId){
  if(!pendingEffectTarget)return;
  const pending=pendingEffectTarget;
- const owner=pending.player||2;
- const target=state.players[owner][pending.zone||"monsters"].find(card=>card.id===cardId);
- if(!target||!pending.candidates.some(card=>card.id===cardId))return;
+ const candidate=pending.candidates.find(card=>card.id===cardId);
+ const owner=candidate?.owner||pending.player||2;
+ const target=state.players[owner]?.[pending.zone||"monsters"]?.find(card=>card.id===cardId);
+ if(!target||!candidate)return;
  if(owner!==1&&target.cannotBeChosenByOpponent)return;
  pendingEffectTarget=null;
  if(pending.kind==="tenkanEnergyCost"){
@@ -797,8 +810,24 @@ function resolvePendingEffectTarget(cardId){
   render();return;
  }else if(pending.kind==="taggedMonsterBuff"){
   target.modification=(Number(target.modification)||0)+pending.amount;
-  if(owner===2&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterModifier",cardId:target.id,delta:pending.amount});
+  if(owner!==pending.player&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterModifier",cardId:target.id,delta:pending.amount});
   log("「"+target.name+"」のパワーを+"+pending.amount+"しました");
+  state.selected={p:1,z:"monsters",id:pending.sourceCard.id};
+ }else if(pending.kind==="monsterDamage"){
+  const amount=Number(pending.amount)||0;
+  target.damage=(Number(target.damage)||0)+amount;
+  if(owner!==pending.player&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:amount});
+  checkMonsterDestruction(owner,true);
+  log("「"+pending.sourceCard.name+"」の効果で「"+target.name+"」に"+amount+"ダメージ");
+  state.selected={p:1,z:pending.sourceZone||"energy",id:pending.sourceCard.id};
+ }else if(pending.kind==="abilityDestroy"){
+  const zone=state.players[owner].monsters;
+  state.players[owner].monsters=zone.filter(card=>card.id!==target.id);
+  moveToDiscard(owner,target,"苔木蜘蛛の効果による破壊");
+  if(owner!==pending.player&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});
+  if(!onlinePlayerId||owner===1){resolveCardTrigger(target,owner,"destroy");resolveTrapTriggers(owner,"ownDestroy")}
+  if(owner!==pending.player)resolveTrapTriggers(pending.player,"opponentDestroy");
+  log("苔木蜘蛛の効果で「"+target.name+"」を破壊しました");
   state.selected={p:1,z:"monsters",id:pending.sourceCard.id};
  }else{
   const sourceCard=pending.sourceCard,amount=attackPower(sourceCard);
@@ -1220,7 +1249,15 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  if(/相手のモンスター全てをタップ/.test(s)){opp.monsters.forEach(mon=>{mon.tapped=true;broadcastEffectDelta({target:"opponentMonsterTap",cardId:mon.id})});handled=true}
  if(/相手のモンスター(?:1体|1体まで)をタップ/.test(s)){const target=chooseEffectTarget(opp.monsters.filter(m=>!m.tapped),"タップする相手のモンスターを選択してください",p,sourceCard);if(target){target.tapped=true;broadcastEffectDelta({target:"opponentMonsterTap",cardId:target.id});handled=true;log("「"+target.name+"」をタップしました")}}
  const singleDamage=s.match(/(相手のモンスター|自分のモンスター|モンスター)(?:1体|1体まで)に\s*(\d+)ダメージ/);
- if(singleDamage){const targetPlayer=singleDamage[1].startsWith("相手")?(p===1?2:1):singleDamage[1].startsWith("自分")?p:(opp.monsters.length?(p===1?2:1):p);const target=chooseEffectTarget(state.players[targetPlayer].monsters,"ダメージを与えるモンスターを選択してください",p,sourceCard);if(target){target.damage=(target.damage||0)+Number(singleDamage[2]);if(targetPlayer!==p)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:Number(singleDamage[2])});checkMonsterDestruction(targetPlayer,targetPlayer===p);handled=true}}
+ if(singleDamage){
+  const targetPlayer=singleDamage[1].startsWith("相手")?(p===1?2:1):singleDamage[1].startsWith("自分")?p:(opp.monsters.length?(p===1?2:1):p);
+  const candidates=state.players[targetPlayer].monsters.filter(target=>targetPlayer===p||!target.cannotBeChosenByOpponent);
+  if(candidates.length){
+   pendingEffectTarget={kind:"monsterDamage",player:targetPlayer,zone:"monsters",sourceCard,sourceZone:state.players[p].energy.some(card=>card.id===sourceCard?.id)?"energy":"monsters",amount:Number(singleDamage[2]),candidates:candidates.map(target=>({id:target.id}))};
+   log("ダメージを与えるモンスターを盤面からクリックしてください");
+   handled=true;render();
+  }else{log("ダメージを与えられる対象モンスターがいません");handled=true}
+ }
  if(/相手のモンスター1体を破壊|相手のモンスター1体までを破壊/.test(s)){const target=chooseEffectTarget(opp.monsters,"破壊する相手のモンスターを選択してください",p,sourceCard);if(target){opp.monsters=opp.monsters.filter(m=>m.id!==target.id);moveToDiscard(p===1?2:1,target,"効果による破壊");broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});if(!onlinePlayerId)resolveCardTrigger(target,p===1?2:1,"destroy");resolveTrapTriggers(p,"opponentDestroy");handled=true}}
  const destroyWithAbility=s.match(/「([^」]+)」を持つモンスター1体を破壊する/);
  if(destroyWithAbility){
