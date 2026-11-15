@@ -746,6 +746,7 @@ function activateCardAbility(cardId,abilityIndex){
    const definition=cardDefinition(entry.target),required=abilityDestroyMatch[1];
    return (String(definition?.effect_text||"").includes(required)||(required==="攻撃されない。"&&entry.target.cannotBeAttacked===true))&&(entry.owner===1||!entry.target.cannotBeChosenByOpponent);
   }):[];
+  if(abilityDestroyMatch&&!abilityDestroyCandidates.length){log("「"+abilityDestroyMatch[1]+"」を持つ破壊可能なモンスターがいないため、能力を使用できません");return}
   if(ability.costKind==="energy"){
     if(!useEnergyCost(1,ability.costValue||0))return;
   }else if(ability.costKind==="tap"){
