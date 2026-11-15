@@ -929,6 +929,37 @@ function chooseEffectTarget(candidates,label,p,sourceCard=null){
  if(!Number.isInteger(index)||index<0||index>=eligible.length){log("対象の番号が正しくないため、効果を中断しました");return null}
  return eligible[index];
 }
+function openDeckSearchPicker(pending){
+ const old=document.querySelector("#effectDeckPicker");if(old)old.remove();
+ const overlay=document.createElement("div");overlay.id="effectDeckPicker";
+ overlay.style.cssText="position:fixed;inset:0;z-index:10050;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box";
+ const panel=document.createElement("div");panel.style.cssText="width:min(900px,96vw);max-height:88vh;overflow:auto;background:#20252d;color:#fff;border:1px solid #8793a3;border-radius:10px;padding:16px;box-sizing:border-box";
+ const heading=document.createElement("h2");heading.textContent=pending.label||"山札からカードを選択";heading.style.cssText="margin:0 0 12px;font-size:18px";panel.appendChild(heading);
+ const help=document.createElement("div");help.style.cssText="margin-bottom:12px;color:#d6dce5";panel.appendChild(help);
+ const grid=document.createElement("div");grid.style.cssText="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px";panel.appendChild(grid);
+ const selected=new Set(),cards=pending.candidates||[];
+ const confirm=document.createElement("button");confirm.type="button";confirm.textContent="選択したカードを手札に加える";confirm.disabled=true;
+ const update=()=>{help.textContent="選択中："+selected.size+" / "+pending.maxCount+"枚";confirm.disabled=selected.size===0};
+ cards.forEach(card=>{
+  const button=document.createElement("button");button.type="button";button.style.cssText="background:#303844;color:#fff;border:2px solid #697586;border-radius:7px;padding:7px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0";
+  const face=createCardFace(card.name);face.style.width="100%";button.appendChild(face);
+  const name=document.createElement("span");name.textContent=card.name;name.style.cssText="font-size:12px;overflow-wrap:anywhere";button.appendChild(name);
+  button.onclick=()=>{if(selected.has(card.id)){selected.delete(card.id);button.style.borderColor="#697586"}else if(selected.size<pending.maxCount){selected.add(card.id);button.style.borderColor="#f2cf54"}update()};
+  grid.appendChild(button);
+ });
+ const footer=document.createElement("div");footer.style.cssText="display:flex;justify-content:flex-end;gap:10px;margin-top:16px";
+ const cancel=document.createElement("button");cancel.type="button";cancel.textContent="キャンセル";cancel.onclick=()=>{overlay.remove();pendingEffectTarget=null;render()};
+ confirm.onclick=()=>{
+  const own=state.players[pending.player],moved=[];
+  for(const id of selected){if(own.hand.length+moved.length>=MAX.hand)break;const index=own.deck.findIndex(card=>card.id===id);if(index>=0)moved.push(own.deck.splice(index,1)[0])}
+  own.hand.push(...moved);overlay.remove();pendingEffectTarget=null;
+  if(moved.length)log(own.name+"は山札から「"+moved.map(card=>card.name).join("」「")+"」を手札に加えました");
+  else log("手札に加えられるカードがありませんでした");
+  state.selected=null;render();
+ };
+ [cancel,confirm].forEach(button=>button.style.cssText="padding:9px 14px;border-radius:6px;border:1px solid #aab3c0;background:#394454;color:#fff;cursor:pointer");
+ footer.append(cancel,confirm);panel.appendChild(footer);overlay.appendChild(panel);document.body.appendChild(overlay);update();
+}
 function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const own=state.players[p],opp=state.players[p===1?2:1];let s=String(text||"");let handled=false,revealedCardForEffect=null;
  const countNamed=(list,name)=>list.filter(c=>String(c.name||"").includes(name)).length;
@@ -1008,6 +1039,35 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
    if(onlinePlayerId&&p===1)broadcastEffectDelta({target:targetPlayer===p?"ownEnergyPool":"opponentEnergyPool",delta});
   }
   handled=true;log(scope==="お互いの"?"お互いの使用可能エネルギーを"+(delta>=0?"+"+delta:delta)+"変更しました":(scope==="相手の"?opp.name:own.name)+"の使用可能エネルギーを"+(delta>=0?"+"+delta:delta)+"変更しました");
+ }
+ /* Generic deck search: user selects matching cards; do not silently choose the first result. */
+ const deckSearches=[...s.matchAll(/自分のデッキから([\s\S]*?)(\d+)枚までを手札に加える/g)];
+ for(const match of deckSearches){
+  const qualifier=match[1]||"",maxCount=Math.max(1,Math.min(9,Number(match[2])||1));
+  const quoted=[...qualifier.matchAll(/「([^」]+)」/g)].map(item=>item[1]);
+  const nameIncludes=qualifier.match(/名前に「([^」]+)」を含む/);
+  const costBelow=qualifier.match(/(\d+)コスト以下/),exactCost=qualifier.match(/(\d+)コストの/);
+  const kindWord=qualifier.match(/(モンスター|魔法|罠|フィールド|エネルギー)/)?.[1]||null;
+  const kindMap={モンスター:"monster",魔法:"spell",罠:"trap",フィールド:"field",エネルギー:"energy"};
+  const typeMatch=qualifier.match(/\[([^\]]+)\]/);
+  const requiredTypes=typeMatch?typeMatch[1].split(/[,、]/).map(value=>value.trim()).filter(Boolean):[];
+  const candidates=own.deck.filter(card=>{
+   const data=cardDefinition(card);if(!data)return false;
+   if(kindWord&&cardKind(card)!==kindMap[kindWord])return false;
+   if(qualifier.includes("種別を持つエネルギー")&&cardKind(card)!=="energy")return false;
+   if(costBelow&&cardCost(card)>Number(costBelow[1]))return false;
+   if(exactCost&&cardCost(card)!==Number(exactCost[1]))return false;
+   const types=String(data.types||"").split(/[,、]/).map(value=>value.trim()).filter(Boolean);
+   if(requiredTypes.length&&!requiredTypes.some(type=>types.includes(type)))return false;
+   if(nameIncludes&&!String(card.name||"").includes(nameIncludes[1]))return false;
+   if(quoted.length&&!nameIncludes&&!quoted.some(name=>card.name===name))return false;
+   return true;
+  });
+  if(!candidates.length){log("山札に条件に合うカードがありませんでした");handled=true;continue}
+  if(own.hand.length>=MAX.hand){log("手札が上限のため、山札からカードを加えられません");handled=true;continue}
+  if(pendingEffectTarget){log("別のカード選択が進行中のため、山札検索を開始できません");handled=true;continue}
+  pendingEffectTarget={kind:"deckSearchToHand",player:p,candidates:candidates.map(card=>({id:card.id,name:card.name})),maxCount,label:"手札に加えるカードを山札から選択してください"};
+  openDeckSearchPicker(pendingEffectTarget);handled=true;
  }
  const effectTypeMap={モンスター:"monster",魔法:"spell",罠:"trap",フィールド:"field",エネルギー:"energy"};
  const discardHand=s.match(/自分の手札から(?:(魔法|モンスター|罠|フィールド|エネルギー)\s*)?(\d+)枚(?:まで)?(?:を)?捨てる/);
