@@ -737,6 +737,8 @@ function activateCardAbility(cardId,abilityIndex){
   const card=find(1,selected.z,cardId);if(!card)return;
   const abilities=CardEffectEngine.activatedAbilities(cardDefinition(card)?.effect_text||"");
   const ability=abilities[abilityIndex];if(!ability)return;
+  const isKingdomArcherDamage=cardDefinition(card)?.id==="card_0079"&&/相手のモンスター\s*1体に\s*[（(]これのパワー[）)]\s*ダメージ/.test(ability.body);
+  const kingdomArcherCandidates=isKingdomArcherDamage?state.players[2].monsters.filter(target=>!target.cannotBeChosenByOpponent):[];
   if(ability.costKind==="energy"){
     if(!useEnergyCost(1,ability.costValue||0))return;
   }else if(ability.costKind==="tap"){
@@ -759,10 +761,14 @@ function activateCardAbility(cardId,abilityIndex){
     log("未対応の能力コストです："+(ability.costToken||"不明"));return;
   }
   log("「"+card.name+"」の能力を使用"+(ability.costKind==="energy"?"（コスト"+(ability.costValue||0)+"）":"（コスト："+(ability.costToken||"不明")+"）"));
-  if(cardDefinition(card)?.id==="card_0079"&&/相手のモンスター\s*1体に\s*[（(]これのパワー[）)]\s*ダメージ/.test(ability.body)){
-    if(!state.players[2].monsters.some(target=>!target.cannotBeChosenByOpponent)){log("選択できる相手モンスターがいません");return}
-
-    pendingEffectTarget={sourceCard:card};
+  if(isKingdomArcherDamage&&!kingdomArcherCandidates.length){
+    log("選択できる相手モンスターがいないため、対象を選ばずに処理を終了しました");
+    state.selected={p:1,z:selected.z,id:card.id};
+    render();
+    return;
+  }
+  if(isKingdomArcherDamage){
+    pendingEffectTarget={kind:"kingdomArcherDamage",player:2,sourceCard:card,candidates:kingdomArcherCandidates.map(target=>({id:target.id}))};
     log("ダメージを与える相手モンスターを盤面からクリックしてください");
     render();
     return;
