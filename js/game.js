@@ -948,7 +948,7 @@ function openDeckSearchPicker(pending){
  const selected=new Set(),cards=pending.candidates||[];
  const destinationLabels={hand:"手札に加える",discard:"捨て札に置く",energy:"エネルギーとして場に出す",monsters:"モンスターとして場に出す",field:"フィールドとして場に出す",facedown:"罠として場に伏せる"};
  const confirm=document.createElement("button");confirm.type="button";confirm.textContent="選択したカードを"+(destinationLabels[pending.destination]||"移動する");confirm.disabled=true;
- const update=()=>{help.textContent="選択中："+selected.size+" / "+pending.maxCount+"枚";confirm.disabled=selected.size===0};
+ const update=()=>{help.textContent="選択中："+selected.size+" / "+pending.maxCount+"枚（選択しないこともできます）";confirm.disabled=false};
  cards.forEach(card=>{
   const button=document.createElement("button");button.type="button";button.style.cssText="background:#303844;color:#fff;border:2px solid #697586;border-radius:7px;padding:7px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0";
   const face=createCardFace(card.name);face.style.width="100%";button.appendChild(face);
