@@ -497,7 +497,7 @@ function cardEl(p,z,c,visible){
   if(c.revealed){const mark=document.createElement("span");mark.className="revealed-marker";mark.textContent="!";e.appendChild(mark)}
   e.dataset.player=String(p);e.dataset.zone=z;e.dataset.cardId=c.id;
   if(state.pendingDiscardPlayer!==null){if(state.pendingDiscardPlayer===1&&p===1&&z==="hand")e.onclick=()=>completePendingDiscard(1,c.id);else e.onclick=null}
-  else if(pendingEffectTarget){if(z==="monsters"&&pendingEffectTarget.candidates.some(card=>card.id===c.id)&&!(p!==1&&c.cannotBeChosenByOpponent)){e.classList.add("effect-targetable");e.onclick=()=>resolvePendingEffectTarget(c.id)}else e.onclick=null}
+  else if(pendingEffectTarget){if(z===(pendingEffectTarget.zone||"monsters")&&p===(pendingEffectTarget.player||2)&&pendingEffectTarget.candidates.some(card=>card.id===c.id)&&!(p!==1&&c.cannotBeChosenByOpponent)){e.classList.add("effect-targetable");e.onclick=()=>resolvePendingEffectTarget(c.id)}else e.onclick=null}
   else if(pendingAttack&&p===2&&z==="monsters")e.onclick=()=>resolveAttack(c.id)
   else if(p===1&&z==="energy")e.onclick=()=>{state.selected={p,z,id:c.id};if(!c.tapped){c.tapped=true;state.players[1].energyPool=(state.players[1].energyPool||0)+1;broadcastEnergyPool();log("エネルギー「"+c.name+"」をタップしました（使用可能エネルギー +1）")}render()}
   else e.onclick=()=>select(p,z,c.id);
@@ -781,11 +781,19 @@ function resolvePendingEffectTarget(cardId){
  if(!pendingEffectTarget)return;
  const pending=pendingEffectTarget;
  const owner=pending.player||2;
- const target=state.players[owner].monsters.find(card=>card.id===cardId);
+ const target=state.players[owner][pending.zone||"monsters"].find(card=>card.id===cardId);
  if(!target||!pending.candidates.some(card=>card.id===cardId))return;
  if(owner!==1&&target.cannotBeChosenByOpponent)return;
  pendingEffectTarget=null;
- if(pending.kind==="taggedMonsterBuff"){
+ if(pending.kind==="tenkanEnergyCost"){
+  const own=state.players[pending.player],index=own.energy.findIndex(card=>card.id===cardId);if(index<0)return;
+  const destroyed=own.energy.splice(index,1)[0];moveToDiscard(pending.player,destroyed,"転換の効果");
+  const candidates=own.deck.filter(card=>cardKind(card)==="energy");
+  log("「"+destroyed.name+"」を破壊しました。山札から出すエネルギーを選択してください");
+  if(candidates.length){pendingEffectTarget={kind:"deckSearchMove",player:pending.player,destination:"energy",tap:true,afterDraw:1,candidates:candidates.map(card=>({id:card.id,name:card.name})),maxCount:1,label:"タップして場に出すエネルギーを山札から選択してください"};openDeckSearchPicker(pendingEffectTarget)}
+  else{log("山札にエネルギーがありません");drawEffectCards(pending.player,1)}
+  render();return;
+ }else if(pending.kind==="taggedMonsterBuff"){
   target.modification=(Number(target.modification)||0)+pending.amount;
   if(owner===2&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterModifier",cardId:target.id,delta:pending.amount});
   log("「"+target.name+"」のパワーを+"+pending.amount+"しました");
@@ -938,8 +946,9 @@ function openDeckSearchPicker(pending){
  const help=document.createElement("div");help.style.cssText="margin-bottom:12px;color:#d6dce5";panel.appendChild(help);
  const grid=document.createElement("div");grid.style.cssText="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px";panel.appendChild(grid);
  const selected=new Set(),cards=pending.candidates||[];
- const confirm=document.createElement("button");confirm.type="button";confirm.textContent="選択したカードを手札に加える";confirm.disabled=true;
- const update=()=>{help.textContent="選択中："+selected.size+" / "+pending.maxCount+"枚";confirm.disabled=selected.size===0};
+ const destinationLabels={hand:"手札に加える",discard:"捨て札に置く",energy:"エネルギーとして場に出す",monsters:"モンスターとして場に出す",field:"フィールドとして場に出す",facedown:"罠として場に伏せる"};
+ const confirm=document.createElement("button");confirm.type="button";confirm.textContent="選択したカードを"+(destinationLabels[pending.destination]||"移動する");confirm.disabled=true;
+ const update=()=>{help.textContent="選択中："+selected.size+" / "+pending.maxCount+"枚（選択しないこともできます）";confirm.disabled=false};
  cards.forEach(card=>{
   const button=document.createElement("button");button.type="button";button.style.cssText="background:#303844;color:#fff;border:2px solid #697586;border-radius:7px;padding:7px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0";
   const face=createCardFace(card.name);face.style.width="100%";button.appendChild(face);
@@ -951,10 +960,19 @@ function openDeckSearchPicker(pending){
  const cancel=document.createElement("button");cancel.type="button";cancel.textContent="キャンセル";cancel.onclick=()=>{overlay.remove();pendingEffectTarget=null;render()};
  confirm.onclick=()=>{
   const own=state.players[pending.player],moved=[];
-  for(const id of selected){if(own.hand.length+moved.length>=MAX.hand)break;const index=own.deck.findIndex(card=>card.id===id);if(index>=0)moved.push(own.deck.splice(index,1)[0])}
-  own.hand.push(...moved);overlay.remove();pendingEffectTarget=null;
-  if(moved.length)log(own.name+"は山札から「"+moved.map(card=>card.name).join("」「")+"」を手札に加えました");
-  else log("手札に加えられるカードがありませんでした");
+  for(const id of selected){const index=own.deck.findIndex(card=>card.id===id);if(index>=0)moved.push(own.deck.splice(index,1)[0])}
+  for(const card of moved){
+   resetGrantedCardInformation(card);card.faceUp=true;card.revealed=false;card.tapped=!!pending.tap;
+   if(pending.destination==="hand"){if(own.hand.length<MAX.hand)own.hand.push(card);else{own.deck.push(card);log("手札が上限のためカードを加えられません")}}
+   else if(pending.destination==="discard")moveToDiscard(pending.player,card,"効果による山札からの破棄");
+   else if(pending.destination==="energy"){if(own.energy.length<MAX.energy)own.energy.push(card);else{own.deck.push(card);log("エネルギーゾーンが満杯です")}}
+   else if(pending.destination==="monsters"){if(own.monsters.length<MAX.monsters){card.power=Number(cardDefinition(card)?.power)||card.power||0;card.damage=0;card.modification=0;card.summonedThisTurn=true;own.monsters.push(card);resolveCardTrigger(card,pending.player,"enter")}else own.deck.push(card)}
+   else if(pending.destination==="field"){if(own.field.length)moveToDiscard(pending.player,own.field.shift(),"効果によるフィールド置換");own.field.push(card);resolveCardTrigger(card,pending.player,"enter")}
+   else if(pending.destination==="facedown"){if(own.facedown.length<MAX.facedown){card.faceUp=false;own.facedown.push(card)}else own.deck.push(card)}
+  }
+  overlay.remove();pendingEffectTarget=null;
+  if(moved.length)log(own.name+"は山札から"+moved.map(card=>"「"+card.name+"」").join("、")+"を"+(destinationLabels[pending.destination]||"移動")+(pending.tap?"（タップ状態）":"")+"しました");
+  if(pending.afterDraw)drawEffectCards(pending.player,pending.afterDraw);
   state.selected=null;render();
  };
  [cancel,confirm].forEach(button=>button.style.cssText="padding:9px 14px;border-radius:6px;border:1px solid #aab3c0;background:#394454;color:#fff;cursor:pointer");
@@ -963,6 +981,12 @@ function openDeckSearchPicker(pending){
 function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const own=state.players[p],opp=state.players[p===1?2:1];let s=String(text||"");let handled=false,revealedCardForEffect=null;
  const countNamed=(list,name)=>list.filter(c=>String(c.name||"").includes(name)).length;
+ if(sourceCard?.name==="転換"&&s.includes("自分のエネルギー1枚を破壊する")&&s.includes("自分のデッキからエネルギー1枚までをタップして出す")){
+  const candidates=own.energy;
+  if(!candidates.length){log("破壊する自分のエネルギーがないため、転換の効果を終了しました");return}
+  pendingEffectTarget={kind:"tenkanEnergyCost",player:p,zone:"energy",sourceCard,candidates:candidates.map(card=>({id:card.id}))};
+  log("破壊する自分のエネルギーを盤面からクリックしてください");render();return;
+ }
  const countTag=(list,tag)=>list.filter(c=>String(cardDefinition(c)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)).length;
  /* Owner-specified three-roll random effect: choose all outcomes first, then resolve in order. */
  if(s.includes("未来を照らす")&&sourceCard?.name==="尖晶石の少女"){
@@ -1041,9 +1065,10 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   handled=true;log(scope==="お互いの"?"お互いの使用可能エネルギーを"+(delta>=0?"+"+delta:delta)+"変更しました":(scope==="相手の"?opp.name:own.name)+"の使用可能エネルギーを"+(delta>=0?"+"+delta:delta)+"変更しました");
  }
  /* Generic deck search: user selects matching cards; do not silently choose the first result. */
- const deckSearches=[...s.matchAll(/自分のデッキから([\s\S]*?)(\d+)枚までを手札に加える/g)];
+ const deckSearches=[...s.matchAll(/自分のデッキから([\s\S]*?)(\d+)枚までを(手札に加える|捨てる|タップして出す|場に出す)/g)];
  for(const match of deckSearches){
-  const qualifier=match[1]||"",maxCount=Math.max(1,Math.min(9,Number(match[2])||1));
+  const qualifier=match[1]||"",maxCount=Math.max(1,Math.min(9,Number(match[2])||1)),destinationText=match[3];
+  const destination=destinationText==="手札に加える"?"hand":destinationText==="捨てる"?"discard":destinationText==="タップして出す"?"energy":(/エネルギー/.test(qualifier)?"energy":/モンスター|体/.test(qualifier)?"monsters":/フィールド/.test(qualifier)?"field":/罠/.test(qualifier)?"facedown":"discard");
   const quoted=[...qualifier.matchAll(/「([^」]+)」/g)].map(item=>item[1]);
   const nameIncludes=qualifier.match(/名前に「([^」]+)」を含む/);
   const costBelow=qualifier.match(/(\d+)コスト以下/),exactCost=qualifier.match(/(\d+)コストの/);
@@ -1064,9 +1089,9 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
    return true;
   });
   if(!candidates.length){log("山札に条件に合うカードがありませんでした");handled=true;continue}
-  if(own.hand.length>=MAX.hand){log("手札が上限のため、山札からカードを加えられません");handled=true;continue}
+  if(destination==="hand"&&own.hand.length>=MAX.hand){log("手札が上限のため、山札からカードを加えられません");handled=true;continue}
   if(pendingEffectTarget){log("別のカード選択が進行中のため、山札検索を開始できません");handled=true;continue}
-  pendingEffectTarget={kind:"deckSearchToHand",player:p,candidates:candidates.map(card=>({id:card.id,name:card.name})),maxCount,label:"手札に加えるカードを山札から選択してください"};
+  pendingEffectTarget={kind:"deckSearchMove",player:p,destination,tap:destinationText==="タップして出す",candidates:candidates.map(card=>({id:card.id,name:card.name})),maxCount,label:"山札から移動するカードを選択してください"};
   openDeckSearchPicker(pendingEffectTarget);handled=true;
  }
  const effectTypeMap={モンスター:"monster",魔法:"spell",罠:"trap",フィールド:"field",エネルギー:"energy"};
