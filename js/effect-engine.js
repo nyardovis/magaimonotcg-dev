@@ -19,10 +19,32 @@
     opponentDamaged:["相手がダメージを受けた時","相手がダメージを受けたとき"],
     anyDestroy:["モンスターの破壊時","モンスターが破壊された時","モンスターが破壊されたとき","自分のモンスターの破壊時"]
   };
-  function splitAbilities(text) {
+  function splitEffectSentences(text) {
     const source=String(text||"");
     if(!source.trim())return [];
-    return source.split("。").map((part,index,all)=>(part.trim()?part.trim()+(index<all.length-1?"。":""):"")).filter(Boolean).map((raw,index)=>{
+    const pairs={"「":"」","『":"』","（":"）","(" :")","【":"】","[":"]","《":"》","〈":"〉","〔":"〕","［":"］","｛":"｝","{":"}"};
+    const closing=new Set(Object.values(pairs));
+    const stack=[];
+    const parts=[];
+    let start=0;
+    for(let i=0;i<source.length;i++){
+      const ch=source[i];
+      if(Object.prototype.hasOwnProperty.call(pairs,ch)){
+        stack.push(pairs[ch]);
+      }else if(closing.has(ch)){
+        if(stack.length && stack[stack.length-1]===ch)stack.pop();
+      }else if(ch==="。" && stack.length===0){
+        const part=source.slice(start,i+1).trim();
+        if(part)parts.push(part);
+        start=i+1;
+      }
+    }
+    const tail=source.slice(start).trim();
+    if(tail)parts.push(tail);
+    return parts;
+  }
+  function splitAbilities(text) {
+    return splitEffectSentences(text).map((raw,index)=>{
       const costMatch=raw.match(/^\s*[（(]\s*(\d+|これをタップ|これを破壊|カウンター\s*\d+|手札から\d+枚捨てる)\s*[）)]\s*/);
       const costToken=costMatch?costMatch[1].replace(/\s+/g,""):null;
       const body=costMatch?raw.slice(costMatch[0].length).trim():raw.trim();
