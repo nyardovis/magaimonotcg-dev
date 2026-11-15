@@ -284,6 +284,8 @@ function connectGameServer(){
         }
         else if(message.type==="first_player_set"&&!devLocalMode){
           state.turnPlayer=message.turnPlayer===onlinePlayerId?1:2;
+          state.firstPlayer=state.turnPlayer;
+          state.firstTurnPending=true;
           render();
           log("先攻: "+state.players[state.turnPlayer].name,false);
         }
@@ -306,7 +308,7 @@ function connectGameServer(){
 const MAX={hand:9,monsters:7,energy:18,field:1,facedown:3};
 const CARD_NAMES_URL="all_card_names.txt";
 
-const state={turnPlayer:1,selected:null,deckInspectId:null,discardInspectId:null,discardInspectPlayer:1,pendingDiscardPlayer:null,pendingDiscardReason:null,pendingDrawCount:0,gameOver:null,players:{},savedDeck:[],deckSaveTimer:null,deckLoadTimer:null,phase:"mulligan",mulligan:{1:{count:0,done:false},2:{count:0,done:false}}};
+const state={turnPlayer:1,firstPlayer:1,firstTurnPending:true,selected:null,deckInspectId:null,discardInspectId:null,discardInspectPlayer:1,pendingDiscardPlayer:null,pendingDiscardReason:null,pendingDrawCount:0,gameOver:null,players:{},savedDeck:[],deckSaveTimer:null,deckLoadTimer:null,phase:"mulligan",mulligan:{1:{count:0,done:false},2:{count:0,done:false}}};
 let cardNames=[];
 let cardDatabase=[];
 let cardDataByName=new Map();
@@ -612,7 +614,7 @@ function move(dest){
 
 function drawCards(n,p=1){if(!Number.isInteger(n)||n<=0)return log("ドロー枚数は1以上の整数にしてください");drawEffectCards(p,n);state.selected=null;render()}
 function ensureDiscardWarning(){if(document.querySelector("#discardWarning"))return;const e=document.createElement("div");e.id="discardWarning";e.hidden=true;e.style.cssText="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9999;background:#8b0000;color:#fff;padding:10px 18px;border:2px solid #f33;border-radius:6px;font-weight:700;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.45);";document.body.appendChild(e)}
-function startTurn(p,showLog=true){if(state.phase!=="playing")return;debugLog("ターン開始処理: "+(state.players[p]?.name||("プレイヤー"+p)),"state","info",{player:p,phase:state.phase});const x=state.players[p];x.energyPlacedThisTurn=false;x.extraEnergyPlacements=0;x.energyPool=0;if(p===1)broadcastEnergyPool();x.monsters.forEach(m=>{m.tapped=false;m.summonedThisTurn=false;m.canAttackOnSummon=false;m.attacksThisTurn=0;m.cannotAttackUntilTurnEnd=false});x.energy.forEach(e=>e.tapped=false);if(x.deck.length===0){const winner=p===1?2:1;state.gameOver={winner,reason:"deck_empty"};state.phase="finished";render();log(x.name+"はターン開始時に山札が0枚だったため、"+state.players[winner].name+"の勝利です");return}if(x.deck.length&&x.hand.length>=MAX.hand){state.pendingDiscardPlayer=p;state.pendingDiscardReason="turn_start";state.pendingDrawCount=1;state.selected=null;render();log(x.name+"はドロー前に手札を1枚捨てる必要があります。手札のカードをクリックしてください");return}if(x.deck.length&&x.hand.length<MAX.hand)drawCards(1,p);resolveTurnTriggers(p,"start");render();if(showLog)log(x.name+" のターン開始")}
+function startTurn(p,showLog=true){if(state.phase!=="playing")return;debugLog("ターン開始処理: "+(state.players[p]?.name||("プレイヤー"+p)),"state","info",{player:p,phase:state.phase});const skipDraw=state.firstTurnPending&&p===state.firstPlayer;state.firstTurnPending=false;const x=state.players[p];x.energyPlacedThisTurn=false;x.extraEnergyPlacements=0;x.energyPool=0;if(p===1)broadcastEnergyPool();x.monsters.forEach(m=>{m.tapped=false;m.summonedThisTurn=false;m.canAttackOnSummon=false;m.attacksThisTurn=0;m.cannotAttackUntilTurnEnd=false});x.energy.forEach(e=>e.tapped=false);if(x.deck.length===0){const winner=p===1?2:1;state.gameOver={winner,reason:"deck_empty"};state.phase="finished";render();log(x.name+"はターン開始時に山札が0枚だったため、"+state.players[winner].name+"の勝利です");return}if(!skipDraw&&x.deck.length&&x.hand.length>=MAX.hand){state.pendingDiscardPlayer=p;state.pendingDiscardReason="turn_start";state.pendingDrawCount=1;state.selected=null;render();log(x.name+"はドロー前に手札を1枚捨てる必要があります。手札のカードをクリックしてください");return}if(!skipDraw&&x.deck.length&&x.hand.length<MAX.hand)drawCards(1,p);if(skipDraw)debugLog("先攻の最初のターンのため通常ドローをスキップ","state","info",{player:p});resolveTurnTriggers(p,"start");render();if(showLog)log(x.name+" のターン開始")}
 function completePendingDiscard(p,id){if(p!==1)return false;if(state.pendingDiscardPlayer!==p)return false;const x=state.players[p],i=x.hand.findIndex(c=>c.id===id);if(i<0)return true;const discarded=x.hand.splice(i,1)[0],reason=state.pendingDiscardReason,remaining=state.pendingDrawCount;moveToDiscard(p,discarded,"手札上限による破棄");state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.selected=null;log(x.name+"は「"+discarded.name+"」を捨てました");if(reason==="effect_draw"){if(remaining>0)drawEffectCards(p,remaining);render();return true}if(x.deck.length&&x.hand.length<MAX.hand)drawCards(1,p);resolveTurnTriggers(p,"start");render();log(x.name+" のターン開始");return true}
 function processScheduledEndTurnEffects(p){const x=state.players[p];for(const owner of [1,2])for(const zone of ["monsters","energy","field"])for(const card of state.players[owner][zone])if(card.cannotAttackUntilPlayerTurnEnd===p)delete card.cannotAttackUntilPlayerTurnEnd;for(const card of [...x.monsters,...x.energy,...x.field]){if(!card.destroyAtTurnEnd)continue;card.destroyAtTurnEnd=false;for(const zone of ["monsters","energy","field"]){const i=x[zone].findIndex(c=>c.id===card.id);if(i>=0){x[zone].splice(i,1);moveToDiscard(p,card,"ターン終了時効果");if(zone==="monsters")resolveCardTrigger(card,p,"destroy");break}}}}
 function endTurn(){const localPlayer=1;if(state.turnPlayer!==localPlayer||state.pendingDiscardPlayer!==null||state.phase!=="playing")return;if(onlinePlayerId!==null&&!devLocalMode){if(!gameSocket||gameSocket.readyState!==WebSocket.OPEN)return log("オンラインサーバーに接続されていません");resolveTurnTriggers(1,"end");processScheduledEndTurnEffects(1);state.players[1].monsters.forEach(m=>{m.damage=0});render();gameSocket.send(JSON.stringify({type:"operation",action:"end_turn"}));return}const p=state.turnPlayer,x=state.players[p];resolveTurnTriggers(p,"end");processScheduledEndTurnEffects(p);x.monsters.forEach(m=>{m.damage=0});state.turnPlayer=p===1?2:1;startTurn(state.turnPlayer)}
@@ -1220,6 +1222,26 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const singleDamage=s.match(/(相手のモンスター|自分のモンスター|モンスター)(?:1体|1体まで)に\s*(\d+)ダメージ/);
  if(singleDamage){const targetPlayer=singleDamage[1].startsWith("相手")?(p===1?2:1):singleDamage[1].startsWith("自分")?p:(opp.monsters.length?(p===1?2:1):p);const target=chooseEffectTarget(state.players[targetPlayer].monsters,"ダメージを与えるモンスターを選択してください",p,sourceCard);if(target){target.damage=(target.damage||0)+Number(singleDamage[2]);if(targetPlayer!==p)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:Number(singleDamage[2])});checkMonsterDestruction(targetPlayer,targetPlayer===p);handled=true}}
  if(/相手のモンスター1体を破壊|相手のモンスター1体までを破壊/.test(s)){const target=chooseEffectTarget(opp.monsters,"破壊する相手のモンスターを選択してください",p,sourceCard);if(target){opp.monsters=opp.monsters.filter(m=>m.id!==target.id);moveToDiscard(p===1?2:1,target,"効果による破壊");broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});if(!onlinePlayerId)resolveCardTrigger(target,p===1?2:1,"destroy");resolveTrapTriggers(p,"opponentDestroy");handled=true}}
+ const destroyWithAbility=s.match(/「([^」]+)」を持つモンスター1体を破壊する/);
+ if(destroyWithAbility){
+  const requiredAbility=destroyWithAbility[1];
+  const candidates=[...own.monsters,...opp.monsters].filter(mon=>{
+   const definition=cardDefinition(mon);
+   return String(definition?.effect_text||"").includes(requiredAbility)||(requiredAbility==="攻撃されない。"&&mon.cannotBeAttacked===true);
+  });
+  const target=chooseEffectTarget(candidates,"「"+requiredAbility+"」を持つ破壊するモンスターを選択してください",p,sourceCard);
+  if(target){
+   const owner=own.monsters.some(mon=>mon.id===target.id)?p:(p===1?2:1);
+   const targetPlayer=state.players[owner];
+   targetPlayer.monsters=targetPlayer.monsters.filter(mon=>mon.id!==target.id);
+   moveToDiscard(owner,target,"条件に合うモンスターの破壊");
+   if(onlinePlayerId&&owner!==p)broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});
+   if(!onlinePlayerId||owner===1){resolveCardTrigger(target,owner,"destroy");resolveTrapTriggers(owner,"ownDestroy")}
+   if(owner!==p)resolveTrapTriggers(p,"opponentDestroy");
+   handled=true;
+   log("「"+target.name+"」を条件に合うモンスターとして破壊しました");
+  }else log("「"+requiredAbility+"」を持つ破壊対象がいませんでした");
+ }
  const search=s.match(/自分の(デッキ|捨て札)から(?:種別を持つ)?(?:(\d+)コスト以下の)?(?:\[([^\]]+)\]の)?(モンスター|魔法|罠|フィールド|エネルギー)?(\d+)枚までを手札に加える/);
  if(search&&!(search[1]==="捨て札"&&effectCannotChooseZone(p,"discard"))){const source=search[1]==="デッキ"?own.deck:own.discard,max=Number(search[5]),costLimit=search[2]===undefined?Infinity:Number(search[2]),type=search[4],element=search[3];for(let i=0;i<max;i++){const eligible=source.filter(c=>{const d=cardDefinition(c);if(!d||cardCost(c)>costLimit)return false;if(type&&!String(d.tags||"").includes(({モンスター:"#モンスターカード",魔法:"#魔法カード",罠:"#罠カード",フィールド:"#フィールドカード",エネルギー:"#エネルギーカード"})[type]))return false;if(element&&!String(d.types||"").includes(element))return false;return true});const chosen=chooseEffectTarget(eligible,"手札に加えるカードを選択してください（"+(i+1)+"/"+max+"）",p,sourceCard);if(!chosen||own.hand.length>=MAX.hand)break;const idx=source.findIndex(c=>c.id===chosen.id);if(idx<0)break;const moved=source.splice(idx,1)[0];resetGrantedCardInformation(moved);own.hand.push(moved);handled=true}if(handled)log(own.name+"は効果で"+(search[1]==="デッキ"?"山札":"捨て札")+"からカードを手札に加えました")}
  const sameNameSearch=s.match(/自分のデッキか捨て札からそれと同名のカード(\d+)枚までを手札に加える/);
