@@ -577,7 +577,7 @@ function selection(){
     if(!targets.length){const empty=document.createElement("div");empty.textContent="相手の場にモンスターはいません";op.appendChild(empty)}
     targets.forEach(target=>{const b=document.createElement("button");b.type="button";b.className="attack-target-button";b.textContent=target.name+"（攻撃力 "+attackPower(target)+"）";b.onclick=()=>resolveAttack(target.id);op.appendChild(b)});
     const playerButton=document.createElement("button");playerButton.type="button";playerButton.className="attack-target-button attack-player-button";playerButton.textContent=state.players[2].name+"に攻撃（プレイヤー）";playerButton.onclick=()=>resolveAttack(null);op.appendChild(playerButton);
-    const cancel=document.createElement("button");cancel.type="button";cancel.textContent="攻撃をキャンセル";cancel.onclick=()=>{pendingAttack=null;render()};op.appendChild(cancel);return;
+    const cancel=document.createElement("button");cancel.type="button";cancel.textContent=pendingAttack.awaitingResponse?"防御処理中":"攻撃をキャンセル";cancel.disabled=!!pendingAttack.awaitingResponse;cancel.onclick=()=>{if(pendingAttack?.awaitingResponse)return;pendingAttack=null;render()};op.appendChild(cancel);return;
   }
   const visible=s.p===1||c.faceUp!==false;renderCardInfo(c,visible);
   if(state.pendingDiscardPlayer!==null){if(s.p===1&&s.z==="hand"&&s.p===state.pendingDiscardPlayer){add("このカードを捨てる",()=>completePendingDiscard(1,s.id));return}op.textContent="カードを捨てるまで操作できません";return}
@@ -771,6 +771,7 @@ function activateCardAbility(cardId,abilityIndex){
   const card=find(1,selected.z,cardId);if(!card)return;
   const abilities=CardEffectEngine.activatedAbilities(cardDefinition(card)?.effect_text||"");
   const ability=abilities[abilityIndex];if(!ability)return;
+  if(ability.body.includes("自分の罠が場にあるなら")&&!state.players[1].facedown.length){log("自分の罠が場にないため、この能力は使用できません");return}
   const isKingdomArcherDamage=cardDefinition(card)?.id==="card_0079"&&/相手のモンスター\s*1体に\s*[（(]これのパワー[）)]\s*ダメージ/.test(ability.body);
   const kingdomArcherCandidates=isKingdomArcherDamage?state.players[2].monsters.filter(target=>!target.cannotBeChosenByOpponent):[];
   const isKingdomCaptainDamage=card.name==="王国の騎士団長"&&/相手のモンスター\s*1体に\s*[（(]自分のモンスターの数\s*[×x*]\s*300[）)]\s*ダメージ/.test(ability.body);
@@ -995,7 +996,7 @@ function openDeckSearchPicker(pending){
    const candidate=source[index],kind=cardKind(candidate),destination=pending.destination==="auto"?(kind==="spell"?"spell":kind==="monster"?"monsters":kind==="energy"?"energy":kind==="field"?"field":kind==="trap"?"facedown":null):pending.destination;
    if(!destination)continue;
    const capacity=destination==="spell"?Infinity:MAX[destination];if(destination!=="field"&&Number.isFinite(capacity)&&(own[destination]?.length||0)>=capacity){log("移動先ゾーンが満杯のため「"+candidate.name+"」を移動できません");continue}
-   const card=source.splice(index,1)[0];moved.push({card,destination});resetGrantedCardInformation(card);card.faceUp=destination!=="facedown";card.revealed=false;card.tapped=destination==="energy"&&!!pending.tap;
+   const card=source.splice(index,1)[0];moved.push({card,destination,sourceZone});resetGrantedCardInformation(card);card.faceUp=destination!=="facedown";card.revealed=false;card.tapped=destination==="energy"&&!!pending.tap;
    if(destination==="hand")own.hand.push(card);
    else if(destination==="discard"||destination==="spell"){moveToDiscard(pending.player,card,"効果によるカード移動");if(destination==="spell")resolveCardTrigger(card,pending.player,"spell")}
    else if(destination==="energy"){own.energy.push(card);resolveCardTrigger(card,pending.player,"enter")}
@@ -1003,6 +1004,7 @@ function openDeckSearchPicker(pending){
    else if(destination==="field"){if(own.field.length)moveToDiscard(pending.player,own.field.shift(),"効果によるフィールド置換");own.field.push(card);resolveCardTrigger(card,pending.player,"enter")}
    else if(destination==="facedown"){card.faceUp=false;own.facedown.push(card)}
   }
+  if(moved.some(item=>item.sourceZone==="deck"))own.deck=shuffle(own.deck);
   overlay.remove();pendingEffectTarget=null;
   if(moved.length)log(moved.every(item=>item.destination==="facedown")?own.name+"は山札から罠を秘密裏に伏せました":own.name+"は山札などから"+moved.map(item=>"「"+item.card.name+"」").join("、")+"を選んで移動しました");
   if(pending.afterDraw)drawEffectCards(pending.player,pending.afterDraw);
