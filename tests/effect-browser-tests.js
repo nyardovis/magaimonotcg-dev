@@ -110,7 +110,7 @@ const server=http.createServer((req,res)=>{
    api.addCard(targetName,2,"deck","ice-draw");
    const iceWall=api.attack("ice-attacker");
    const iceWallState={opponentLife:iceWall.players[2].life,opponentHand:iceWall.players[2].zones.hand.length,trapDiscarded:iceWall.players[2].zones.discard.some(c=>c.id==="ice-wall")};
-   return {iceWall,drawHand:draw.players[1].zones.hand.length,drawDeck:draw.players[1].zones.deck.length,pendingTarget:pending.pendingTarget?.kind||null,targetDamage:damage.players[2].zones.monsters.find(c=>c.id==="damage-target")?.damage||0,enterOpponentLife:enter.players[2].life,activatedPending:activatedPending.pendingTarget?.kind||null,archerTapped:activatedPending.players[1].zones.monsters.find(c=>c.id==="archer")?.tapped||false};
+   return {iceWall:iceWallState,drawHand:draw.players[1].zones.hand.length,drawDeck:draw.players[1].zones.deck.length,pendingTarget:pending.pendingTarget?.kind||null,targetDamage:damage.players[2].zones.monsters.find(c=>c.id==="damage-target")?.damage||0,enterOpponentLife:enter.players[2].life,activatedPending:activatedPending.pendingTarget?.kind||null,archerTapped:activatedPending.players[1].zones.monsters.find(c=>c.id==="archer")?.tapped||false};
   },{fixture,sourceName:fixtureCards.monster.name,targetName:fixtureCards.monster.name});
   assert.equal(smoke.drawHand,2,"live executor draw smoke test failed");
   assert.equal(smoke.drawDeck,0,"live executor draw did not remove cards from deck");
