@@ -975,7 +975,7 @@ function openDeckSearchPicker(pending){
  const help=document.createElement("div");help.style.cssText="margin-bottom:12px;color:#d6dce5";panel.appendChild(help);
  const grid=document.createElement("div");grid.style.cssText="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px";panel.appendChild(grid);
  const selected=new Set(),cards=pending.candidates||[];
- const destinationLabels={hand:"手札に加える",discard:"捨て札に置く",energy:"エネルギーとして場に出す",monsters:"モンスターとして場に出す",field:"フィールドとして場に出す",facedown:"罠として場に伏せる"};
+ const destinationLabels={hand:"手札に加える",discard:"捨て札に置く",energy:"エネルギーとして場に出す",monsters:"モンスターとして場に出す",field:"フィールドとして場に出す",facedown:"罠として場に伏せる",auto:"場に出す"};
  const confirm=document.createElement("button");confirm.type="button";confirm.textContent="選択したカードを"+(destinationLabels[pending.destination]||"移動する");confirm.disabled=true;
  const update=()=>{help.textContent="選択中："+selected.size+" / "+pending.maxCount+"枚（選択しないこともできます）";confirm.disabled=false};
  cards.forEach(card=>{
