@@ -15,9 +15,13 @@ on:
       - "data/cards.json"
       - "js/effect-engine.js"
       - "js/effect-runtime.js"
+      - "js/game.js"
       - "tests/**"
       - ".github/workflows/effect-tests.yml"
   workflow_dispatch:
+concurrency:
+  group: effect-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   effect-tests:
     runs-on: ubuntu-24.04
@@ -30,14 +34,8 @@ jobs:
         run: npm install
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Run parser and regression tests
-        run: node tests/effect-tests.js
-      - name: Run deterministic simulator contract tests
-        run: node tests/effect-execution-tests.js
-      - name: Generate compiler audit
-        run: node tests/effect-audit.js effect-compiler-audit-report.json
-      - name: Run real game executor browser audit
-        run: node tests/effect-browser-tests.js effect-live-audit-report.json
+      - name: Run all effect tests and audits
+        run: npm run test:all
       - name: Upload audit reports
         if: always()
         uses: actions/upload-artifact@v4
