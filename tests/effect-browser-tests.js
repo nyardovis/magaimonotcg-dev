@@ -67,12 +67,17 @@ const server=http.createServer((req,res)=>{
   await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
   browser=await chromium.launch({headless:true});
   const page=await browser.newPage();
-  page.on("pageerror",error=>{throw error});
+  const pageErrors=[],consoleErrors=[],failedRequests=[];
+  page.on("pageerror",error=>pageErrors.push(String(error?.stack||error)));
+  page.on("console",message=>{if(message.type()==="error")consoleErrors.push(message.text())});
+  page.on("requestfailed",request=>failedRequests.push({url:request.url(),error:request.failure()?.errorText||"unknown"}));
   await page.addInitScript(()=>{window.prompt=()=>null;window.confirm=()=>true;window.alert=()=>{}});
   const address=server.address();
   await page.goto("http://127.0.0.1:"+address.port+"/index.html?ankrTest=1");
-  await page.waitForFunction(()=>window.__ANKR_TEST_READY__&&window.__ANKR_TEST__);
-  const apiReady=await page.evaluate(()=>!!window.__ANKR_TEST__);
+  await page.waitForFunction(()=>window.__ANKR_TEST__||window.__ANKR_TEST_BOOT_ERROR__,null,{timeout:60000});
+  const boot=await page.evaluate(()=>({api:!!window.__ANKR_TEST__,error:window.__ANKR_TEST_BOOT_ERROR__||null}));
+  if(!boot.api)throw new Error("live game test bridge did not initialize: "+JSON.stringify({boot,pageErrors,consoleErrors,failedRequests}));
+  const apiReady=boot.api;
   assert.equal(apiReady,true,"live game test bridge did not initialize");
   const smoke=await page.evaluate(({fixture,sourceName,targetName})=>{
    const api=window.__ANKR_TEST__;
