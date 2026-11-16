@@ -1825,6 +1825,7 @@ function exposeAnkrEffectTestApi(){
   startTurn(player=1,skipDraw=false){state.phase="playing";startTurn(player,true,skipDraw);return this.snapshot()},
   removeCard(id,owner=1,zone="monsters"){const list=state.players[owner]?.[zone]||[];const index=list.findIndex(card=>card.id===id);if(index>=0)list.splice(index,1);recalculatePlayerPassives();return this.snapshot()},
   setEnergyPool(player,value){state.players[player].energyPool=value;return this.snapshot()},
+  activatedAbilities(name){return CardEffectEngine.activatedAbilities(cardDefinition(name)?.effect_text||"").map(a=>({raw:a.raw,body:a.body,costKind:a.costKind,costValue:a.costValue}))},
   chooseTarget(cardId){resolvePendingEffectTarget(cardId);return this.snapshot()},
   snapshot(){
    recalculatePlayerPassives();
