@@ -24,15 +24,23 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Install test dependencies
+        run: npm install
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
       - name: Run parser and regression tests
         run: node tests/effect-tests.js
-      - name: Run deterministic effect execution tests
+      - name: Run deterministic simulator contract tests
         run: node tests/effect-execution-tests.js
-      - name: Generate all-card audit
-        run: node tests/effect-audit.js effect-audit-report.json
-      - name: Upload audit report
+      - name: Generate compiler audit
+        run: node tests/effect-audit.js effect-compiler-audit-report.json
+      - name: Run real game executor browser audit
+        run: node tests/effect-browser-tests.js effect-live-audit-report.json
+      - name: Upload audit reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: effect-audit-report
-          path: effect-audit-report.json
+          name: effect-audit-reports
+          path: |
+            effect-compiler-audit-report.json
+            effect-live-audit-report.json
