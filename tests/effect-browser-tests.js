@@ -130,7 +130,6 @@ const server=http.createServer((req,res)=>{
    api.addCard(energyName,1,"deck","belief-other");
    api.runEffect("自分のデッキからカード1枚までを手札に加える。",1,"belief-source");
    const beliefPending=api.snapshot();
-   api.chooseTarget("belief-target");
    api.reset();
    api.addCard("苔木蜘蛛",1,"monsters","moss-source");
    api.addCard(trapName,1,"deck","moss-trap");
@@ -175,7 +174,7 @@ const server=http.createServer((req,res)=>{
    return {
     beliefPending:beliefPending.pendingTarget?.kind||null,beliefPicker:beliefPending.pickerOpen,
     mossPending:mossPending.pendingTarget?.kind||null,mossDestination:mossPending.pendingTarget?.destination||null,
-    blueFlowerLife:blueFlower.players[1].life,
+    blueFlowerLife:blueFlower.players[1].life,expectedHighPower:highPower,
     tenkanPending:tenkanPending.pendingTarget?.kind||null,tenkanDestination:tenkanPending.pendingTarget?.destination||null,tenkanPicker:tenkanPending.pickerOpen,
     passiveBefore,passiveAfter,secondTurnHand:secondTurn.players[2].zones.hand.length,firstTurnHand:firstTurn.players[1].zones.hand.length,
     commanderBuffPending:commanderBuffPending.pendingTarget?.kind||null,captainPending:captainPending.pendingTarget?.kind||null
@@ -185,7 +184,7 @@ const server=http.createServer((req,res)=>{
   assert.equal(advanced.beliefPicker,true,"Believing Heart picker was not displayed");
   assert.equal(advanced.mossPending,"deckSearchMove","Moss Tree Spider did not open a deck trap picker");
   assert.equal(advanced.mossDestination,"facedown","Moss Tree Spider picker did not set traps face down");
-  assert.equal(advanced.blueFlowerLife,4000+highPower,"Blue Flower maximum-power healing did not resolve");
+  assert.equal(advanced.blueFlowerLife,4000+advanced.expectedHighPower,"Blue Flower maximum-power healing did not resolve");
   assert.equal(advanced.tenkanPending,"deckSearchMove","Tenkan did not continue to its deck-energy selection");
   assert.equal(advanced.tenkanDestination,"energy","Tenkan did not offer energy deployment");
   assert.equal(advanced.tenkanPicker,true,"Tenkan energy picker was not displayed");
