@@ -54,7 +54,7 @@ for(const card of cardsData.cards){
   cases.push({cardId:card.id,cardName:card.name,sourceZone,clauseIndex:ability.index,text});
  }
 }
-function mime(file){return file.endsWith(".js")?"text/javascript":file.endsWith(".json")?"application/json":file.endsWith(".css")?"text/css":"text/plain"}
+function mime(file){return file.endsWith(".html")?"text/html":file.endsWith(".js")?"text/javascript":file.endsWith(".json")?"application/json":file.endsWith(".css")?"text/css":"text/plain"}
 const server=http.createServer((req,res)=>{
  const pathname=decodeURIComponent(new URL(req.url,"http://localhost").pathname);
  const target=path.resolve(root,"."+pathname);
