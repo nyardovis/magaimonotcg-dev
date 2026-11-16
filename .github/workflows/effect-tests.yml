@@ -24,8 +24,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Run effect regression tests
+      - name: Run parser and regression tests
         run: node tests/effect-tests.js
+      - name: Run deterministic effect execution tests
+        run: node tests/effect-execution-tests.js
       - name: Generate all-card audit
         run: node tests/effect-audit.js effect-audit-report.json
       - name: Upload audit report
