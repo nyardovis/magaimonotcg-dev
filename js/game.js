@@ -434,26 +434,39 @@ function renderDiscardViewer(){
 function recalculatePlayerPassives(){
  for(const p of [1,2]){
   const player=state.players[p];if(!player)continue;
-  player.opponentMonstersCannotAttackPlayer=false;player.disableOpponentTraps=false;player.disableOpponentEnterEffects=false;player.damageReduction=0;
+  player.opponentMonstersCannotAttackPlayer=false;player.disableOpponentTraps=false;player.disableOpponentEnterEffects=false;player.passiveDamageReduction=0;
   for(const owner of [1,2])for(const card of [...(state.players[owner]?.monsters||[]),...(state.players[owner]?.energy||[]),...(state.players[owner]?.field||[])]){
-   const data=cardDefinition(card),text=String(data?.effect_text||"");if(!data||card.effectsDisabled)continue;
+   const data=cardDefinition(card),text=String(data?.effect_text||"");if(!data)continue;
+   if(card.effectsDisabled)continue;
    if(text.includes("相手のモンスターはプレイヤーに攻撃できない")&&p!==owner)player.opponentMonstersCannotAttackPlayer=true;
    if(text.includes("相手の罠は発動しない")&&p!==owner)player.disableOpponentTraps=true;
    if(text.includes("相手の「場に出た時」の効果は発動しない")&&p!==owner)player.disableOpponentEnterEffects=true;
-   if(text.includes("自分が受けるダメージ-")&&p===owner){const m=text.match(/自分が受けるダメージ-(\d+)/);if(m)player.damageReduction=Math.max(player.damageReduction,Number(m[1]))}
+   if(text.includes("自分が受けるダメージ-")&&p===owner){const m=text.match(/自分が受けるダメージ-(\\d+)/);if(m)player.passiveDamageReduction=Math.max(player.passiveDamageReduction,Number(m[1]))}
   }
  }
  for(const owner of [1,2])for(const card of [...(state.players[owner]?.monsters||[]),...(state.players[owner]?.energy||[]),...(state.players[owner]?.field||[])]){
-  if(card.effectsDisabled)continue;const text=String(cardDefinition(card)?.effect_text||"");
-  if(/(?:^|。)\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(text))card.cannotAttack=true;else delete card.cannotAttack;
-  if(/(?:^|。)\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(text))card.cannotBeAttacked=true;else delete card.cannotBeAttacked;
-  if(text.includes("アンタップ中は攻撃されない"))card.cannotBeAttackedWhileUntapped=true;else delete card.cannotBeAttackedWhileUntapped;
-  if(text.includes("相手のモンスターはこれにしか攻撃できない"))card.mustBeAttacked=true;else delete card.mustBeAttacked;
-  if(text.includes("相手の効果で選ばれない"))card.cannotBeChosenByOpponent=true;else delete card.cannotBeChosenByOpponent;
-  if(text.includes("モンスターとの戦闘時、戦闘相手のパワーで戦闘する"))card.combatPowerUsesOpponent=true;else delete card.combatPowerUsesOpponent;
-  if(text.includes("モンスターとの戦闘時、これのパワーの代わりに0パワーで戦闘する"))card.combatPowerOverride=0;else if(card.combatPowerOverride===0)delete card.combatPowerOverride;
-  const repeat=text.match(/1ターンに(\d+)回攻撃できる/);if(repeat)card.attacksPerTurn=Number(repeat[1]);else delete card.attacksPerTurn;
-  const reduction=text.match(/これが受けるダメージ-(\d+)/);if(reduction)card.damageReduction=Number(reduction[1]);else delete card.damageReduction;
+  const text=String(cardDefinition(card)?.effect_text||"");
+  if(card.effectsDisabled){
+   if(/(?:^|。)\\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(text))delete card.cannotAttack;
+   if(/(?:^|。)\\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(text))delete card.cannotBeAttacked;
+   if(text.includes("アンタップ中は攻撃されない"))delete card.cannotBeAttackedWhileUntapped;
+   if(text.includes("相手のモンスターはこれにしか攻撃できない"))delete card.mustBeAttacked;
+   if(text.includes("相手の効果で選ばれない"))delete card.cannotBeChosenByOpponent;
+   if(text.includes("モンスターとの戦闘時、戦闘相手のパワーで戦闘する"))delete card.combatPowerUsesOpponent;
+   if(text.includes("モンスターとの戦闘時、これのパワーの代わりに0パワーで戦闘する"))delete card.combatPowerOverride;
+   if(text.includes("1ターンに")&&text.includes("回攻撃できる"))delete card.attacksPerTurn;
+   if(text.includes("これが受けるダメージ-"))delete card.passiveDamageReduction;
+   continue;
+  }
+  if(/(?:^|。)\\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(text))card.cannotAttack=true;
+  if(/(?:^|。)\\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(text))card.cannotBeAttacked=true;
+  if(text.includes("アンタップ中は攻撃されない"))card.cannotBeAttackedWhileUntapped=true;
+  if(text.includes("相手のモンスターはこれにしか攻撃できない"))card.mustBeAttacked=true;
+  if(text.includes("相手の効果で選ばれない"))card.cannotBeChosenByOpponent=true;
+  if(text.includes("モンスターとの戦闘時、戦闘相手のパワーで戦闘する"))card.combatPowerUsesOpponent=true;
+  if(text.includes("モンスターとの戦闘時、これのパワーの代わりに0パワーで戦闘する"))card.combatPowerOverride=0;
+  const repeat=text.match(/1ターンに(\\d+)回攻撃できる/);if(repeat)card.attacksPerTurn=Number(repeat[1]);
+  const reduction=text.match(/これが受けるダメージ-(\\d+)/);if(reduction)card.passiveDamageReduction=Number(reduction[1]);
  }
 }
 function render(){
@@ -729,7 +742,7 @@ function effectCannotChooseZone(player,zone){
  }
  return false;
 }
-function resetGrantedCardInformation(c){if(!c)return;for(const key of ["effectsDisabled","cannotAttack","cannotAttackUntilTurnEnd","cannotAttackUntilPlayerTurnEnd","cannotBeAttacked","cannotBeAttackedWhileUntapped","mustBeAttacked","cannotBeChosenByOpponent","combatPowerUsesOpponent","combatPowerOverride","attacksPerTurn","damageReduction","grantedEffects","temporaryEffects","cannotAttackUntilOwnerTurnEnd"])delete c[key];c.summonedThisTurn=false;c.canAttackOnSummon=false;c.attacksThisTurn=0}
+function resetGrantedCardInformation(c){if(!c)return;for(const key of ["effectsDisabled","cannotAttack","cannotAttackUntilTurnEnd","cannotAttackUntilPlayerTurnEnd","cannotBeAttacked","cannotBeAttackedWhileUntapped","mustBeAttacked","cannotBeChosenByOpponent","combatPowerUsesOpponent","combatPowerOverride","attacksPerTurn","damageReduction","passiveDamageReduction","grantedEffects","temporaryEffects","cannotAttackUntilOwnerTurnEnd"])delete c[key];c.summonedThisTurn=false;c.canAttackOnSummon=false;c.attacksThisTurn=0}
 function cardEffectCannotBeRemoved(c){return /この効果は消えない/.test(String(cardDefinition(c)?.effect_text||""))}
 function disableCardEffects(c){if(!c||cardEffectCannotBeRemoved(c))return false;c.effectsDisabled=true;return true}
 function moveToDiscard(p,c,reason=""){const x=state.players[p];resetGrantedCardInformation(c);c.tapped=false;c.faceUp=true;c.revealed=false;c.damage=0;c.modification=0;c.counters=0;x.discard.push(c);if(reason)log("「"+c.name+"」を捨て札に置きました（"+reason+"）")}
@@ -753,9 +766,9 @@ function resolveCardTrigger(card,p,trigger){
     const repeatAttack=text.match(/1ターンに(\d+)回攻撃できる/);
     if(repeatAttack)card.attacksPerTurn=Number(repeatAttack[1]);
     const reduction=text.match(/自分が受けるダメージ-(\d+)/);
-    if(reduction)state.players[p].damageReduction=Math.max(Number(state.players[p].damageReduction)||0,Number(reduction[1]));
+    if(reduction)state.players[p].passiveDamageReduction=Math.max(Number(state.players[p].passiveDamageReduction)||0,Number(reduction[1]));
     const ownCardReduction=text.match(/これが受けるダメージ-(\d+)/);
-    if(ownCardReduction)card.damageReduction=Math.max(Number(card.damageReduction)||0,Number(ownCardReduction[1]));
+    if(ownCardReduction)card.passiveDamageReduction=Math.max(Number(card.passiveDamageReduction)||0,Number(ownCardReduction[1]));
   }
   if(trigger==="enter"&&state.players[p===1?2:1].disableOpponentEnterEffects){debugLog("相手の効果により場に出た時効果を無効化: "+card.name,"effect","skipped",{player:p,card:card.name});return}
   if(trigger==="spell"&&data.name==="転換"){resolveEffectText(text,p,card);return}
@@ -1383,7 +1396,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  if(sourceCard&&s.includes("相手のモンスターはこれにしか攻撃できない"))sourceCard.mustBeAttacked=true;
  if(sourceCard&&s.includes("相手のモンスターはプレイヤーに攻撃できない"))own.opponentMonstersCannotAttackPlayer=true;
  const damageReductionMatch=s.match(/自分が受けるダメージ-(\d+)/);
- if(damageReductionMatch)own.damageReduction=Math.max(Number(own.damageReduction)||0,Number(damageReductionMatch[1]));
+ if(damageReductionMatch)own.effectDamageReduction=Math.max(Number(own.effectDamageReduction)||0,Number(damageReductionMatch[1]));
  const ownCardReduction=s.match(/これが受けるダメージ-(\d+)/);
  if(ownCardReduction&&sourceCard)sourceCard.damageReduction=Math.max(Number(sourceCard.damageReduction)||0,Number(ownCardReduction[1]));
 
@@ -1556,7 +1569,7 @@ function resolveEffectText(text,p,sourceCard,eventCard=null){
  }
 }
 function attackPower(card){if(card?.combatPowerOverride!==undefined&&card?.combatPowerOverride!==null)return Math.max(0,Number(card.combatPowerOverride)||0);const base=Number(card.power)||Number(cardDefinition(card)?.power)||0;return Math.max(0,base+(Number(card.modification)||0))}
-function reduceIncomingDamage(target,amount){return Math.max(0,Number(amount||0)-Math.max(0,Number(target?.damageReduction)||0))}
+function reduceIncomingDamage(target,amount){const reduction=Math.max(0,Number(target?.damageReduction)||0,Number(target?.passiveDamageReduction)||0,Number(target?.effectDamageReduction)||0);return Math.max(0,Number(amount||0)-reduction)}
 function declareAttack(cardId){
   if(state.phase!=="playing"||state.pendingDiscardPlayer!==null||state.turnPlayer!==1||state.gameOver)return;
   const card=state.players[1].monsters.find(c=>c.id===cardId);if(!card)return;
