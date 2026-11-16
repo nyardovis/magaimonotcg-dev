@@ -769,6 +769,7 @@ function activateCardAbility(cardId,abilityIndex){
   const selected=state.selected;
   if(!selected||selected.p!==1||!["monsters","energy","field","facedown","discard"].includes(selected.z))return;
   const card=find(1,selected.z,cardId);if(!card)return;
+  if(card.name==="碧い花"&&abilityIndex===0){if(!state.players[1].facedown.length){log("自分の罠が場にないため、この能力は使用できません");return}if(!useEnergyCost(1,2))return;state.players[1].life+=700;broadcastEffectDelta({target:"ownLife",delta:700});if(!onlinePlayerId)resolveTrapTriggers(2,"opponentHeal");log("碧い花の効果で700回復しました");state.selected={p:1,z:selected.z,id:card.id};render();return}
   const abilities=CardEffectEngine.activatedAbilities(cardDefinition(card)?.effect_text||"");
   const ability=abilities[abilityIndex];if(!ability)return;
   const isBlueFlowerTrapHeal=card.name==="碧い花"&&ability.body.includes("自分の罠が場にあるなら")&&/自分を\\s*700回復/.test(ability.body);
