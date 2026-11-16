@@ -54,7 +54,7 @@ for(const card of cardsData.cards){
   cases.push({cardId:card.id,cardName:card.name,sourceZone,clauseIndex:ability.index,text});
  }
 }
-function mime(file){return file.endsWith(".js")?"text/javascript":file.endsWith(".json")?"application/json":file.endsWith(".css")?".css":"text/plain"}
+function mime(file){return file.endsWith(".js")?"text/javascript":file.endsWith(".json")?"application/json":file.endsWith(".css")?"text/css":"text/plain"}
 const server=http.createServer((req,res)=>{
  const pathname=decodeURIComponent(new URL(req.url,"http://localhost").pathname);
  const target=path.resolve(root,"."+pathname);
@@ -90,12 +90,28 @@ const server=http.createServer((req,res)=>{
    const pending=api.snapshot();
    api.chooseTarget("damage-target");
    const damage=api.snapshot();
-   return {drawHand:draw.players[1].zones.hand.length,drawDeck:draw.players[1].zones.deck.length,pendingTarget:pending.pendingTarget?.kind||null,targetDamage:damage.players[2].zones.monsters.find(c=>c.id==="damage-target")?.damage||0};
+   api.reset();
+   const enterSource=api.addCard("紅魚",1,"monsters","enter-source");
+   api.trigger(enterSource,1,"enter");
+   const enter=api.snapshot();
+   api.reset();
+   const archer=api.addCard("王国の弓騎士",1,"monsters","archer");
+   api.addCard(targetName,2,"monsters","archer-target");
+   api.activate(archer,"monsters",0);
+   const activatedPending=api.snapshot();
+   api.chooseTarget("archer-target");
+   const activated=api.snapshot();
+   const archerCard=activated.players[1].zones.monsters.find(c=>c.id==="archer");
+   return {drawHand:draw.players[1].zones.hand.length,drawDeck:draw.players[1].zones.deck.length,pendingTarget:pending.pendingTarget?.kind||null,targetDamage:damage.players[2].zones.monsters.find(c=>c.id==="damage-target")?.damage||0,enterOpponentLife:enter.players[2].life,activatedPending:activatedPending.pendingTarget?.kind||null,archerTapped:archerCard?.tapped||false,archerTargetDamage:activated.players[2].zones.monsters.find(c=>c.id==="archer-target")?.damage||0,archerPower:archerCard?.power||0};
   },{fixture,sourceName:fixtureCards.monster.name,targetName:fixtureCards.monster.name});
   assert.equal(smoke.drawHand,2,"live executor draw smoke test failed");
   assert.equal(smoke.drawDeck,0,"live executor draw did not remove cards from deck");
   assert.equal(smoke.pendingTarget,"monsterDamage","live executor did not request a board target for monster damage");
   assert.equal(smoke.targetDamage,300,"live executor did not apply damage to the chosen target");
+  assert.equal(smoke.enterOpponentLife,3900,"live enter trigger did not apply the card effect");
+  assert.equal(smoke.activatedPending,"kingdomArcherDamage","activated ability did not request a board target");
+  assert.equal(smoke.archerTapped,true,"tap activation cost was not paid");
+  assert.equal(smoke.archerTargetDamage,smoke.archerPower,"activated ability did not apply source power damage");
   const results=await page.evaluate(({cases,fixture})=>window.__ANKR_TEST__.auditBatch(cases,fixture),{cases,fixture});
   const counts={};for(const result of results)counts[result.status]=(counts[result.status]||0)+1;
   const errors=results.filter(r=>r.status==="runtime_error");
