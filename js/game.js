@@ -1139,7 +1139,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  if(eventDamage&&eventCard&&eventOwner){const amount=Number(eventDamage[1]);eventCard.damage=(Number(eventCard.damage)||0)+amount;if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:eventCard.id,delta:amount});checkMonsterDestruction(eventOwner,true);handled=true}
  const eventModifier=s.match(/それを\s*([+-]\d+)/);
  if(eventModifier&&eventCard&&eventOwner){const delta=Number(eventModifier[1]);eventCard.modification=(Number(eventCard.modification)||0)+delta;if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentMonsterModifier",cardId:eventCard.id,delta});handled=true}
- if(/それが与えるダメージを0にする/.test(s)&&eventCard&&eventOwner){eventCard.nextAttackDamage=0;if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentAttackDamageZero",cardId:eventCard.id});handled=true;log("「"+eventCard.name+"」が与えるダメージを0にしました（戦闘の処理は手動）")}
+ if(/それが与えるダメージを0にする/.test(s)&&eventCard&&eventOwner){eventCard.nextAttackDamage=0;if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentAttackDamageZero",cardId:eventCard.id});handled=true;log("「"+eventCard.name+"」が与えるダメージを0にしました")}
  if(/それの効果を消す/.test(s)&&eventCard&&eventOwner){if(disableCardEffects(eventCard)){if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentDisable",cardId:eventCard.id});handled=true}else log("「"+eventCard.name+"」は効果を消されません")}
  if(/それを打ち消す/.test(s)&&eventCard&&eventOwner){
   const targetState=state.players[eventOwner];let zone=null;
@@ -1591,7 +1591,7 @@ function resolveAttack(targetMonsterId){
     resolveTrapTriggers(nonActive,"opponentAttack",attacker);
     if(defender){debugLog("防御側モンスターの効果を確認","effect","info",{player:nonActive,card:defender.name});resolveCardTrigger(defender,nonActive,"attack")}
   }
-  const attack=attacker.combatPowerUsesOpponent&&defender?attackPower(defender):attackPower(attacker);
+  const attack=attacker.nextAttackDamage!==undefined?Math.max(0,Number(attacker.nextAttackDamage)||0):(attacker.combatPowerUsesOpponent&&defender?attackPower(defender):attackPower(attacker));delete attacker.nextAttackDamage;
   debugLog("戦闘ダメージを計算","combat","info",{attacker:attacker.name,attackerPower:attack,defender:defender?.name||"プレイヤー",defenderPower:defender?attackPower(defender):null});
   if(defender&&state.players[2].monsters.some(c=>c.id===defender.id)){
     const defenderPower=defender.combatPowerUsesOpponent?attackPower(attacker):attackPower(defender);
@@ -1817,6 +1817,7 @@ function exposeAnkrEffectTestApi(){
   activate(sourceId,zone="monsters",abilityIndex=0){
    state.selected={p:1,z:zone,id:sourceId};activateCardAbility(sourceId,abilityIndex);return this.snapshot();
   },
+  attack(attackerId,targetId=null){const attacker=state.players[1].monsters.find(c=>c.id===attackerId);if(!attacker)throw new Error("attacker not found");pendingAttack={cardId:attacker.id,name:attacker.name};resolveAttack(targetId);return this.snapshot()},
   chooseTarget(cardId){resolvePendingEffectTarget(cardId);return this.snapshot()},
   snapshot(){
    const players={};
