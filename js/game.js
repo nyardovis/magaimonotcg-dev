@@ -1833,10 +1833,10 @@ function exposeAnkrEffectTestApi(){
     let promptCount=0;window.prompt=()=>{promptCount++;return null};
     this.reset();
     for(const entry of fixture||[])this.addCard(entry.name,entry.owner,entry.zone,entry.id);
-    const sourceId=this.addCard(item.cardName,1,item.sourceZone||"monsters","audit-source");
+    const sourceCard=newCard(item.cardName,"audit-source");
     const before=JSON.stringify(this.snapshot());
     let error=null;
-    try{resolveEffectText(item.text,1,state.players[1][item.sourceZone||"monsters"].find(c=>c.id===sourceId)||null)}catch(e){error={message:String(e?.message||e),stack:String(e?.stack||"")}}
+    try{resolveEffectText(item.text,1,sourceCard)}catch(e){error={message:String(e?.message||e),stack:String(e?.stack||"")}}
     const logs=this.logs(),after=JSON.stringify(this.snapshot());
     const pending=!!pendingEffectTarget,picker=!!document.querySelector("#effectDeckPicker");
     const unimplemented=logs.some(e=>e.status==="unimplemented"||e.message.includes("未対応の効果"));
