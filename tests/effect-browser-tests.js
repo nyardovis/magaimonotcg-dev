@@ -259,6 +259,16 @@ const server=http.createServer((req,res)=>{
   const fieldCommanderSummon=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
   assert.equal(fieldCommanderSummon.players[1].zones.monsters.some(c=>c.id==="field-commander-knight"),true,"Field Commander activated summon did not move the selected Knight to the field");
 
+
+  await page.evaluate(()=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("ドラゴンヘッド",1,"monsters","dragon-head");api.addCard("火花",1,"deck","spark-use");api.setEnergyPool(1,0);api.trigger("dragon-head",1,"enter")});
+  assert.equal(await page.locator("#effectDeckPicker").isVisible().catch(()=>false),true,"Dragon Head did not open a picker for a spell in the deck");
+  await page.locator('#effectDeckPicker button[data-card-id="spark-use"]').click();
+  await page.locator("#effectDeckPicker button").filter({hasText:"選択したカードを使用する"}).click();
+  const freeUse=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(freeUse.players[1].zones.discard.some(c=>c.id==="spark-use"),true,"The selected spell was not used from the deck");
+  assert.equal(freeUse.players[2].life,3700,"The spell used from the deck did not resolve");
+  assert.equal(freeUse.players[1].energyPool,0,"A card used by an effect incorrectly paid its normal energy cost");
+
   const results=await page.evaluate(({cases,fixture})=>window.__ANKR_TEST__.auditBatch(cases,fixture),{cases,fixture});
   const counts={};for(const result of results)counts[result.status]=(counts[result.status]||0)+1;
   const errors=results.filter(r=>r.status==="runtime_error");
