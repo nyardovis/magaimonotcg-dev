@@ -994,7 +994,7 @@ function openDeckSearchPicker(pending){
    const source=own[sourceZone],index=source.findIndex(card=>card.id===id);if(index<0)continue;
    const candidate=source[index],kind=cardKind(candidate),destination=pending.destination==="auto"?(kind==="spell"?"spell":kind==="monster"?"monsters":kind==="energy"?"energy":kind==="field"?"field":kind==="trap"?"facedown":null):pending.destination;
    if(!destination)continue;
-   const capacity=destination==="spell"?Infinity:MAX[destination];if(Number.isFinite(capacity)&&(own[destination]?.length||0)>=capacity){log("移動先ゾーンが満杯のため「"+candidate.name+"」を移動できません");continue}
+   const capacity=destination==="spell"?Infinity:MAX[destination];if(destination!=="field"&&Number.isFinite(capacity)&&(own[destination]?.length||0)>=capacity){log("移動先ゾーンが満杯のため「"+candidate.name+"」を移動できません");continue}
    const card=source.splice(index,1)[0];moved.push({card,destination});resetGrantedCardInformation(card);card.faceUp=destination!=="facedown";card.revealed=false;card.tapped=destination==="energy"&&!!pending.tap;
    if(destination==="hand")own.hand.push(card);
    else if(destination==="discard"||destination==="spell"){moveToDiscard(pending.player,card,"効果によるカード移動");if(destination==="spell")resolveCardTrigger(card,pending.player,"spell")}
@@ -1823,13 +1823,14 @@ function exposeAnkrEffectTestApi(){
   setEnergyPool(player,value){state.players[player].energyPool=value;return this.snapshot()},
   chooseTarget(cardId){resolvePendingEffectTarget(cardId);return this.snapshot()},
   snapshot(){
+   recalculatePlayerPassives();
    const players={};
    for(const p of [1,2]){
     const x=state.players[p],zones={};
     for(const z of ["hand","deck","monsters","energy","field","discard","facedown"])zones[z]=(x[z]||[]).map(c=>({id:c.id,name:c.name,tapped:!!c.tapped,damage:Number(c.damage)||0,modification:Number(c.modification)||0,counters:Number(c.counters)||0,power:Number(c.power)||0,effectsDisabled:!!c.effectsDisabled,cannotBeAttacked:!!c.cannotBeAttacked,cannotBeAttackedWhileUntapped:!!c.cannotBeAttackedWhileUntapped,cannotAttack:!!c.cannotAttack,attacksPerTurn:Number(c.attacksPerTurn)||0,damageReduction:Number(c.damageReduction)||0}));
     players[p]={life:x.life,energyPool:x.energyPool,zones};
    }
-   recalculatePlayerPassives();return {players,pendingTarget:pendingEffectTarget?{kind:pendingEffectTarget.kind,candidates:pendingEffectTarget.candidates,destination:pendingEffectTarget.destination,maxCount:pendingEffectTarget.maxCount}:null,pickerOpen:!!document.querySelector("#effectDeckPicker"),pendingDiscardPlayer:state.pendingDiscardPlayer,gameOver:state.gameOver};
+   return {players,pendingTarget:pendingEffectTarget?{kind:pendingEffectTarget.kind,candidates:pendingEffectTarget.candidates,destination:pendingEffectTarget.destination,maxCount:pendingEffectTarget.maxCount}:null,pickerOpen:!!document.querySelector("#effectDeckPicker"),pendingDiscardPlayer:state.pendingDiscardPlayer,gameOver:state.gameOver};
   },
   logs(){return debugLogEntries.map(e=>({category:e.category,status:e.status,message:e.message,details:e.details}))},
   auditBatch(cases,fixture){
