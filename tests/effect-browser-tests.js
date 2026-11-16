@@ -195,6 +195,45 @@ const server=http.createServer((req,res)=>{
   assert.equal(advanced.commanderBuffPending,"taggedMonsterBuff","Field Commander did not request a Knight target");
   assert.equal(advanced.captainPending,"formulaMonsterDamage","Kingdom Commander did not request a board target for its damage formula");
 
+
+  await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("信じる心",1,"monsters","belief-source");api.addCard(monsterName,1,"deck","belief-choice");api.runEffect("自分のデッキからカード1枚までを手札に加える。",1,"belief-source")},{monsterName:fixtureCards.monster.name});
+  await page.locator('#effectDeckPicker button[data-card-id="belief-choice"]').click();
+  await page.locator("#effectDeckPicker button").filter({hasText:"選択したカードを手札に加える"}).click();
+  const beliefChosen=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(beliefChosen.players[1].zones.hand.some(c=>c.id==="belief-choice"),true,"Believing Heart did not move the selected deck card to hand");
+
+  await page.evaluate(({trapName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("苔木蜘蛛",1,"monsters","moss-source");api.addCard(trapName,1,"deck","moss-trap");api.trigger("moss-source",1,"enter")},{trapName:fixtureCards.trap.name});
+  await page.locator('#effectDeckPicker button[data-card-id="moss-trap"]').click();
+  await page.locator("#effectDeckPicker button").filter({hasText:"選択したカードを罠として場に伏せる"}).click();
+  const mossChosen=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(mossChosen.players[1].zones.facedown.some(c=>c.id==="moss-trap"),true,"Moss Tree Spider did not set the selected trap face down");
+
+  await page.evaluate(({energyName,monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("転換",1,"hand","tenkan-source");api.addCard(energyName,1,"energy","tenkan-cost");api.addCard(energyName,1,"deck","tenkan-energy");api.addCard(monsterName,1,"deck","tenkan-draw");api.runEffect("自分のエネルギーが場に無い時使用できない。自分のエネルギー1枚を破壊する。自分のデッキからエネルギー1枚までをタップして出す。自分は1枚引く。",1,"tenkan-source");api.chooseTarget("tenkan-cost")},{energyName:fixtureCards.energy.name,monsterName:fixtureCards.monster.name});
+  await page.locator('#effectDeckPicker button[data-card-id="tenkan-energy"]').click();
+  await page.locator("#effectDeckPicker button").filter({hasText:"選択したカードをエネルギーとして場に出す"}).click();
+  const tenkanChosen=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(tenkanChosen.players[1].zones.energy.some(c=>c.id==="tenkan-energy"&&c.tapped),true,"Tenkan did not deploy the selected energy tapped");
+  assert.equal(tenkanChosen.players[1].zones.hand.length,1,"Tenkan did not draw after its energy selection");
+
+  await page.evaluate(({knightName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("王国の騎士団長",1,"monsters","kingdom-commander");api.addCard(knightName,1,"deck","knight-summon-1");api.addCard(knightName,1,"deck","knight-summon-2");api.trigger("kingdom-commander",1,"enter")},{knightName:(cardsData.cards.find(c=>String(c.tags||"").includes("#モンスターカード")&&String(c.types||"").split(/[,、]/).includes("騎士")&&Number(c.cost)<=2&&!String(c.effect_text||"").trim())||fixtureCards.monster).name});
+  const summonPickerVisible=await page.locator("#effectDeckPicker").isVisible().catch(()=>false);
+  assert.equal(summonPickerVisible,true,"Kingdom Commander summon did not open a player selection picker");
+  await page.locator('#effectDeckPicker button[data-card-id="knight-summon-1"]').click();
+  await page.locator('#effectDeckPicker button[data-card-id="knight-summon-2"]').click();
+  await page.locator("#effectDeckPicker button").filter({hasText:"選択したカードを場に出す"}).click();
+  const summonedKnights=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(summonedKnights.players[1].zones.monsters.filter(c=>c.id.startsWith("knight-summon-")).length,2,"Kingdom Commander did not summon the two selected Knights");
+
+  await page.evaluate(({knightName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("部隊指揮官",1,"monsters","field-commander");api.addCard(knightName,1,"monsters","knight-target");api.trigger("field-commander",1,"enter")},{knightName:(cardsData.cards.find(c=>String(c.tags||"").includes("#モンスターカード")&&String(c.types||"").split(/[,、]/).includes("騎士")&&!String(c.effect_text||"").trim())||fixtureCards.monster).name});
+  await page.locator('.card[data-card-id="knight-target"]').click();
+  const buffedKnight=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(buffedKnight.players[1].zones.monsters.find(c=>c.id==="knight-target")?.modification,300,"Field Commander did not apply +300 to the selected Knight");
+
+  await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("王国の騎士団長",1,"monsters","kingdom-commander");api.addCard(monsterName,1,"monsters","extra-own");api.addCard(monsterName,2,"monsters","commander-target");api.setEnergyPool(1,4);api.activate("kingdom-commander","monsters",0)},{monsterName:fixtureCards.monster.name});
+  await page.locator('.card[data-card-id="commander-target"]').click();
+  const captainDamage=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(captainDamage.players[2].zones.monsters.find(c=>c.id==="commander-target")?.damage,600,"Kingdom Commander did not apply its calculated damage to the clicked target");
+
   const results=await page.evaluate(({cases,fixture})=>window.__ANKR_TEST__.auditBatch(cases,fixture),{cases,fixture});
   const counts={};for(const result of results)counts[result.status]=(counts[result.status]||0)+1;
   const errors=results.filter(r=>r.status==="runtime_error");
