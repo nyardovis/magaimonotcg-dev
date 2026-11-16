@@ -229,7 +229,7 @@ const server=http.createServer((req,res)=>{
   const buffedKnight=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
   assert.equal(buffedKnight.players[1].zones.monsters.find(c=>c.id==="knight-target")?.modification,300,"Field Commander did not apply +300 to the selected Knight");
 
-  await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("王国の騎士団長",1,"monsters","kingdom-commander");api.addCard(monsterName,1,"monsters","extra-own");api.addCard(monsterName,2,"monsters","commander-target");api.setEnergyPool(1,4);api.activate("kingdom-commander","monsters",0)},{monsterName:fixtureCards.monster.name});
+  await page.evaluate(({monsterName,highPowerMonsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("王国の騎士団長",1,"monsters","kingdom-commander");api.addCard(monsterName,1,"monsters","extra-own");api.addCard(highPowerMonsterName,2,"monsters","commander-target");api.setEnergyPool(1,4);api.activate("kingdom-commander","monsters",0)},{monsterName:fixtureCards.monster.name,highPowerMonsterName:(cardsData.cards.find(c=>String(c.tags||"").includes("#モンスターカード")&&Number(c.power)>=700)||fixtureCards.monster).name});
   await page.locator('.card[data-card-id="commander-target"]').click();
   const captainDamage=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
   assert.equal(captainDamage.players[2].zones.monsters.find(c=>c.id==="commander-target")?.damage,600,"Kingdom Commander did not apply its calculated damage to the clicked target");
