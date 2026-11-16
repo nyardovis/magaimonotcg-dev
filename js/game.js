@@ -899,24 +899,30 @@ function resolvePendingEffectTarget(cardId){
  render();sendPendingAttackResponseIfReady();
 }
 function resolveSummonEffects(text,p,sourceCard){
- const own=state.players[p],sourcePattern=/自分の(手札かデッキか捨て札|手札かデッキ|デッキか捨て札|手札か捨て札|手札|デッキ|捨て札)から([\s\S]*?)(\d+)(体|枚)(?:まで)?(?:を場に|を)出す/g;
+ const own=state.players[p],sourcePattern=/自分の(手札かデッキか捨て札|手札かデッキ|デッキか捨て札|手札か捨て札|手札|デッキ|捨て札)から([\\s\\S]*?)(\\d+)(体|枚)(?:まで)?(?:を場に|を)出す/g;
  let matched=false;
  for(const match of String(text||"").matchAll(sourcePattern)){
   matched=true;
   const sourceNames=match[1].split("か"),qualifier=match[2]||"",limit=Number(match[3]),unit=match[4];
-  const costMatch=qualifier.match(/(\d+)コスト以下/),costLimit=costMatch?Number(costMatch[1]):Infinity;
-  const includeNameMatch=qualifier.match(/名前に「([^」]+)」を含む/),quotedNames=[...qualifier.matchAll(/「([^」]+)」/g)].map(m=>m[1]),excludedNameMatch=qualifier.match(/「([^」]+)」以外/);
-  const exactName=quotedNames.find(name=>(!excludedNameMatch||name!==excludedNameMatch[1])&&(!includeNameMatch||name!==includeNameMatch[1]));
-  const includeName=includeNameMatch?.[1]||null,typeMatch=qualifier.match(/\[([^\]]+)\]/),requiredTypes=typeMatch?typeMatch[1].split(/[,、]/).map(v=>v.trim()).filter(Boolean):[];
+  const maxCostMatch=qualifier.match(/(\\d+)コスト以下/),minCostMatch=qualifier.match(/(\\d+)コスト以上/),maxPowerMatch=qualifier.match(/(\\d+)パワー以下/);
+  const maxCost=maxCostMatch?Number(maxCostMatch[1]):Infinity,minCost=minCostMatch?Number(minCostMatch[1]):0,maxPower=maxPowerMatch?Number(maxPowerMatch[1]):Infinity;
+  const includeNameMatch=qualifier.match(/名前に「([^」]+)」を含む/),excludedNameMatch=qualifier.match(/「([^」]+)」以外/),requiredAbilityMatch=qualifier.match(/「([^」]+)」を持つ/);
+  const quotedNames=[...qualifier.matchAll(/「([^」]+)」/g)].map(m=>m[1]);
+  const exactName=quotedNames.find(name=>name!==excludedNameMatch?.[1]&&name!==includeNameMatch?.[1]&&name!==requiredAbilityMatch?.[1]);
+  const includeName=includeNameMatch?.[1]||null,requiredAbility=requiredAbilityMatch?.[1]||null;
+  const requiredTypes=[...qualifier.matchAll(/\\[([^\\]]+)\\]/g)].map(m=>m[1].trim()).filter(Boolean);
+  const orTypes=/\\[[^\\]]+\\]か\\[[^\\]]+\\]/.test(qualifier);
   const kindWord=qualifier.match(/(モンスター|エネルギー|魔法|罠|フィールド)/)?.[1]||null,kindMap={モンスター:"monster",エネルギー:"energy",魔法:"spell",罠:"trap",フィールド:"field"};
   const requiredKind=kindWord?kindMap[kindWord]:(unit==="体"?"monster":null);
   const sourceZones=sourceNames.map(name=>name==="手札"?"hand":name==="デッキ"?"deck":"discard").filter(zone=>zone!=="discard"||!effectCannotChooseZone(p,"discard"));
   const candidates=sourceZones.flatMap(zone=>own[zone]||[]).filter(card=>{
    const data=cardDefinition(card),kind=cardKind(card);if(!data||kind==="unknown"||kind==="spell"&&unit==="体")return false;
    if(kind==="monster"&&/これは使わずに場に出せない/.test(String(data.effect_text||"")))return false;
-   if(requiredKind&&kind!==requiredKind||cardCost(card)>costLimit)return false;
+   if(requiredKind&&kind!==requiredKind||cardCost(card)>maxCost||cardCost(card)<minCost||Number(data.power||0)>maxPower)return false;
    const types=String(data.types||"").split(/[,、]/).map(v=>v.trim()).filter(Boolean);
-   if(requiredTypes.some(type=>!types.includes(type))||exactName&&card.name!==exactName||includeName&&!String(card.name||"").includes(includeName)||excludedNameMatch&&card.name===excludedNameMatch[1])return false;
+   if(requiredTypes.length&&(orTypes?!requiredTypes.some(type=>types.includes(type)):!requiredTypes.every(type=>types.includes(type))))return false;
+   if(requiredAbility&&!String(data.effect_text||"").includes(requiredAbility))return false;
+   if(exactName&&card.name!==exactName||includeName&&!String(card.name||"").includes(includeName)||excludedNameMatch&&card.name===excludedNameMatch[1])return false;
    if(/パワー-100の/.test(qualifier)&&Number(data.power)!==-100)return false;
    return true;
   });
@@ -1014,7 +1020,7 @@ function openDeckSearchPicker(pending){
    const capacity=destination==="spell"?Infinity:MAX[destination];if(destination!=="field"&&Number.isFinite(capacity)&&(own[destination]?.length||0)>=capacity){log("移動先ゾーンが満杯のため「"+candidate.name+"」を移動できません");continue}
    const card=source.splice(index,1)[0];moved.push({card,destination,sourceZone});resetGrantedCardInformation(card);card.faceUp=destination!=="facedown";card.revealed=false;card.tapped=destination==="energy"&&!!pending.tap;
    if(destination==="hand")own.hand.push(card);
-   else if(destination==="discard"||destination==="spell"){moveToDiscard(pending.player,card,"効果によるカード移動");if(destination==="spell")resolveCardTrigger(card,pending.player,"spell")}
+   else if(destination==="discard"||destination==="spell"){moveToDiscard(pending.player,card,"効果によるカード移動");if(destination==="spell"){resolveCardTrigger(card,pending.player,"spell");if(!onlinePlayerId)resolveTrapTriggers(pending.player===1?2:1,"opponentSpell",card)}}
    else if(destination==="energy"){own.energy.push(card);resolveCardTrigger(card,pending.player,"enter")}
    else if(destination==="monsters"){card.power=Number(cardDefinition(card)?.power)||card.power||0;card.damage=0;card.modification=0;card.summonedThisTurn=true;card.canAttackOnSummon=String(cardDefinition(card)?.effect_text||"").includes("場に出たターンでも攻撃できる");own.monsters.push(card);resolveCardTrigger(card,pending.player,"enter");resolveTrapTriggers(pending.player,"ownEnter",card);if(!onlinePlayerId)resolveTrapTriggers(pending.player===1?2:1,"opponentEnter",card)}
    else if(destination==="field"){if(own.field.length)moveToDiscard(pending.player,own.field.shift(),"効果によるフィールド置換");own.field.push(card);resolveCardTrigger(card,pending.player,"enter")}
@@ -1367,7 +1373,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   else log("オンライン対戦中の相手の捨て札を山札に戻す同期は未対応です");
   handled=true;log("自分の捨て札を全て山札の下に戻しました"+(onlinePlayerId?"":"（相手の捨て札も戻しました）"));
  }
- if(resolveSummonEffects(s,p,sourceCard))handled=true;
+ const summonHandled=resolveSummonEffects(s,p,sourceCard);if(summonHandled)handled=true;
  /* Additional broadly reusable effect patterns. */
  const counterCount=Number(sourceCard?.counters)||0;
  const formulaCounterHeal=s.match(/自分を\s*[（(]これのカウンターの数\s*[×x*]\s*(\d+)[）)]\s*回復/);
@@ -1428,89 +1434,19 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   if(target){if(disableCardEffects(target)){const targetOwner=own.monsters.some(mon=>mon.id===target.id)?p:(p===1?2:1);if(targetOwner!==p&&onlinePlayerId)broadcastEffectDelta({target:"opponentDisable",cardId:target.id});handled=true;log("「"+target.name+"」の効果を無効にしました")}else log("「"+target.name+"」は効果を消されません")}
  }
  /* 「使用する」は効果による使用なので、通常のエネルギーコストを支払わない。対象の種類に応じて使用処理を共通化する。 */
- const genericUse=s.match(/自分の(デッキか捨て札|デッキ|捨て札|手札)から(?:(\d+|[（(]自分のマナの数[）)])コスト以下の)?(?:名前に「([^」]+)」を含む)?(?:「([^」]+)」以外の)?(?:「([^」]+)」)?(?:\[([^\]]+)\](?:の)?)?(モンスター|魔法|罠|フィールド|エネルギー)?(\d+)(枚|体)までを使用する/);
- const topCardUse=s.match(/自分のデッキの上(\d+)枚を公開し、(?:それが([^、]+)なら、)?(?:それ)?1枚までを使用する/);
+ const genericUse=s.match(/自分の(デッキか捨て札|デッキ|捨て札|手札)から(?:(\\d+|[（(]自分のマナの数[）)])コスト以下の)?(?:名前に「([^」]+)」を含む)?(?:「([^」]+)」以外の)?(?:「([^」]+)」)?(?:\\[([^\\]]+)\\](?:の)?)?(モンスター|魔法|罠|フィールド|エネルギー)?(\\d+)(枚|体)までを使用する/);
+ const topCardUse=s.match(/自分のデッキの上(\\d+)枚を公開し、(?:それが([^、]+)なら、)?(?:それ)?1枚までを使用する/);
  if(genericUse||topCardUse){
-  const zoneName=genericUse?genericUse[1]:"デッキ",sourceZone=zoneName==="デッキか捨て札"?"both":zoneName==="デッキ"?"deck":zoneName==="捨て札"?"discard":"hand";
-  const costText=genericUse?genericUse[2]:null,maxCost=costText==null?Infinity:costText.includes("自分のマナ")?(Number(own.energyPool)||0):Number(costText);
-  const namePart=genericUse?(genericUse[3]||""):"",excludedName=genericUse?(genericUse[4]||""):"",exactName=genericUse?(genericUse[5]||""):"",tag=genericUse?(genericUse[6]||""):"",kindWord=genericUse?(genericUse[7]||""):"",repeatMatch=s.match(/これを(\d+)回行う/),max=(topCardUse?1:Number(genericUse[8]))*(repeatMatch?Number(repeatMatch[1]):1);
-  const kindByWord={モンスター:"monster",魔法:"spell",罠:"trap",フィールド:"field",エネルギー:"energy"};
-  const source=sourceZone==="both"?(effectCannotChooseZone(p,"discard")?[...own.deck]:[...own.deck,...own.discard]):sourceZone==="discard"&&effectCannotChooseZone(p,"discard")?[]:own[sourceZone];
+  const zoneName=genericUse?genericUse[1]:"デッキ",costText=genericUse?genericUse[2]:null,maxCost=costText==null?Infinity:costText.includes("自分のマナ")?(Number(own.energyPool)||0):Number(costText);
+  const namePart=genericUse?(genericUse[3]||""):"",excludedName=genericUse?(genericUse[4]||""):"",exactName=genericUse?(genericUse[5]||""):"",tag=genericUse?(genericUse[6]||""):"",kindWord=genericUse?(genericUse[7]||""):"";
+  const repeatMatch=s.match(/これを(\\d+)回行う/),max=(topCardUse?1:Number(genericUse[8]))*(repeatMatch?Number(repeatMatch[1]):1),kindByWord={モンスター:"monster",魔法:"spell",罠:"trap",フィールド:"field",エネルギー:"energy"};
+  const sourceZones=topCardUse?["deck"]:zoneName==="デッキか捨て札"?(effectCannotChooseZone(p,"discard")?["deck"]:["deck","discard"]):zoneName==="デッキ"?["deck"]:zoneName==="捨て札"?(effectCannotChooseZone(p,"discard")?[]:["discard"]):["hand"];
+  const source=sourceZones.flatMap(zone=>own[zone]||[]);
   if(topCardUse&&source[0]){source[0].faceUp=true;source[0].revealed=true;log("山札の一番上を公開しました: "+source[0].name)}
   const topCondition=topCardUse?(topCardUse[2]&&topCardUse[2].includes("5コスト以下")?5:Infinity):Infinity;
-  for(let n=0;n<max;n++){
-   const eligible=source.filter((card,index)=>(!topCardUse||index===0)&&cardCost(card)<=maxCost&&(!topCardUse||cardCost(card)<=topCondition||!cardDefinition(card)?.cost)&&(!namePart||String(card.name||"").includes(namePart))&&(!exactName||String(card.name||"")===exactName)&&(!excludedName||String(card.name||"")!==excludedName)&&(!tag||String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag))&&(!kindByWord[kindWord]||cardKind(card)===kindByWord[kindWord])&&cardKind(card)!=="unknown");
-   const chosen=chooseEffectTarget(eligible,"効果で使用するカードを"+zoneName+"から選んでください",p,sourceCard);
-   if(!chosen)break;
-   const sourceArray=[own.deck,own.discard,own.hand].find(list=>list.some(card=>card.id===chosen.id));if(!sourceArray)break;
-   const idx=sourceArray.findIndex(card=>card.id===chosen.id);if(idx<0)break;
-   const used=sourceArray.splice(idx,1)[0],kind=cardKind(used);
-   if(topCardUse)s=s.replace(/異なるなら、自分は1枚引く/,"");
-   resetGrantedCardInformation(used);used.faceUp=true;used.revealed=false;used.tapped=false;
-   if(kind==="spell"){
-    moveToDiscard(p,used,"効果による魔法の使用（コスト不要）");
-    resolveCardTrigger(used,p,"spell");
-    if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentSpell",used);
-   }else if(kind==="monster"){
-    if(own.monsters.length>=MAX.monsters){sourceArray.push(used);log("モンスターゾーンが満杯のため使用できません");break}
-    used.power=Number(cardDefinition(used)?.power)||used.power||0;used.damage=0;used.modification=0;used.summonedThisTurn=true;
-    used.canAttackOnSummon=String(cardDefinition(used)?.effect_text||"").includes("場に出たターンでも攻撃できる");own.monsters.push(used);
-    resolveCardTrigger(used,p,"enter");resolveTrapTriggers(p,"ownEnter",used);
-    if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentEnter",used);
-   }else if(kind==="field"){
-    if(own.field.length)moveToDiscard(p,own.field.shift(),"効果によるフィールド置換");
-    own.field.push(used);resolveCardTrigger(used,p,"enter");
-   }else if(kind==="trap"){
-    if(own.facedown.length>=MAX.facedown){sourceArray.push(used);log("罠ゾーンが満杯のため使用できません");break}
-    used.faceUp=false;own.facedown.push(used);
-   }else if(kind==="energy"){
-    if(own.energy.length>=MAX.energy){sourceArray.push(used);log("エネルギーゾーンが満杯のため使用できません");break}
-    own.energy.push(used);resolveCardTrigger(used,p,"enter");
-   }
-   handled=true;log(own.name+"は効果で"+zoneName+"から「"+used.name+"」をコストなしで使用しました");
-  }
-  if(!handled)log("使用条件に合うカードが"+zoneName+"にありません");
- }
- /* General graveyard-to-field summon: supports name, tag, cost, power, and multi-card limits. */
- const graveSummon=s.match(/自分の捨て札から(?:(?:「([^」]+)」)(以外の)?|名前に「([^」]+)」を含む)?(?:(\d+)コスト以下の)?(?:(\d+)コスト以上の)?(?:(\d+)パワー以下の)?(?:\[([^\]]+)\](?:か\[([^\]]+)\])?)?(?:の)?(?:「([^」]+)」を持つ)?(モンスター|体)?(\d+)体?(?:まで)?を出す/);
- if(graveSummon){
-  const excludedName=graveSummon[1]&&graveSummon[2]?graveSummon[1]:null;
-  const requiredAbility=graveSummon[9]||(graveSummon[1]&&s.includes("「"+graveSummon[1]+"」を持つ")?graveSummon[1]:null);
-  const requiredName=graveSummon[3]||(graveSummon[1]&&!excludedName&&!requiredAbility?graveSummon[1]:null);
-  const maxCost=graveSummon[4]!==undefined?Number(graveSummon[4]):null;
-  const minCost=graveSummon[5]!==undefined?Number(graveSummon[5]):null;
-  const maxPower=graveSummon[6]!==undefined?Number(graveSummon[6]):null;
-  const tagText=graveSummon[7]||"",orTag=graveSummon[8]||"";
-  const maxCount=Math.max(1,Number(graveSummon[11])||1);
-  if(effectCannotChooseZone(p,"discard")){log("効果により捨て札を対象に選べないため、捨て札からの召喚はできません")}
-  else{
-   let summoned=0;
-   for(let n=0;n<maxCount&&own.monsters.length<MAX.monsters;n++){
-    const eligible=own.discard.filter(card=>{
-     if(cardKind(card)!=="monster")return false;
-     const def=cardDefinition(card)||{},name=String(card.name||""),types=String(def.types||"").split(/[,、]/).map(v=>v.trim());
-     if(excludedName&&name.includes(excludedName))return false;
-     if(requiredName&&!requiredAbility&&!name.includes(requiredName))return false;
-     if(maxCost!==null&&cardCost(card)>maxCost)return false;
-     if(minCost!==null&&cardCost(card)<minCost)return false;
-     if(maxPower!==null&&(Number(def.power)||0)>maxPower)return false;
-     if(tagText){const requiredTags=tagText.split(/[,、]/).map(v=>v.trim());const matches=requiredTags.every(tag=>types.includes(tag));const alternativeMatches=orTag&&orTag.split(/[,、]/).map(v=>v.trim()).some(tag=>types.includes(tag));if(!matches&&!alternativeMatches)return false;}
-     if(requiredAbility&&!String(def.effect_text||"").includes(requiredAbility))return false;
-     return true;
-    });
-    const chosen=chooseEffectTarget(eligible,"場に出すモンスターを捨て札から選択してください（"+(n+1)+"/"+maxCount+"）",p,sourceCard);
-    if(!chosen)break;
-    const index=own.discard.findIndex(card=>card.id===chosen.id);if(index<0)break;
-    const summonedCard=own.discard.splice(index,1)[0];resetGrantedCardInformation(summonedCard);
-    summonedCard.tapped=false;summonedCard.faceUp=true;summonedCard.damage=0;summonedCard.modification=0;summonedCard.counters=0;
-    summonedCard.summonedThisTurn=true;summonedCard.canAttackOnSummon=String(cardDefinition(summonedCard)?.effect_text||"").includes("場に出たターンでも攻撃できる");
-    own.monsters.push(summonedCard);summoned++;
-    if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"move_card",zone:"discard",dest:"monsters",cardId:summonedCard.id}));
-    log("効果で捨て札から「"+summonedCard.name+"」を場に出しました");
-    resolveCardTrigger(summonedCard,p,"enter");
-   }
-   if(summoned){handled=true;log("捨て札から"+summoned+"体を場に出しました")}
-  }
+  const eligible=source.filter((card,index)=>(!topCardUse||index===0)&&cardCost(card)<=maxCost&&(!topCardUse||cardCost(card)<=topCondition||!cardDefinition(card)?.cost)&&(!namePart||String(card.name||"").includes(namePart))&&(!exactName||String(card.name||"")===exactName)&&(!excludedName||String(card.name||"")!==excludedName)&&(!tag||String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag))&&(!kindByWord[kindWord]||cardKind(card)===kindByWord[kindWord])&&cardKind(card)!=="unknown");
+  if(eligible.length&&!pendingEffectTarget){pendingEffectTarget={kind:"deckSearchMove",player:p,sourceZones,destination:"auto",candidates:eligible.map(card=>({id:card.id,name:card.name})),maxCount:max,label:"効果で使用するカードを選択してください（最大"+max+"枚）"};openDeckSearchPicker(pendingEffectTarget);handled=true}
+  else if(!eligible.length)log("使用条件に合うカードが"+zoneName+"にありません");
  }
  const energyFromHandEffect=s.match(/自分の手札から(?:(?:「([^」]+)」の)?\[([^\]]+)\]の)?エネルギー(\d+)枚までをタップして出す/);
  if(energyFromHandEffect){
