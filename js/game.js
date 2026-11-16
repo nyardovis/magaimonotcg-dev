@@ -439,20 +439,20 @@ function recalculatePlayerPassives(){
    if(text.includes("相手のモンスターはプレイヤーに攻撃できない")&&p!==owner)player.opponentMonstersCannotAttackPlayer=true;
    if(text.includes("相手の罠は発動しない")&&p!==owner)player.disableOpponentTraps=true;
    if(text.includes("相手の「場に出た時」の効果は発動しない")&&p!==owner)player.disableOpponentEnterEffects=true;
-   if(text.includes("自分が受けるダメージ-")&&p===owner){const m=text.match(/自分が受けるダメージ-(\\d+)/);if(m)player.damageReduction=Math.max(player.damageReduction,Number(m[1]))}
+   if(text.includes("自分が受けるダメージ-")&&p===owner){const m=text.match(/自分が受けるダメージ-(\d+)/);if(m)player.damageReduction=Math.max(player.damageReduction,Number(m[1]))}
   }
  }
  for(const owner of [1,2])for(const card of [...(state.players[owner]?.monsters||[]),...(state.players[owner]?.energy||[]),...(state.players[owner]?.field||[])]){
   if(card.effectsDisabled)continue;const text=String(cardDefinition(card)?.effect_text||"");
-  if(/(?:^|。)\\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(text))card.cannotAttack=true;else delete card.cannotAttack;
-  if(/(?:^|。)\\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(text))card.cannotBeAttacked=true;else delete card.cannotBeAttacked;
+  if(/(?:^|。)\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(text))card.cannotAttack=true;else delete card.cannotAttack;
+  if(/(?:^|。)\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(text))card.cannotBeAttacked=true;else delete card.cannotBeAttacked;
   if(text.includes("アンタップ中は攻撃されない"))card.cannotBeAttackedWhileUntapped=true;else delete card.cannotBeAttackedWhileUntapped;
   if(text.includes("相手のモンスターはこれにしか攻撃できない"))card.mustBeAttacked=true;else delete card.mustBeAttacked;
   if(text.includes("相手の効果で選ばれない"))card.cannotBeChosenByOpponent=true;else delete card.cannotBeChosenByOpponent;
   if(text.includes("モンスターとの戦闘時、戦闘相手のパワーで戦闘する"))card.combatPowerUsesOpponent=true;else delete card.combatPowerUsesOpponent;
   if(text.includes("モンスターとの戦闘時、これのパワーの代わりに0パワーで戦闘する"))card.combatPowerOverride=0;else if(card.combatPowerOverride===0)delete card.combatPowerOverride;
-  const repeat=text.match(/1ターンに(\\d+)回攻撃できる/);if(repeat)card.attacksPerTurn=Number(repeat[1]);else delete card.attacksPerTurn;
-  const reduction=text.match(/これが受けるダメージ-(\\d+)/);if(reduction)card.damageReduction=Number(reduction[1]);else delete card.damageReduction;
+  const repeat=text.match(/1ターンに(\d+)回攻撃できる/);if(repeat)card.attacksPerTurn=Number(repeat[1]);else delete card.attacksPerTurn;
+  const reduction=text.match(/これが受けるダメージ-(\d+)/);if(reduction)card.damageReduction=Number(reduction[1]);else delete card.damageReduction;
  }
 }
 function render(){
@@ -871,15 +871,15 @@ function resolvePendingEffectTarget(cardId){
  render();
 }
 function resolveSummonEffects(text,p,sourceCard){
- const own=state.players[p],sourcePattern=/自分の(手札かデッキか捨て札|手札かデッキ|デッキか捨て札|手札か捨て札|手札|デッキ|捨て札)から([\\s\\S]*?)(\\d+)(体|枚)(?:まで)?(?:を場に|を)出す/g;
+ const own=state.players[p],sourcePattern=/自分の(手札かデッキか捨て札|手札かデッキ|デッキか捨て札|手札か捨て札|手札|デッキ|捨て札)から([\s\S]*?)(\d+)(体|枚)(?:まで)?(?:を場に|を)出す/g;
  let matched=false;
  for(const match of String(text||"").matchAll(sourcePattern)){
   matched=true;
   const sourceNames=match[1].split("か"),qualifier=match[2]||"",limit=Number(match[3]),unit=match[4];
-  const costMatch=qualifier.match(/(\\d+)コスト以下/),costLimit=costMatch?Number(costMatch[1]):Infinity;
+  const costMatch=qualifier.match(/(\d+)コスト以下/),costLimit=costMatch?Number(costMatch[1]):Infinity;
   const includeNameMatch=qualifier.match(/名前に「([^」]+)」を含む/),quotedNames=[...qualifier.matchAll(/「([^」]+)」/g)].map(m=>m[1]),excludedNameMatch=qualifier.match(/「([^」]+)」以外/);
   const exactName=quotedNames.find(name=>(!excludedNameMatch||name!==excludedNameMatch[1])&&(!includeNameMatch||name!==includeNameMatch[1]));
-  const includeName=includeNameMatch?.[1]||null,typeMatch=qualifier.match(/\\[([^\\]]+)\\]/),requiredTypes=typeMatch?typeMatch[1].split(/[,、]/).map(v=>v.trim()).filter(Boolean):[];
+  const includeName=includeNameMatch?.[1]||null,typeMatch=qualifier.match(/\[([^\]]+)\]/),requiredTypes=typeMatch?typeMatch[1].split(/[,、]/).map(v=>v.trim()).filter(Boolean):[];
   const kindWord=qualifier.match(/(モンスター|エネルギー|魔法|罠|フィールド)/)?.[1]||null,kindMap={モンスター:"monster",エネルギー:"energy",魔法:"spell",罠:"trap",フィールド:"field"};
   const requiredKind=kindWord?kindMap[kindWord]:(unit==="体"?"monster":null);
   const sourceZones=sourceNames.map(name=>name==="手札"?"hand":name==="デッキ"?"deck":"discard").filter(zone=>zone!=="discard"||!effectCannotChooseZone(p,"discard"));
@@ -1003,7 +1003,7 @@ function openDeckSearchPicker(pending){
 function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const own=state.players[p],opp=state.players[p===1?2:1];let s=String(text||"");let handled=false,revealedCardForEffect=null;
  const countNamed=(list,name)=>list.filter(c=>String(c.name||"").includes(name)).length;
- const mossTrapSearch=s.match(/自分のデッキから罠(\\d+)枚までを秘密裏に伏せる/);
+ const mossTrapSearch=s.match(/自分のデッキから罠(\d+)枚までを秘密裏に伏せる/);
  if(mossTrapSearch){
   const max=Number(mossTrapSearch[1]),candidates=own.deck.filter(card=>cardKind(card)==="trap");
   if(candidates.length){pendingEffectTarget={kind:"deckSearchMove",player:p,sourceZones:["deck"],destination:"facedown",candidates:candidates.map(card=>({id:card.id,name:card.name})),maxCount:max,label:"秘密裏に伏せる罠を山札から選択してください（最大"+max+"枚）"};openDeckSearchPicker(pendingEffectTarget);handled=true;log("秘密裏に伏せる罠を選択してください")}else log("山札に伏せられる罠がありません");
@@ -1143,7 +1143,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  }
  if(/(?:それ|そのモンスター)を破壊する/.test(s)&&eventCard&&eventOwner&&state.players[eventOwner].monsters.some(c=>c.id===eventCard.id)){const target=state.players[eventOwner].monsters.find(c=>c.id===eventCard.id);state.players[eventOwner].monsters=state.players[eventOwner].monsters.filter(c=>c.id!==target.id);moveToDiscard(eventOwner,target,"罠の効果による破壊");if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});if(!onlinePlayerId||eventOwner===1){resolveCardTrigger(target,eventOwner,"destroy");resolveTrapTriggers(eventOwner,"ownDestroy")}if(eventOwner!==p)resolveTrapTriggers(p,"opponentDestroy");handled=true}
  if(/自分のモンスター全てを全回復/.test(s)){own.monsters.forEach(c=>c.damage=0);handled=true}
- const opponentMaxPowerHeal=s.match(/自分を\\s*[（(]相手のモンスターの最大パワー[）)]\\s*回復/);
+ const opponentMaxPowerHeal=s.match(/自分を\s*[（(]相手のモンスターの最大パワー[）)]\s*回復/);
  if(opponentMaxPowerHeal){const amount=Math.max(0,...opp.monsters.map(mon=>attackPower(mon)));own.life+=amount;broadcastEffectDelta({target:"ownLife",delta:amount});if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentHeal");handled=true;log(own.name+"は相手の最大パワーに応じて"+amount+"回復")}
  const selfDamage=s.match(/自分に\s*(\d+)ダメージ/);
  if(selfDamage){const amount=Number(selfDamage[1]);own.life-=amount;broadcastEffectDelta({target:"ownLife",delta:-amount});checkLifeWinner(p);handled=true;log(own.name+"に"+amount+"ダメージ")}
@@ -1566,7 +1566,7 @@ function resolveAttack(targetMonsterId,defenseResponse=null){
    if(targetMonsterId&&!defender)return;
    const forcedTargets=state.players[2].monsters.filter(c=>c.mustBeAttacked||String(cardDefinition(c)?.effect_text||"").includes("相手のモンスターはこれにしか攻撃できない"));
    if(forcedTargets.length&&(!defender||!forcedTargets.some(c=>c.id===defender.id))){log("相手の効果により、指定されたモンスターにしか攻撃できません");return}
-   if(defender&&(defender.cannotBeAttacked||(!defender.tapped&&defender.cannotBeAttackedWhileUntapped)||/(?:^|。)\\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(String(cardDefinition(defender)?.effect_text||"")))){log("そのモンスターは攻撃されません");return}
+   if(defender&&(defender.cannotBeAttacked||(!defender.tapped&&defender.cannotBeAttackedWhileUntapped)||/(?:^|。)\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(String(cardDefinition(defender)?.effect_text||"")))){log("そのモンスターは攻撃されません");return}
    if(!targetMonsterId&&state.players[2].opponentMonstersCannotAttackPlayer){log("相手の効果によりプレイヤーへの攻撃が禁止されています");return}
    const maxAttacks=Math.max(1,Number(attacker.attacksPerTurn)||1),attackNumber=(Number(attacker.attacksThisTurn)||0)+1;
    attacker.tapped=attackNumber>=maxAttacks;debugLog("攻撃宣言: "+attacker.name+"（"+attackNumber+"/"+maxAttacks+"回目）","combat","info",{attackerId:attacker.id,attackNumber,maxAttacks});
