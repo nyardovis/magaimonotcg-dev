@@ -14,7 +14,7 @@ const engine=parserContext.CardEffectEngine;
 const excludedNames=new Set(["愛おしき放課後","いぬ"]);
 const deckRuleNames=new Set(["量産型タイロス","ノーマルエネルギー"]);
 const first=(predicate)=>cardsData.cards.find(predicate)||cardsData.cards.find(c=>predicate(c,false));
-const byTag=(tag)=>first(c=>String(c.tags||"").includes(tag));
+const byTag=(tag)=>cardsData.cards.find(c=>String(c.tags||"").includes(tag)&&!String(c.effect_text||"").trim())||first(c=>String(c.tags||"").includes(tag));
 const fixtureCards={
  monster:byTag("#モンスターカード"),
  energy:byTag("#エネルギーカード"),
@@ -99,10 +99,7 @@ const server=http.createServer((req,res)=>{
    api.addCard(targetName,2,"monsters","archer-target");
    api.activate(archer,"monsters",0);
    const activatedPending=api.snapshot();
-   api.chooseTarget("archer-target");
-   const activated=api.snapshot();
-   const archerCard=activated.players[1].zones.monsters.find(c=>c.id==="archer");
-   return {drawHand:draw.players[1].zones.hand.length,drawDeck:draw.players[1].zones.deck.length,pendingTarget:pending.pendingTarget?.kind||null,targetDamage:damage.players[2].zones.monsters.find(c=>c.id==="damage-target")?.damage||0,enterOpponentLife:enter.players[2].life,activatedPending:activatedPending.pendingTarget?.kind||null,archerTapped:archerCard?.tapped||false,archerTargetDamage:activated.players[2].zones.monsters.find(c=>c.id==="archer-target")?.damage||0,archerPower:archerCard?.power||0};
+   return {drawHand:draw.players[1].zones.hand.length,drawDeck:draw.players[1].zones.deck.length,pendingTarget:pending.pendingTarget?.kind||null,targetDamage:damage.players[2].zones.monsters.find(c=>c.id==="damage-target")?.damage||0,enterOpponentLife:enter.players[2].life,activatedPending:activatedPending.pendingTarget?.kind||null,archerTapped:activatedPending.players[1].zones.monsters.find(c=>c.id==="archer")?.tapped||false};
   },{fixture,sourceName:fixtureCards.monster.name,targetName:fixtureCards.monster.name});
   assert.equal(smoke.drawHand,2,"live executor draw smoke test failed");
   assert.equal(smoke.drawDeck,0,"live executor draw did not remove cards from deck");
@@ -111,7 +108,10 @@ const server=http.createServer((req,res)=>{
   assert.equal(smoke.enterOpponentLife,3900,"live enter trigger did not apply the card effect");
   assert.equal(smoke.activatedPending,"kingdomArcherDamage","activated ability did not request a board target");
   assert.equal(smoke.archerTapped,true,"tap activation cost was not paid");
-  assert.equal(smoke.archerTargetDamage,smoke.archerPower,"activated ability did not apply source power damage");
+  await page.locator('.card[data-card-id="archer-target"]').click();
+  const clickedTarget=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  const archerCard=clickedTarget.players[1].zones.monsters.find(c=>c.id==="archer");
+  assert.equal(clickedTarget.players[2].zones.monsters.find(c=>c.id==="archer-target")?.damage,archerCard?.power||0,"clicking the actual board target did not resolve the activated ability");
   const results=await page.evaluate(({cases,fixture})=>window.__ANKR_TEST__.auditBatch(cases,fixture),{cases,fixture});
   const counts={};for(const result of results)counts[result.status]=(counts[result.status]||0)+1;
   const errors=results.filter(r=>r.status==="runtime_error");
