@@ -1864,4 +1864,4 @@ async function start(){
   else{const lobby=document.querySelector("#roomLobby");if(lobby)lobby.hidden=true;showPreparationScreen();}
 }
 window.__ANKR_TEST_READY__=start().then(()=>{exposeAnkrEffectTestApi();return true;});
-window.__ANKR_TEST_READY__.catch(e=>{console.error(e);document.querySelector("#log").textContent="カード一覧の読み込みに失敗しました。";});
+window.__ANKR_TEST_READY__.catch(e=>{window.__ANKR_TEST_BOOT_ERROR__=String(e?.stack||e);console.error(e);document.querySelector("#log").textContent="カード一覧の読み込みに失敗しました。";});
