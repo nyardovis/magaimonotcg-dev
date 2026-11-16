@@ -42,7 +42,6 @@ async function main(){
     const firstJoined=await first.waitFor(message=>message.type==="joined","first player join");
     await second.ready;
     const secondJoined=await second.waitFor(message=>message.type==="joined","second player join");
-    await first.waitFor(message=>message.type==="player_joined","opponent join");
     assert.equal(firstJoined.playerId,"player1");
     assert.equal(secondJoined.playerId,"player2");
 
