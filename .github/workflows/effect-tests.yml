@@ -6,6 +6,7 @@ on:
       - "data/cards.json"
       - "js/effect-engine.js"
       - "js/effect-runtime.js"
+      - "js/game.js"
       - "tests/**"
       - "package.json"
       - ".github/workflows/effect-tests.yml"
