@@ -1396,7 +1396,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const topCardUse=s.match(/自分のデッキの上(\d+)枚を公開し、(?:それが([^、]+)なら、)?(?:それ)?1枚までを使用する/);
  if(genericUse||topCardUse){
   const zoneName=genericUse?genericUse[1]:"デッキ",sourceZone=zoneName==="デッキか捨て札"?"both":zoneName==="デッキ"?"deck":zoneName==="捨て札"?"discard":"hand";
-  const costText=genericUse?genericUse[2]:null,maxCost=costText===null?Infinity:costText.includes("自分のマナ")?(Number(own.energyPool)||0):Number(costText);
+  const costText=genericUse?genericUse[2]:null,maxCost=costText==null?Infinity:costText.includes("自分のマナ")?(Number(own.energyPool)||0):Number(costText);
   const namePart=genericUse?(genericUse[3]||""):"",excludedName=genericUse?(genericUse[4]||""):"",exactName=genericUse?(genericUse[5]||""):"",tag=genericUse?(genericUse[6]||""):"",kindWord=genericUse?(genericUse[7]||""):"",repeatMatch=s.match(/これを(\d+)回行う/),max=(topCardUse?1:Number(genericUse[8]))*(repeatMatch?Number(repeatMatch[1]):1);
   const kindByWord={モンスター:"monster",魔法:"spell",罠:"trap",フィールド:"field",エネルギー:"energy"};
   const source=sourceZone==="both"?(effectCannotChooseZone(p,"discard")?[...own.deck]:[...own.deck,...own.discard]):sourceZone==="discard"&&effectCannotChooseZone(p,"discard")?[]:own[sourceZone];
