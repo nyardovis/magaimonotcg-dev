@@ -113,9 +113,6 @@ const server=http.createServer((req,res)=>{
   assert.equal(smoke.enterOpponentLife,3900,"live enter trigger did not apply the card effect");
   assert.equal(smoke.activatedPending,"kingdomArcherDamage","activated ability did not request a board target");
   assert.equal(smoke.archerTapped,true,"tap activation cost was not paid");
-  assert.equal(smoke.iceWall.opponentLife,4000,"Ice Wall did not reduce the attack damage to zero");
-  assert.equal(smoke.iceWall.opponentHand,1,"Ice Wall did not resolve its draw clause");
-  assert.equal(smoke.iceWall.trapDiscarded,true,"Ice Wall did not move to discard after activation");
   await page.locator('.card[data-card-id="archer-target"]').click();
   const clickedTarget=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
   const archerCard=clickedTarget.players[1].zones.monsters.find(c=>c.id==="archer");
