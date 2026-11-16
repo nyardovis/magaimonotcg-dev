@@ -16,7 +16,7 @@ const deckRuleNames=new Set(["量産型タイロス","ノーマルエネルギ�
 const first=(predicate)=>cardsData.cards.find(predicate)||cardsData.cards.find(c=>predicate(c,false));
 const byTag=(tag)=>cardsData.cards.find(c=>String(c.tags||"").includes(tag)&&!String(c.effect_text||"").trim())||first(c=>String(c.tags||"").includes(tag));
 const fixtureCards={
- monster:byTag("#モンスターカード"),
+ monster:cardsData.cards.find(c=>String(c.tags||"").includes("#モンスターカード")&&!String(c.effect_text||"").trim()&&Number(c.power)>=600)||byTag("#モンスターカード"),
  energy:byTag("#エネルギーカード"),
  spell:byTag("#魔法カード"),
  trap:byTag("#罠カード"),
