@@ -234,6 +234,20 @@ const server=http.createServer((req,res)=>{
   const captainDamage=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
   assert.equal(captainDamage.players[2].zones.monsters.find(c=>c.id==="commander-target")?.damage,600,"Kingdom Commander did not apply its calculated damage to the clicked target");
 
+
+  const blueFlowerCondition=await page.evaluate(({trapName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("碧い花",1,"monsters","blue-no-trap");api.setEnergyPool(1,2);api.activate("blue-no-trap","monsters",0);const withoutTrap=api.snapshot();api.reset();api.addCard("碧い花",1,"monsters","blue-with-trap");api.addCard(trapName,1,"facedown","blue-required-trap");api.setEnergyPool(1,2);api.activate("blue-with-trap","monsters",0);return {withoutLife:withoutTrap.players[1].life,withoutEnergy:withoutTrap.players[1].energyPool,withLife:api.snapshot().players[1].life,withEnergy:api.snapshot().players[1].energyPool}},{trapName:fixtureCards.trap.name});
+  assert.equal(blueFlowerCondition.withoutLife,4000,"Blue Flower's conditional recovery resolved without a trap");
+  assert.equal(blueFlowerCondition.withoutEnergy,2,"Blue Flower incorrectly paid its cost without a trap");
+  assert.equal(blueFlowerCondition.withLife,4700,"Blue Flower did not recover 700 when a trap was present");
+  assert.equal(blueFlowerCondition.withEnergy,0,"Blue Flower did not pay its activation cost when its condition was met");
+
+  await page.evaluate(({knightName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("部隊指揮官",1,"monsters","field-commander-activated");api.addCard(knightName,1,"deck","field-commander-knight");api.setEnergyPool(1,3);api.activate("field-commander-activated","monsters",0)},{knightName:(cardsData.cards.find(c=>String(c.tags||"").includes("#モンスターカード")&&String(c.types||"").split(/[,、]/).includes("騎士")&&Number(c.cost)<=2&&!String(c.effect_text||"").trim())||fixtureCards.monster).name});
+  assert.equal(await page.locator("#effectDeckPicker").isVisible().catch(()=>false),true,"Field Commander activated summon did not open a deck picker");
+  await page.locator('#effectDeckPicker button[data-card-id="field-commander-knight"]').click();
+  await page.locator("#effectDeckPicker button").filter({hasText:"選択したカードを場に出す"}).click();
+  const fieldCommanderSummon=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(fieldCommanderSummon.players[1].zones.monsters.some(c=>c.id==="field-commander-knight"),true,"Field Commander activated summon did not move the selected Knight to the field");
+
   const results=await page.evaluate(({cases,fixture})=>window.__ANKR_TEST__.auditBatch(cases,fixture),{cases,fixture});
   const counts={};for(const result of results)counts[result.status]=(counts[result.status]||0)+1;
   const errors=results.filter(r=>r.status==="runtime_error");
