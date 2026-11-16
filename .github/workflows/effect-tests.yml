@@ -36,6 +36,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Run all effect tests and audits
         run: npm run test:all
+        env:
+          ANKR_DEV_WORKER_WS: wss://card-game-server-test.original-card-game-dev.workers.dev
       - name: Upload audit reports
         if: always()
         uses: actions/upload-artifact@v4
