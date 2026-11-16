@@ -1396,7 +1396,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const topCardUse=s.match(/自分のデッキの上(\d+)枚を公開し、(?:それが([^、]+)なら、)?(?:それ)?1枚までを使用する/);
  if(genericUse||topCardUse){
   const zoneName=genericUse?genericUse[1]:"デッキ",sourceZone=zoneName==="デッキか捨て札"?"both":zoneName==="デッキ"?"deck":zoneName==="捨て札"?"discard":"hand";
-  const costText=genericUse?genericUse[2]:null,maxCost=costText===null?Infinity:costText.includes("自分のマナ")?(Number(own.energyPool)||0):Number(costText);
+  const costText=genericUse?genericUse[2]:null,maxCost=costText==null?Infinity:costText.includes("自分のマナ")?(Number(own.energyPool)||0):Number(costText);
   const namePart=genericUse?(genericUse[3]||""):"",excludedName=genericUse?(genericUse[4]||""):"",exactName=genericUse?(genericUse[5]||""):"",tag=genericUse?(genericUse[6]||""):"",kindWord=genericUse?(genericUse[7]||""):"",repeatMatch=s.match(/これを(\d+)回行う/),max=(topCardUse?1:Number(genericUse[8]))*(repeatMatch?Number(repeatMatch[1]):1);
   const kindByWord={モンスター:"monster",魔法:"spell",罠:"trap",フィールド:"field",エネルギー:"energy"};
   const source=sourceZone==="both"?(effectCannotChooseZone(p,"discard")?[...own.deck]:[...own.deck,...own.discard]):sourceZone==="discard"&&effectCannotChooseZone(p,"discard")?[]:own[sourceZone];
@@ -1780,6 +1780,75 @@ function setup(){
   };
   document.querySelector("#reset").onclick=()=>{if(confirm("自分の盤面をリセットしますか？")){const n=state.players[1].name;const deckList=(state.savedDeck||[]).slice();const p=newPlayer(n,"p1");const pool=shuffle((deckList.length?deckList:p.deckList).slice());p.deckList=pool.slice();p.hand=pool.slice(0,7).map((name,i)=>newCard(name,"p1h"+i));p.deck=pool.slice(7).map((name,i)=>newCard(name,"p1d"+i));state.players[1]=p;state.selected=null;state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.gameOver=null;state.phase="mulligan";state.mulligan={1:{count:0,done:false},2:{count:0,done:false}};lastPublicState=null;render();log("自分の盤面をリセットし、シャッフルしてマリガンを開始しました")}};
 }
+
+function exposeAnkrEffectTestApi(){
+ if(new URLSearchParams(location.search).get("ankrTest")!=="1")return;
+ window.__ANKR_TEST__={
+  reset(){
+   state.players={1:newPlayer("テスト自分","t1"),2:newPlayer("テスト相手","t2")};
+   for(const p of [1,2]){
+    const x=state.players[p];
+    for(const z of ["hand","deck","monsters","energy","field","discard","facedown"])x[z]=[];
+    x.life=4000;x.energyPool=0;x.deckCounters=0;x.deckHorizontal=false;
+    x.energyPlacedThisTurn=false;x.extraEnergyPlacements=0;
+   }
+   state.turnPlayer=1;state.phase="playing";state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.gameOver=null;state.selected=null;
+   pendingEffectTarget=null;pendingAttack=null;debugLogEntries=[];debugLogSequence=0;
+   const picker=document.querySelector("#effectDeckPicker");if(picker)picker.remove();
+   for(const id of ["prepScreen","deckEditor","discardViewer","deckViewer","roomLobby","mulliganOverlay","roomWaitOverlay","gameOverOverlay","rematchWaitOverlay"]){const element=document.querySelector("#"+id);if(element)element.hidden=true}
+   devLocalMode=true;onlinePlayerId=null;gameSocket=null;
+   return true;
+  },
+  addCard(name,owner=1,zone="monsters",id){
+   if(!state.players[owner]||!Array.isArray(state.players[owner][zone]))throw new Error("invalid zone: "+owner+"/"+zone);
+   const card=newCard(name,id||("test-"+owner+"-"+zone+"-"+Math.random().toString(36).slice(2)));
+   state.players[owner][zone].push(card);return card.id;
+  },
+  runEffect(text,owner=1,sourceId=null){
+   const source=sourceId?[1,2].flatMap(p=>["hand","deck","monsters","energy","field","discard","facedown"].flatMap(z=>state.players[p][z]||[])).find(c=>c.id===sourceId):null;
+   resolveEffectText(text,owner,source||null);
+   return this.snapshot();
+  },
+  trigger(sourceId,owner=1,trigger="enter"){
+   const source=state.players[owner]?.monsters.concat(state.players[owner]?.energy,state.players[owner]?.field,state.players[owner]?.facedown,state.players[owner]?.discard).find(c=>c.id===sourceId);
+   if(!source)throw new Error("source card not found: "+sourceId);
+   resolveCardTrigger(source,owner,trigger);return this.snapshot();
+  },
+  activate(sourceId,zone="monsters",abilityIndex=0){
+   state.selected={p:1,z:zone,id:sourceId};activateCardAbility(sourceId,abilityIndex);return this.snapshot();
+  },
+  chooseTarget(cardId){resolvePendingEffectTarget(cardId);return this.snapshot()},
+  snapshot(){
+   const players={};
+   for(const p of [1,2]){
+    const x=state.players[p],zones={};
+    for(const z of ["hand","deck","monsters","energy","field","discard","facedown"])zones[z]=(x[z]||[]).map(c=>({id:c.id,name:c.name,tapped:!!c.tapped,damage:Number(c.damage)||0,modification:Number(c.modification)||0,counters:Number(c.counters)||0,power:Number(c.power)||0,effectsDisabled:!!c.effectsDisabled}));
+    players[p]={life:x.life,energyPool:x.energyPool,zones};
+   }
+   return {players,pendingTarget:pendingEffectTarget?{kind:pendingEffectTarget.kind,candidates:pendingEffectTarget.candidates}:null,pickerOpen:!!document.querySelector("#effectDeckPicker"),gameOver:state.gameOver};
+  },
+  logs(){return debugLogEntries.map(e=>({category:e.category,status:e.status,message:e.message,details:e.details}))},
+  auditBatch(cases,fixture){
+   const results=[],originalPrompt=window.prompt;
+   for(const item of cases){
+    let promptCount=0;window.prompt=()=>{promptCount++;return null};
+    this.reset();
+    for(const entry of fixture||[])this.addCard(entry.name,entry.owner,entry.zone,entry.id);
+    const sourceCard=newCard(item.cardName,"audit-source");
+    const before=JSON.stringify(this.snapshot());
+    let error=null;
+    try{resolveEffectText(item.text,1,sourceCard)}catch(e){error={message:String(e?.message||e),stack:String(e?.stack||"")}}
+    const logs=this.logs(),after=JSON.stringify(this.snapshot());
+    const pending=!!pendingEffectTarget,picker=!!document.querySelector("#effectDeckPicker");
+    const unimplemented=logs.some(e=>e.status==="unimplemented"||e.message.includes("未対応の効果"));
+    const status=error?"runtime_error":unimplemented?"unimplemented":picker?"needs_card_selection":pending?"needs_board_target":promptCount>0?"needs_choice":before!==after?"executed":"no_state_change";
+    results.push({cardId:item.cardId,cardName:item.cardName,clauseIndex:item.clauseIndex,text:item.text,status,promptCount,error,logs:logs.filter(e=>e.status==="error"||e.status==="unimplemented"||e.message.includes("未対応")).map(e=>e.message)});
+   }
+   window.prompt=originalPrompt;return results;
+  }
+ };
+}
+
 async function start(){
   ensureDiscardWarning();
   const [namesResponse,cardsResponse]=await Promise.all([fetch(CARD_NAMES_URL),fetch("data/cards.json")]);
@@ -1795,4 +1864,5 @@ async function start(){
   if(hasRoom){showPreparationScreen();}
   else{const lobby=document.querySelector("#roomLobby");if(lobby)lobby.hidden=true;showPreparationScreen();}
 }
-start().catch(e=>{console.error(e);document.querySelector("#log").textContent="カード一覧の読み込みに失敗しました。";});
+window.__ANKR_TEST_READY__=start().then(()=>{exposeAnkrEffectTestApi();return true;});
+window.__ANKR_TEST_READY__.catch(e=>{window.__ANKR_TEST_BOOT_ERROR__=String(e?.stack||e);console.error(e);document.querySelector("#log").textContent="カード一覧の読み込みに失敗しました。";});

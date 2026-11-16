@@ -1,0 +1,11 @@
+{
+  "name": "ankr-tcg-dev-tests",
+  "private": true,
+  "scripts": {
+    "test:effects": "node tests/effect-tests.js && node tests/effect-execution-tests.js && node tests/effect-browser-tests.js",
+    "test:all": "node tests/effect-tests.js && node tests/effect-execution-tests.js && node tests/effect-audit.js effect-compiler-audit-report.json && node tests/effect-browser-tests.js effect-live-audit-report.json"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
+}
