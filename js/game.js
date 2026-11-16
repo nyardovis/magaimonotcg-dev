@@ -1795,6 +1795,7 @@ function exposeAnkrEffectTestApi(){
    state.turnPlayer=1;state.phase="playing";state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.gameOver=null;state.selected=null;
    pendingEffectTarget=null;pendingAttack=null;debugLogEntries=[];debugLogSequence=0;
    const picker=document.querySelector("#effectDeckPicker");if(picker)picker.remove();
+   for(const id of ["prepScreen","deckEditor","discardViewer","deckViewer","roomLobby","mulliganOverlay","roomWaitOverlay","gameOverOverlay","rematchWaitOverlay"]){const element=document.querySelector("#"+id);if(element)element.hidden=true}
    devLocalMode=true;onlinePlayerId=null;gameSocket=null;
    return true;
   },
