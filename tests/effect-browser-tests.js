@@ -86,7 +86,7 @@ const server=http.createServer((req,res)=>{
    api.addCard(targetName,2,"monsters","smoke-target");
    api.addCard(targetName,1,"deck","smoke-draw-1");
    api.addCard(targetName,1,"deck","smoke-draw-2");
-   api.runEffect("カードを2枚引く。",1,"smoke-source");
+   api.runEffect("自分は2枚引く。",1,"smoke-source");
    const draw=api.snapshot();
    api.reset();
    api.addCard(sourceName,1,"monsters","damage-source");
