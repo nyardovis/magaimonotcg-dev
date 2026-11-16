@@ -246,7 +246,10 @@ function connectGameServer(){
           if(message.playerId!==onlinePlayerId&&state.turnPlayer===1)endTurn();
         }
         else if(message.type==="operation"&&message.action==="attack_declared"&&!devLocalMode){
-          if(message.playerId!==onlinePlayerId){const attacker=state.players[2].monsters.find(c=>c.id===message.cardId);if(attacker)attacker.tapped=true;const defender=message.targetCardId?state.players[1].monsters.find(c=>c.id===message.targetCardId):null;resolveTrapTriggers(1,"opponentAttack",attacker||null);if(defender)resolveCardTrigger(defender,1,"attack");render();}
+          if(message.playerId!==onlinePlayerId){const attacker=state.players[2].monsters.find(c=>c.id===message.cardId);if(attacker)attacker.tapped=true;const defender=message.targetCardId?state.players[1].monsters.find(c=>c.id===message.targetCardId):null;resolveTrapTriggers(1,"opponentAttack",attacker||null);if(defender)resolveCardTrigger(defender,1,"attack");const response={type:"operation",action:"attack_response",attackId:message.attackId,damageOverride:Number.isFinite(attacker?.nextAttackDamage)?attacker.nextAttackDamage:null};if(gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify(response));render();}
+        }
+        else if(message.type==="operation"&&message.action==="attack_response"&&!devLocalMode){
+          if(message.playerId!==onlinePlayerId&&pendingAttack?.awaitingResponse)resolveAttack(pendingAttack.targetMonsterId,{attackId:message.attackId,damageOverride:message.damageOverride});
         }
         else if(message.type==="public_state"&&!devLocalMode){
           applyPublicState(message.playerId,message.state);
@@ -427,7 +430,33 @@ function renderDiscardViewer(){
   const selected=cards.find(c=>c.id===state.discardInspectId)||cards[cards.length-1];
   state.discardInspectId=selected.id;
 }function moveInspectedDiscardCard(dest){if(state.pendingDiscardPlayer!==null)return log("強制捨て中は捨て札からカードを移動できません");const x=state.players[state.discardInspectPlayer||1],i=x.discard.findIndex(c=>c.id===state.discardInspectId);if(i<0)return;if(MAX[dest]!==undefined&&x[dest].length>=MAX[dest])return log(dest+" の上限のため移動をキャンセル");const c=x.discard.splice(i,1)[0];resetGrantedCardInformation(c);c.faceUp=dest==="facedown"?false:true;x[dest].push(c);if(dest==="monsters")resolveCardTrigger(c,state.discardInspectPlayer||1,"enter");log("捨て札から "+c.name+" を "+({"deck":"山札","hand":"手札","monsters":"モンスター","energy":"エネルギー","field":"フィールド","facedown":"罠"}[dest])+" へ移動しました");state.discardInspectId=null;render();renderDiscardViewer()}
+function recalculatePlayerPassives(){
+ for(const p of [1,2]){
+  const player=state.players[p];if(!player)continue;
+  player.opponentMonstersCannotAttackPlayer=false;player.disableOpponentTraps=false;player.disableOpponentEnterEffects=false;player.damageReduction=0;
+  for(const owner of [1,2])for(const card of [...(state.players[owner]?.monsters||[]),...(state.players[owner]?.energy||[]),...(state.players[owner]?.field||[])]){
+   const data=cardDefinition(card),text=String(data?.effect_text||"");if(!data||card.effectsDisabled)continue;
+   if(text.includes("相手のモンスターはプレイヤーに攻撃できない")&&p!==owner)player.opponentMonstersCannotAttackPlayer=true;
+   if(text.includes("相手の罠は発動しない")&&p!==owner)player.disableOpponentTraps=true;
+   if(text.includes("相手の「場に出た時」の効果は発動しない")&&p!==owner)player.disableOpponentEnterEffects=true;
+   if(text.includes("自分が受けるダメージ-")&&p===owner){const m=text.match(/自分が受けるダメージ-(\\d+)/);if(m)player.damageReduction=Math.max(player.damageReduction,Number(m[1]))}
+  }
+ }
+ for(const owner of [1,2])for(const card of [...(state.players[owner]?.monsters||[]),...(state.players[owner]?.energy||[]),...(state.players[owner]?.field||[])]){
+  if(card.effectsDisabled)continue;const text=String(cardDefinition(card)?.effect_text||"");
+  if(/(?:^|。)\\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(text))card.cannotAttack=true;else delete card.cannotAttack;
+  if(/(?:^|。)\\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(text))card.cannotBeAttacked=true;else delete card.cannotBeAttacked;
+  if(text.includes("アンタップ中は攻撃されない"))card.cannotBeAttackedWhileUntapped=true;else delete card.cannotBeAttackedWhileUntapped;
+  if(text.includes("相手のモンスターはこれにしか攻撃できない"))card.mustBeAttacked=true;else delete card.mustBeAttacked;
+  if(text.includes("相手の効果で選ばれない"))card.cannotBeChosenByOpponent=true;else delete card.cannotBeChosenByOpponent;
+  if(text.includes("モンスターとの戦闘時、戦闘相手のパワーで戦闘する"))card.combatPowerUsesOpponent=true;else delete card.combatPowerUsesOpponent;
+  if(text.includes("モンスターとの戦闘時、これのパワーの代わりに0パワーで戦闘する"))card.combatPowerOverride=0;else if(card.combatPowerOverride===0)delete card.combatPowerOverride;
+  const repeat=text.match(/1ターンに(\\d+)回攻撃できる/);if(repeat)card.attacksPerTurn=Number(repeat[1]);else delete card.attacksPerTurn;
+  const reduction=text.match(/これが受けるダメージ-(\\d+)/);if(reduction)card.damageReduction=Number(reduction[1]);else delete card.damageReduction;
+ }
+}
 function render(){
+  recalculatePlayerPassives();
   const localPlayer=1;
   saveLocalGameState();
   applyOnlinePlayers();
@@ -727,6 +756,7 @@ function resolveCardTrigger(card,p,trigger){
     if(ownCardReduction)card.damageReduction=Math.max(Number(card.damageReduction)||0,Number(ownCardReduction[1]));
   }
   if(trigger==="enter"&&state.players[p===1?2:1].disableOpponentEnterEffects){debugLog("相手の効果により場に出た時効果を無効化: "+card.name,"effect","skipped",{player:p,card:card.name});return}
+  if(trigger==="spell"&&data.name==="転換"){resolveEffectText(text,p,card);return}
   const abilities=trigger==="spell"?CardEffectEngine.immediateAbilities(text):CardEffectEngine.forTrigger(text,trigger);
   if(!abilities.length)debugLog("カード効果の発動条件に一致なし: "+card.name+" / "+trigger,"effect","skipped",{player:p,card:card.name,trigger});
   abilities.forEach(ability=>{debugLog("カード効果を発動: "+card.name+" / "+trigger,"effect","info",{player:p,card:card.name,trigger,ability:ability.body});resolveEffectText(ability.body,p,card)});
@@ -806,7 +836,7 @@ function resolvePendingEffectTarget(cardId){
   const destroyed=own.energy.splice(index,1)[0];moveToDiscard(pending.player,destroyed,"転換の効果");
   const candidates=own.deck.filter(card=>cardKind(card)==="energy");
   log("「"+destroyed.name+"」を破壊しました。山札から出すエネルギーを選択してください");
-  if(candidates.length){pendingEffectTarget={kind:"deckSearchMove",player:pending.player,destination:"energy",tap:true,afterDraw:1,candidates:candidates.map(card=>({id:card.id,name:card.name})),maxCount:1,label:"タップして場に出すエネルギーを山札から選択してください"};openDeckSearchPicker(pendingEffectTarget)}
+  if(candidates.length){pendingEffectTarget={kind:"deckSearchMove",player:pending.player,sourceZones:["deck"],destination:"energy",tap:true,afterDraw:1,candidates:candidates.map(card=>({id:card.id,name:card.name})),maxCount:1,label:"タップして場に出すエネルギーを山札から選択してください"};openDeckSearchPicker(pendingEffectTarget)}
   else{log("山札にエネルギーがありません");drawEffectCards(pending.player,1)}
   render();return;
  }else if(pending.kind==="taggedMonsterBuff"){
@@ -841,77 +871,33 @@ function resolvePendingEffectTarget(cardId){
  render();
 }
 function resolveSummonEffects(text,p,sourceCard){
- const own=state.players[p],sourcePattern=/自分の(手札かデッキか捨て札|手札かデッキ|デッキか捨て札|手札か捨て札|手札|デッキ|捨て札)から([\s\S]*?)(\d+)(体|枚)(?:まで)?(?:を場に|を)出す/g;
+ const own=state.players[p],sourcePattern=/自分の(手札かデッキか捨て札|手札かデッキ|デッキか捨て札|手札か捨て札|手札|デッキ|捨て札)から([\\s\\S]*?)(\\d+)(体|枚)(?:まで)?(?:を場に|を)出す/g;
  let matched=false;
  for(const match of String(text||"").matchAll(sourcePattern)){
   matched=true;
   const sourceNames=match[1].split("か"),qualifier=match[2]||"",limit=Number(match[3]),unit=match[4];
-  const costMatch=qualifier.match(/(\d+)コスト以下/),costLimit=costMatch?Number(costMatch[1]):Infinity;
-  const includeNameMatch=qualifier.match(/名前に「([^」]+)」を含む/);
-  const quotedNames=[...qualifier.matchAll(/「([^」]+)」/g)].map(m=>m[1]);
-  const excludedNameMatch=qualifier.match(/「([^」]+)」以外/);
+  const costMatch=qualifier.match(/(\\d+)コスト以下/),costLimit=costMatch?Number(costMatch[1]):Infinity;
+  const includeNameMatch=qualifier.match(/名前に「([^」]+)」を含む/),quotedNames=[...qualifier.matchAll(/「([^」]+)」/g)].map(m=>m[1]),excludedNameMatch=qualifier.match(/「([^」]+)」以外/);
   const exactName=quotedNames.find(name=>(!excludedNameMatch||name!==excludedNameMatch[1])&&(!includeNameMatch||name!==includeNameMatch[1]));
-  const includeName=includeNameMatch?.[1]||null;
-  const typeMatch=qualifier.match(/\[([^\]]+)\]/);
-  const requiredTypes=typeMatch?typeMatch[1].split(/[,、]/).map(v=>v.trim()).filter(Boolean):[];
-  const kindWord=qualifier.match(/(モンスター|エネルギー|魔法|罠|フィールド)/)?.[1]||null;
-  const kindMap={モンスター:"monster",エネルギー:"energy",魔法:"spell",罠:"trap",フィールド:"field"};
+  const includeName=includeNameMatch?.[1]||null,typeMatch=qualifier.match(/\\[([^\\]]+)\\]/),requiredTypes=typeMatch?typeMatch[1].split(/[,、]/).map(v=>v.trim()).filter(Boolean):[];
+  const kindWord=qualifier.match(/(モンスター|エネルギー|魔法|罠|フィールド)/)?.[1]||null,kindMap={モンスター:"monster",エネルギー:"energy",魔法:"spell",罠:"trap",フィールド:"field"};
   const requiredKind=kindWord?kindMap[kindWord]:(unit==="体"?"monster":null);
-  const sources=sourceNames.map(name=>name==="手札"?own.hand:name==="デッキ"?own.deck:(effectCannotChooseZone(p,"discard")?[]:own.discard));
-  let summoned=0;
-  for(let i=0;i<limit;i++){
-   if(requiredKind==="monster"&&own.monsters.length>=MAX.monsters)break;
-   if(requiredKind==="energy"&&own.energy.length>=MAX.energy)break;
-   if(requiredKind==="trap"&&own.facedown.length>=MAX.facedown)break;
-   let selectedSource=null,selectedIndex=-1;
-   for(const source of sources){
-    const index=source.findIndex(card=>{
-     const data=cardDefinition(card),kind=cardKind(card);
-     if(!data||kind==="unknown"||kind==="spell"&&unit==="体")return false;
-     if(kind==="monster"&&/これは使わずに場に出せない/.test(String(data.effect_text||"")))return false;
-     if(requiredKind&&kind!==requiredKind)return false;
-     if(cardCost(card)>costLimit)return false;
-     const types=String(data.types||"").split(/[,、]/).map(v=>v.trim()).filter(Boolean);
-     if(requiredTypes.some(type=>!types.includes(type)))return false;
-     if(exactName&&card.name!==exactName)return false;
-     if(includeName&&!String(card.name||"").includes(includeName))return false;
-     if(excludedNameMatch&&card.name===excludedNameMatch[1])return false;
-     if(/パワー-100の/.test(qualifier)&&Number(data.power)!==-100)return false;
-     return true;
-    });
-    if(index>=0){selectedSource=source;selectedIndex=index;break}
-   }
-   if(!selectedSource)break;
-   const candidate=selectedSource[selectedIndex],candidateKind=cardKind(candidate);
-   if(candidateKind==="monster"&&own.monsters.length>=MAX.monsters)break;
-   if(candidateKind==="energy"&&own.energy.length>=MAX.energy)break;
-   if(candidateKind==="trap"&&own.facedown.length>=MAX.facedown)break;
-   const card=selectedSource.splice(selectedIndex,1)[0],kind=candidateKind;
-   resetGrantedCardInformation(card);card.faceUp=kind!=="trap";card.revealed=false;card.tapped=false;
-   if(kind==="monster"){
-    card.power=Number(cardDefinition(card)?.power)||card.power||0;card.damage=0;card.modification=0;card.summonedThisTurn=true;card.canAttackOnSummon=String(cardDefinition(card)?.effect_text||"").includes("場に出たターンでも攻撃できる");own.monsters.push(card);
-    log(own.name+"は効果で「"+card.name+"」を場に出しました");
-    resolveCardTrigger(card,p,"enter");resolveTrapTriggers(p,"ownEnter",card);
-    if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentEnter",card);
-   }else if(kind==="energy"){
-    card.tapped=String(cardDefinition(card)?.effect_text||"").includes("タップして場に出る");own.energy.push(card);
-    log(own.name+"は効果で「"+card.name+"」をエネルギーに置きました");resolveCardTrigger(card,p,"enter");
-   }else if(kind==="field"){
-    if(own.field.length)moveToDiscard(p,own.field.shift(),"効果でフィールドカードを置換");
-    own.field.push(card);log(own.name+"は効果でフィールド「"+card.name+"」を場に出しました");resolveCardTrigger(card,p,"enter");
-   }else if(kind==="spell"){
-    moveToDiscard(p,card,"効果で魔法を使用");resolveCardTrigger(card,p,"spell");
-    if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentSpell",card);
-   }else if(kind==="trap"){
-    own.facedown.push(card);log(own.name+"は効果で罠「"+card.name+"」をセットしました");
-   }
-   summoned++;
-  }
-  if(summoned===0)log("効果で出せるカードがありませんでした");
+  const sourceZones=sourceNames.map(name=>name==="手札"?"hand":name==="デッキ"?"deck":"discard").filter(zone=>zone!=="discard"||!effectCannotChooseZone(p,"discard"));
+  const candidates=sourceZones.flatMap(zone=>own[zone]||[]).filter(card=>{
+   const data=cardDefinition(card),kind=cardKind(card);if(!data||kind==="unknown"||kind==="spell"&&unit==="体")return false;
+   if(kind==="monster"&&/これは使わずに場に出せない/.test(String(data.effect_text||"")))return false;
+   if(requiredKind&&kind!==requiredKind||cardCost(card)>costLimit)return false;
+   const types=String(data.types||"").split(/[,、]/).map(v=>v.trim()).filter(Boolean);
+   if(requiredTypes.some(type=>!types.includes(type))||exactName&&card.name!==exactName||includeName&&!String(card.name||"").includes(includeName)||excludedNameMatch&&card.name===excludedNameMatch[1])return false;
+   if(/パワー-100の/.test(qualifier)&&Number(data.power)!==-100)return false;
+   return true;
+  });
+  if(!candidates.length){log("効果で場に出せるカードがありませんでした");continue}
+  pendingEffectTarget={kind:"deckSearchMove",player:p,sourceZones,destination:"auto",candidates:candidates.map(card=>({id:card.id,name:card.name})),maxCount:limit,label:"場に出すカードを選択してください（最大"+limit+"枚）"};
+  log("効果で場に出すカードを選択してください");openDeckSearchPicker(pendingEffectTarget);
  }
  return matched;
 }
-
 function performResonanceSummon(p,sourceCard){
  const own=state.players[p];
  const candidates=own.hand.filter(c=>/共鳴召喚\s*[:：]/.test(String(cardDefinition(c)?.effect_text||"")));
@@ -984,28 +970,32 @@ function openDeckSearchPicker(pending){
  cards.forEach(card=>{
   const button=document.createElement("button");button.type="button";button.style.cssText="background:#303844;color:#fff;border:2px solid #697586;border-radius:7px;padding:7px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0";
   const face=createCardFace(card.name);face.style.width="100%";button.appendChild(face);
-  const name=document.createElement("span");name.textContent=card.name;name.style.cssText="font-size:12px;overflow-wrap:anywhere";button.appendChild(name);
+  button.dataset.cardId=card.id;const name=document.createElement("span");name.textContent=card.name;name.style.cssText="font-size:12px;overflow-wrap:anywhere";button.appendChild(name);
   button.onclick=()=>{if(selected.has(card.id)){selected.delete(card.id);button.style.borderColor="#697586"}else if(selected.size<pending.maxCount){selected.add(card.id);button.style.borderColor="#f2cf54"}update()};
   grid.appendChild(button);
  });
  const footer=document.createElement("div");footer.style.cssText="display:flex;justify-content:flex-end;gap:10px;margin-top:16px";
- const cancel=document.createElement("button");cancel.type="button";cancel.textContent="キャンセル";cancel.onclick=()=>{overlay.remove();pendingEffectTarget=null;render()};
+ const cancel=document.createElement("button");cancel.type="button";cancel.textContent="キャンセル";cancel.onclick=()=>{overlay.remove();pendingEffectTarget=null;if(pending.afterDraw)drawEffectCards(pending.player,pending.afterDraw);render()};
  confirm.onclick=()=>{
-  const own=state.players[pending.player],moved=[];
-  for(const id of selected){const index=own.deck.findIndex(card=>card.id===id);if(index>=0)moved.push(own.deck.splice(index,1)[0])}
-  for(const card of moved){
-   resetGrantedCardInformation(card);card.faceUp=true;card.revealed=false;card.tapped=!!pending.tap;
-   if(pending.destination==="hand"){if(own.hand.length<MAX.hand)own.hand.push(card);else{own.deck.push(card);log("手札が上限のためカードを加えられません")}}
-   else if(pending.destination==="discard")moveToDiscard(pending.player,card,"効果による山札からの破棄");
-   else if(pending.destination==="energy"){if(own.energy.length<MAX.energy)own.energy.push(card);else{own.deck.push(card);log("エネルギーゾーンが満杯です")}}
-   else if(pending.destination==="monsters"){if(own.monsters.length<MAX.monsters){card.power=Number(cardDefinition(card)?.power)||card.power||0;card.damage=0;card.modification=0;card.summonedThisTurn=true;own.monsters.push(card);resolveCardTrigger(card,pending.player,"enter")}else own.deck.push(card)}
-   else if(pending.destination==="field"){if(own.field.length)moveToDiscard(pending.player,own.field.shift(),"効果によるフィールド置換");own.field.push(card);resolveCardTrigger(card,pending.player,"enter")}
-   else if(pending.destination==="facedown"){if(own.facedown.length<MAX.facedown){card.faceUp=false;own.facedown.push(card)}else own.deck.push(card)}
+  const own=state.players[pending.player],moved=[],sourceZones=pending.sourceZones||[pending.sourceZone||"deck"];
+  for(const id of selected){
+   const sourceZone=sourceZones.find(zone=>(own[zone]||[]).some(card=>card.id===id));if(!sourceZone)continue;
+   const source=own[sourceZone],index=source.findIndex(card=>card.id===id);if(index<0)continue;
+   const candidate=source[index],kind=cardKind(candidate),destination=pending.destination==="auto"?(kind==="spell"?"spell":kind==="monster"?"monsters":kind==="energy"?"energy":kind==="field"?"field":kind==="trap"?"facedown":null):pending.destination;
+   if(!destination)continue;
+   const capacity=destination==="spell"?Infinity:MAX[destination];if(Number.isFinite(capacity)&&(own[destination]?.length||0)>=capacity){log("移動先ゾーンが満杯のため「"+candidate.name+"」を移動できません");continue}
+   const card=source.splice(index,1)[0];moved.push({card,destination});resetGrantedCardInformation(card);card.faceUp=destination!=="facedown";card.revealed=false;card.tapped=destination==="energy"&&!!pending.tap;
+   if(destination==="hand")own.hand.push(card);
+   else if(destination==="discard"||destination==="spell"){moveToDiscard(pending.player,card,"効果によるカード移動");if(destination==="spell")resolveCardTrigger(card,pending.player,"spell")}
+   else if(destination==="energy"){own.energy.push(card);resolveCardTrigger(card,pending.player,"enter")}
+   else if(destination==="monsters"){card.power=Number(cardDefinition(card)?.power)||card.power||0;card.damage=0;card.modification=0;card.summonedThisTurn=true;card.canAttackOnSummon=String(cardDefinition(card)?.effect_text||"").includes("場に出たターンでも攻撃できる");own.monsters.push(card);resolveCardTrigger(card,pending.player,"enter");resolveTrapTriggers(pending.player,"ownEnter",card);if(!onlinePlayerId)resolveTrapTriggers(pending.player===1?2:1,"opponentEnter",card)}
+   else if(destination==="field"){if(own.field.length)moveToDiscard(pending.player,own.field.shift(),"効果によるフィールド置換");own.field.push(card);resolveCardTrigger(card,pending.player,"enter")}
+   else if(destination==="facedown"){card.faceUp=false;own.facedown.push(card)}
   }
   overlay.remove();pendingEffectTarget=null;
-  if(moved.length)log(own.name+"は山札から"+moved.map(card=>"「"+card.name+"」").join("、")+"を"+(destinationLabels[pending.destination]||"移動")+(pending.tap?"（タップ状態）":"")+"しました");
+  if(moved.length)log(moved.every(item=>item.destination==="facedown")?own.name+"は山札から罠を秘密裏に伏せました":own.name+"は山札などから"+moved.map(item=>"「"+item.card.name+"」").join("、")+"を選んで移動しました");
   if(pending.afterDraw)drawEffectCards(pending.player,pending.afterDraw);
-  state.selected=null;render();
+  state.selected=null;recalculatePlayerPassives();render();
  };
  [cancel,confirm].forEach(button=>button.style.cssText="padding:9px 14px;border-radius:6px;border:1px solid #aab3c0;background:#394454;color:#fff;cursor:pointer");
  footer.append(cancel,confirm);panel.appendChild(footer);overlay.appendChild(panel);document.body.appendChild(overlay);update();
@@ -1013,6 +1003,11 @@ function openDeckSearchPicker(pending){
 function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const own=state.players[p],opp=state.players[p===1?2:1];let s=String(text||"");let handled=false,revealedCardForEffect=null;
  const countNamed=(list,name)=>list.filter(c=>String(c.name||"").includes(name)).length;
+ const mossTrapSearch=s.match(/自分のデッキから罠(\\d+)枚までを秘密裏に伏せる/);
+ if(mossTrapSearch){
+  const max=Number(mossTrapSearch[1]),candidates=own.deck.filter(card=>cardKind(card)==="trap");
+  if(candidates.length){pendingEffectTarget={kind:"deckSearchMove",player:p,sourceZones:["deck"],destination:"facedown",candidates:candidates.map(card=>({id:card.id,name:card.name})),maxCount:max,label:"秘密裏に伏せる罠を山札から選択してください（最大"+max+"枚）"};openDeckSearchPicker(pendingEffectTarget);handled=true;log("秘密裏に伏せる罠を選択してください")}else log("山札に伏せられる罠がありません");
+ }
  if(sourceCard?.name==="転換"&&s.includes("自分のエネルギー1枚を破壊する")&&s.includes("自分のデッキからエネルギー1枚までをタップして出す")){
   const candidates=own.energy;
   if(!candidates.length){log("破壊する自分のエネルギーがないため、転換の効果を終了しました");return}
@@ -1148,6 +1143,8 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  }
  if(/(?:それ|そのモンスター)を破壊する/.test(s)&&eventCard&&eventOwner&&state.players[eventOwner].monsters.some(c=>c.id===eventCard.id)){const target=state.players[eventOwner].monsters.find(c=>c.id===eventCard.id);state.players[eventOwner].monsters=state.players[eventOwner].monsters.filter(c=>c.id!==target.id);moveToDiscard(eventOwner,target,"罠の効果による破壊");if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});if(!onlinePlayerId||eventOwner===1){resolveCardTrigger(target,eventOwner,"destroy");resolveTrapTriggers(eventOwner,"ownDestroy")}if(eventOwner!==p)resolveTrapTriggers(p,"opponentDestroy");handled=true}
  if(/自分のモンスター全てを全回復/.test(s)){own.monsters.forEach(c=>c.damage=0);handled=true}
+ const opponentMaxPowerHeal=s.match(/自分を\\s*[（(]相手のモンスターの最大パワー[）)]\\s*回復/);
+ if(opponentMaxPowerHeal){const amount=Math.max(0,...opp.monsters.map(mon=>attackPower(mon)));own.life+=amount;broadcastEffectDelta({target:"ownLife",delta:amount});if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentHeal");handled=true;log(own.name+"は相手の最大パワーに応じて"+amount+"回復")}
  const selfDamage=s.match(/自分に\s*(\d+)ダメージ/);
  if(selfDamage){const amount=Number(selfDamage[1]);own.life-=amount;broadcastEffectDelta({target:"ownLife",delta:-amount});checkLifeWinner(p);handled=true;log(own.name+"に"+amount+"ダメージ")}
  if(/このターンを終了する/.test(s)){state.forceEndTurnAfterEffect=true;handled=true}
@@ -1348,12 +1345,8 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   const sourceNames=[genericSearch[1],genericSearch[2]].filter(Boolean),sources=sourceNames.map(name=>name==="デッキ"?own.deck:(effectCannotChooseZone(p,"discard")?[]:own.discard));
   const costLimit=genericSearch[3]===undefined?Infinity:Number(genericSearch[3]),namePart=genericSearch[4]||"",tag=genericSearch[5]||"",type=genericSearch[6]||"",max=Number(genericSearch[7]);
   const kindByWord={モンスター:"monster",魔法:"spell",罠:"trap",フィールド:"field",エネルギー:"energy"};
-  for(let i=0;i<max&&own.hand.length<MAX.hand;i++){
-   let found=null,foundIndex=-1,foundSource=null;
-   for(const source of sources){const idx=source.findIndex(c=>{const d=cardDefinition(c);return !!d&&cardCost(c)<=costLimit&&(!namePart||String(c.name||"").includes(namePart))&&(!tag||String(d.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag))&&(!kindByWord[type]||cardKind(c)===kindByWord[type])});if(idx>=0){found=source[idx];foundIndex=idx;foundSource=source;break}}
-   if(!found)break;own.hand.push(foundSource.splice(foundIndex,1)[0]);handled=true;
-  }
-  if(handled)log(own.name+"は条件に合うカードを効果で手札に加えました");
+  const candidates=sources.flatMap(source=>source).filter(card=>{const d=cardDefinition(card);return !!d&&cardCost(card)<=costLimit&&(!namePart||String(card.name||"").includes(namePart))&&(!tag||String(d.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag))&&(!kindByWord[type]||cardKind(card)===kindByWord[type])});
+  if(candidates.length){pendingEffectTarget={kind:"deckSearchMove",player:p,sourceZones:sourceNames.map(name=>name==="デッキ"?"deck":"discard"),destination:"hand",candidates:candidates.map(card=>({id:card.id,name:card.name})),maxCount:max,label:"手札に加えるカードを選択してください（最大"+max+"枚）"};openDeckSearchPicker(pendingEffectTarget);handled=true;log("手札に加えるカードを選択してください")}
  }
  if(sourceCard&&/(?:^|。)\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(s))sourceCard.cannotAttack=true;
  if(sourceCard&&/(?:^|。)\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(s))sourceCard.cannotBeAttacked=true;
@@ -1479,14 +1472,8 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const energyFromDeckEffect=s.match(/自分のデッキから(?:(?:「([^」]+)」)の)?(?:\[([^\]]+)\]の)?エネルギー(\d+)枚までをタップして出す/);
  if(energyFromDeckEffect){
   const namePart=energyFromDeckEffect[1]||"",tag=energyFromDeckEffect[2]||"",max=Number(energyFromDeckEffect[3]);
-   for(let n=0;n<max&&own.energy.length<MAX.energy;n++){
-    const eligible=own.deck.filter(card=>cardKind(card)==="energy"&&(!namePart||String(card.name||"").includes(namePart))&&(!tag||String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)));
-    const chosen=chooseEffectTarget(eligible,"場に出すエネルギーを山札から選んでください（"+(n+1)+"/"+max+"）",p,sourceCard);
-    if(!chosen)break;
-    const cardIndex=own.deck.findIndex(card=>card.id===chosen.id);if(cardIndex<0)break;
-    const energy=own.deck.splice(cardIndex,1)[0];resetGrantedCardInformation(energy);energy.tapped=true;energy.faceUp=true;own.energy.push(energy);handled=true;
-   }
-  if(handled)log("条件に合うエネルギーをタップして場に出しました");
+   const eligible=own.deck.filter(card=>cardKind(card)==="energy"&&(!namePart||String(card.name||"").includes(namePart))&&(!tag||String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)));
+  if(eligible.length){pendingEffectTarget={kind:"deckSearchMove",player:p,sourceZones:["deck"],destination:"energy",tap:true,candidates:eligible.map(card=>({id:card.id,name:card.name})),maxCount:max,label:"場に出すエネルギーを選択してください（最大"+max+"枚）"};openDeckSearchPicker(pendingEffectTarget);handled=true;log("タップして場に出すエネルギーを選択してください")}
  }
  const energyFromHandEffect=s.match(/自分の手札から(?:(?:「([^」]+)」の)?\[([^\]]+)\]の)?エネルギー(\d+)枚までをタップして出す/);
  if(energyFromHandEffect){
@@ -1564,32 +1551,33 @@ function declareAttack(cardId){
   log("「"+card.name+"」の攻撃を宣言しました。相手のモンスターかプレイヤー名をクリックして対象を選んでください");
   render();
 }
-function resolveAttack(targetMonsterId){
-  if(!pendingAttack||state.phase!=="playing"||state.pendingDiscardPlayer!==null)return;
+function resolveAttack(targetMonsterId,defenseResponse=null){
+  recalculatePlayerPassives();
+  if(!pendingAttack||state.phase!=="playing"||state.pendingDiscardPlayer!==null||pendingAttack.awaitingResponse&&!defenseResponse)return;
+  const isDefenseResponse=!!defenseResponse;
   debugLog("攻撃対象を確定: "+(pendingAttack.name||"モンスター")+" → "+(targetMonsterId?("相手モンスターID "+targetMonsterId):"プレイヤーへの直接攻撃"),"combat","info",{attackerId:pendingAttack.cardId,targetMonsterId:targetMonsterId||null});
   const attacker=state.players[1].monsters.find(c=>c.id===pendingAttack.cardId);if(!attacker){pendingAttack=null;render();return}
-  if(attacker.tapped){pendingAttack=null;render();return log("タップしているモンスターは攻撃できません")}
   const defender=targetMonsterId?state.players[2].monsters.find(c=>c.id===targetMonsterId):null;
-  if(targetMonsterId&&!defender)return;
-  const forcedTargets=state.players[2].monsters.filter(c=>c.mustBeAttacked||String(cardDefinition(c)?.effect_text||"").includes("相手のモンスターはこれにしか攻撃できない"));
-  if(forcedTargets.length&&(!defender||!forcedTargets.some(c=>c.id===defender.id))){log("相手の効果により、指定されたモンスターにしか攻撃できません");return}
-  if(defender&&(defender.cannotBeAttacked||(!defender.tapped&&defender.cannotBeAttackedWhileUntapped)||/(?:^|。)\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(String(cardDefinition(defender)?.effect_text||"")))){log("そのモンスターは攻撃されません");return}
-  if(!targetMonsterId&&state.players[2].opponentMonstersCannotAttackPlayer){log("相手の効果によりプレイヤーへの攻撃が禁止されています");return}
-  const maxAttacks=Math.max(1,Number(attacker.attacksPerTurn)||1);
-  const attackNumber=(Number(attacker.attacksThisTurn)||0)+1;
-  attacker.tapped=attackNumber>=maxAttacks;
-  debugLog("攻撃宣言: "+attacker.name+"（"+attackNumber+"/"+maxAttacks+"回目）","combat","info",{attackerId:attacker.id,attackNumber,maxAttacks});
-  const active=state.turnPlayer,nonActive=active===1?2:1;
-  debugLog("攻撃側の罠効果を確認","effect","info",{player:active,trigger:"ownAttack"});
-  resolveTrapTriggers(active,"ownAttack",attacker);
-  debugLog("攻撃側モンスターの攻撃時効果を確認","effect","info",{player:active,card:attacker.name});
-  resolveCardTrigger(attacker,active,"attack");
-  if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN){
-    gameSocket.send(JSON.stringify({type:"operation",action:"attack_declared",cardId:attacker.id,targetCardId:defender?.id||null}));
+  if(isDefenseResponse){
+   if(defenseResponse.attackId!==pendingAttack.attackId)return;
+   if(Number.isFinite(defenseResponse.damageOverride))attacker.nextAttackDamage=Math.max(0,Number(defenseResponse.damageOverride));
   }else{
-    debugLog("防御側の罠効果を確認","effect","info",{player:nonActive,trigger:"opponentAttack"});
-    resolveTrapTriggers(nonActive,"opponentAttack",attacker);
-    if(defender){debugLog("防御側モンスターの効果を確認","effect","info",{player:nonActive,card:defender.name});resolveCardTrigger(defender,nonActive,"attack")}
+   if(attacker.tapped){pendingAttack=null;render();return log("タップしているモンスターは攻撃できません")}
+   if(targetMonsterId&&!defender)return;
+   const forcedTargets=state.players[2].monsters.filter(c=>c.mustBeAttacked||String(cardDefinition(c)?.effect_text||"").includes("相手のモンスターはこれにしか攻撃できない"));
+   if(forcedTargets.length&&(!defender||!forcedTargets.some(c=>c.id===defender.id))){log("相手の効果により、指定されたモンスターにしか攻撃できません");return}
+   if(defender&&(defender.cannotBeAttacked||(!defender.tapped&&defender.cannotBeAttackedWhileUntapped)||/(?:^|。)\\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(String(cardDefinition(defender)?.effect_text||"")))){log("そのモンスターは攻撃されません");return}
+   if(!targetMonsterId&&state.players[2].opponentMonstersCannotAttackPlayer){log("相手の効果によりプレイヤーへの攻撃が禁止されています");return}
+   const maxAttacks=Math.max(1,Number(attacker.attacksPerTurn)||1),attackNumber=(Number(attacker.attacksThisTurn)||0)+1;
+   attacker.tapped=attackNumber>=maxAttacks;debugLog("攻撃宣言: "+attacker.name+"（"+attackNumber+"/"+maxAttacks+"回目）","combat","info",{attackerId:attacker.id,attackNumber,maxAttacks});
+   const active=state.turnPlayer,nonActive=active===1?2:1;resolveTrapTriggers(active,"ownAttack",attacker);resolveCardTrigger(attacker,active,"attack");
+   if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN){
+    const attackId="atk-"+Date.now()+"-"+Math.random().toString(36).slice(2,9);
+    pendingAttack={...pendingAttack,awaitingResponse:true,attackId,targetMonsterId:targetMonsterId||null};
+    gameSocket.send(JSON.stringify({type:"operation",action:"attack_declared",attackId,cardId:attacker.id,targetCardId:defender?.id||null}));
+    log("攻撃を宣言しました。相手の防御側効果の処理を待っています");render();return;
+   }
+   resolveTrapTriggers(nonActive,"opponentAttack",attacker);if(defender)resolveCardTrigger(defender,nonActive,"attack");
   }
   const attack=attacker.nextAttackDamage!==undefined?Math.max(0,Number(attacker.nextAttackDamage)||0):(attacker.combatPowerUsesOpponent&&defender?attackPower(defender):attackPower(attacker));delete attacker.nextAttackDamage;
   debugLog("戦闘ダメージを計算","combat","info",{attacker:attacker.name,attackerPower:attack,defender:defender?.name||"プレイヤー",defenderPower:defender?attackPower(defender):null});
@@ -1818,6 +1806,7 @@ function exposeAnkrEffectTestApi(){
    state.selected={p:1,z:zone,id:sourceId};activateCardAbility(sourceId,abilityIndex);return this.snapshot();
   },
   attack(attackerId,targetId=null){const attacker=state.players[1].monsters.find(c=>c.id===attackerId);if(!attacker)throw new Error("attacker not found");pendingAttack={cardId:attacker.id,name:attacker.name};resolveAttack(targetId);return this.snapshot()},
+  startTurn(player=1,skipDraw=false){state.phase="playing";startTurn(player,true,skipDraw);return this.snapshot()},
   chooseTarget(cardId){resolvePendingEffectTarget(cardId);return this.snapshot()},
   snapshot(){
    const players={};
