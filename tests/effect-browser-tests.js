@@ -121,6 +121,81 @@ const server=http.createServer((req,res)=>{
   assert.equal(iceWall.opponentLife,4000,"Ice Wall did not reduce the attack damage to zero");
   assert.equal(iceWall.opponentHand,1,"Ice Wall did not resolve its draw clause");
   assert.equal(iceWall.trapDiscarded,true,"Ice Wall did not move to discard after activation");
+
+  const advanced=await page.evaluate(({energyName,monsterName,trapName,knightName,highPowerMonsterName,highPower})=>{
+   const api=window.__ANKR_TEST__;
+   api.reset();
+   api.addCard("信じる心",1,"monsters","belief-source");
+   api.addCard(monsterName,1,"deck","belief-target");
+   api.addCard(energyName,1,"deck","belief-other");
+   api.runEffect("自分のデッキからカード1枚までを手札に加える。",1,"belief-source");
+   const beliefPending=api.snapshot();
+   api.chooseTarget("belief-target");
+   api.reset();
+   api.addCard("苔木蜘蛛",1,"monsters","moss-source");
+   api.addCard(trapName,1,"deck","moss-trap");
+   api.trigger("moss-source",1,"enter");
+   const mossPending=api.snapshot();
+   api.reset();
+   api.addCard("碧い花",1,"monsters","blue-flower");
+   api.addCard(highPowerMonsterName,2,"monsters","blue-opponent");
+   api.trigger("blue-flower",1,"enter");
+   const blueFlower=api.snapshot();
+   api.reset();
+   api.addCard("転換",1,"hand","tenkan-source");
+   api.addCard(energyName,1,"energy","tenkan-cost");
+   api.addCard(energyName,1,"deck","tenkan-energy");
+   api.addCard(monsterName,1,"deck","tenkan-draw");
+   api.runEffect("自分のエネルギーが場に無い時使用できない。自分のエネルギー1枚を破壊する。自分のデッキからエネルギー1枚までをタップして出す。自分は1枚引く。",1,"tenkan-source");
+   api.chooseTarget("tenkan-cost");
+   const tenkanPending=api.snapshot();
+   api.reset();
+   api.addCard("王国の槍騎士",2,"monsters","passive-source");
+   const passiveBefore=api.snapshot().players[2].zones.monsters.find(c=>c.id==="passive-source")?.cannotBeAttackedWhileUntapped||false;
+   api.removeCard("passive-source",2,"monsters");
+   const passiveAfter=api.snapshot().players[2].zones.monsters.some(c=>c.id==="passive-source");
+   api.reset();
+   api.addCard(monsterName,2,"deck","second-player-draw");
+   const secondTurn=api.startTurn(2,false);
+   api.reset();
+   api.addCard(monsterName,1,"deck","first-player-no-draw");
+   const firstTurn=api.startTurn(1,true);
+   api.reset();
+   api.addCard("部隊指揮官",1,"monsters","field-commander");
+   api.addCard(knightName,1,"monsters","knight-target");
+   api.trigger("field-commander",1,"enter");
+   const commanderBuffPending=api.snapshot();
+   api.reset();
+   api.addCard("王国の騎士団長",1,"monsters","kingdom-commander");
+   api.addCard(monsterName,1,"monsters","extra-own");
+   api.addCard(monsterName,2,"monsters","commander-target");
+   api.setEnergyPool(1,4);
+   api.activate("kingdom-commander","monsters",0);
+   const captainPending=api.snapshot();
+   return {
+    beliefPending:beliefPending.pendingTarget?.kind||null,beliefPicker:beliefPending.pickerOpen,
+    mossPending:mossPending.pendingTarget?.kind||null,mossDestination:mossPending.pendingTarget?.destination||null,
+    blueFlowerLife:blueFlower.players[1].life,
+    tenkanPending:tenkanPending.pendingTarget?.kind||null,tenkanDestination:tenkanPending.pendingTarget?.destination||null,tenkanPicker:tenkanPending.pickerOpen,
+    passiveBefore,passiveAfter,secondTurnHand:secondTurn.players[2].zones.hand.length,firstTurnHand:firstTurn.players[1].zones.hand.length,
+    commanderBuffPending:commanderBuffPending.pendingTarget?.kind||null,captainPending:captainPending.pendingTarget?.kind||null
+   };
+  },{energyName:fixtureCards.energy.name,monsterName:fixtureCards.monster.name,trapName:fixtureCards.trap.name,knightName:(cardsData.cards.find(c=>String(c.tags||"").includes("#モンスターカード")&&String(c.types||"").split(/[,、]/).includes("騎士")&&Number(c.cost)<=2)||fixtureCards.monster).name,highPowerMonsterName:(cardsData.cards.find(c=>String(c.tags||"").includes("#モンスターカード")&&Number(c.power)>=700)||fixtureCards.monster).name,highPower:Number((cardsData.cards.find(c=>String(c.tags||"").includes("#モンスターカード")&&Number(c.power)>=700)||fixtureCards.monster).power)||0});
+  assert.equal(advanced.beliefPending,"deckSearchMove","Believing Heart did not open a deck card picker");
+  assert.equal(advanced.beliefPicker,true,"Believing Heart picker was not displayed");
+  assert.equal(advanced.mossPending,"deckSearchMove","Moss Tree Spider did not open a deck trap picker");
+  assert.equal(advanced.mossDestination,"facedown","Moss Tree Spider picker did not set traps face down");
+  assert.equal(advanced.blueFlowerLife,4000+highPower,"Blue Flower maximum-power healing did not resolve");
+  assert.equal(advanced.tenkanPending,"deckSearchMove","Tenkan did not continue to its deck-energy selection");
+  assert.equal(advanced.tenkanDestination,"energy","Tenkan did not offer energy deployment");
+  assert.equal(advanced.tenkanPicker,true,"Tenkan energy picker was not displayed");
+  assert.equal(advanced.passiveBefore,true,"Kingdom Spearman untapped passive was not recalculated");
+  assert.equal(advanced.passiveAfter,false,"Kingdom Spearman passive source removal was not reflected");
+  assert.equal(advanced.secondTurnHand,1,"second player's first turn did not draw");
+  assert.equal(advanced.firstTurnHand,0,"first player's initial turn incorrectly drew");
+  assert.equal(advanced.commanderBuffPending,"taggedMonsterBuff","Field Commander did not request a Knight target");
+  assert.equal(advanced.captainPending,"formulaMonsterDamage","Kingdom Commander did not request a board target for its damage formula");
+
   const results=await page.evaluate(({cases,fixture})=>window.__ANKR_TEST__.auditBatch(cases,fixture),{cases,fixture});
   const counts={};for(const result of results)counts[result.status]=(counts[result.status]||0)+1;
   const errors=results.filter(r=>r.status==="runtime_error");
