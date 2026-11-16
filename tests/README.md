@@ -1,25 +1,18 @@
 # Ankr TCG effect checks
 
-Run locally from the repository root:
+Run from the repository root:
 
 ```sh
 node tests/effect-tests.js
-node tests/effect-audit.js
+node tests/effect-execution-tests.js
 node tests/effect-audit.js effect-audit-report.json
 ```
 
-## What is checked
+- `effect-audit.js`: scans all 737 card records, saved ability splits, parser coverage, triggers, costs, and target-selection hints. It emits a JSON report for review.
+- `effect-tests.js`: parser and regression tests.
+- `effect-execution-tests.js`: deterministic tests for a test-only state resolver (draw, damage, healing, deck selection, and destruction). It verifies that explicit target/card choices are required and never silently guessed.
+- GitHub Actions runs all three on relevant pushes and pull requests and uploads the audit report.
 
-- Card record count, required IDs/names, and duplicate IDs.
-- Whether each saved `abilities` array exactly matches the current quote/bracket-aware split of `effect_text`.
-- Per-clause compiler classification: trigger, activation cost, recognized action family, target hints, and conditions.
-- Parser regression fixtures, including player-selected deck search, damage, summon/energy placement, and activation costs.
-- The effect runtime's built-in regression fixtures.
+**Scope:** the execution simulator is deliberately separate from the browser game's live resolver. Passing it validates the compiler's action contract and selection expectations, not the complete game UI, actual `game.js` execution, or two-player synchronization. Those require integration/browser tests and remain separately unverified.
 
-The audit deliberately keeps the user's named exceptions out of normal effect-coverage counts: `愛おしき放課後`, `いぬ`, and the deck-copy text on `量産型タイロス` / `ノーマルエネルギー`.
-
-## Important limitation
-
-These are automated **data/parser and effect-IR contract tests**. They do not yet execute the full browser game state machine. Actual resolution in `game.js` depends on the live board state, DOM rendering, pending target UI, and online synchronization. A passing parser test therefore does not prove a card's effect works in a real match. The audit labels clauses for review rather than claiming implementation is complete.
-
-GitHub Actions runs the regression suite on relevant pushes and pull requests, then uploads the full JSON audit as an artifact.
+The audit excludes the user's exceptions: `愛おしき放課後`, `いぬ`, and deck-copy text on `量産型タイロス` / `ノーマルエネルギー`.
