@@ -771,7 +771,8 @@ function activateCardAbility(cardId,abilityIndex){
   const card=find(1,selected.z,cardId);if(!card)return;
   const abilities=CardEffectEngine.activatedAbilities(cardDefinition(card)?.effect_text||"");
   const ability=abilities[abilityIndex];if(!ability)return;
-  if(ability.body.includes("自分の罠が場にあるなら")&&!state.players[1].facedown.length){log("自分の罠が場にないため、この能力は使用できません");return}
+  const isBlueFlowerTrapHeal=card.name==="碧い花"&&ability.body.includes("自分の罠が場にあるなら")&&/自分を\\s*700回復/.test(ability.body);
+  if((isBlueFlowerTrapHeal||ability.body.includes("自分の罠が場にあるなら"))&&!state.players[1].facedown.length){log("自分の罠が場にないため、この能力は使用できません");return}
   const isKingdomArcherDamage=cardDefinition(card)?.id==="card_0079"&&/相手のモンスター\s*1体に\s*[（(]これのパワー[）)]\s*ダメージ/.test(ability.body);
   const kingdomArcherCandidates=isKingdomArcherDamage?state.players[2].monsters.filter(target=>!target.cannotBeChosenByOpponent):[];
   const isKingdomCaptainDamage=card.name==="王国の騎士団長"&&/相手のモンスター\s*1体に\s*[（(]自分のモンスターの数\s*[×x*]\s*300[）)]\s*ダメージ/.test(ability.body);
@@ -804,6 +805,7 @@ function activateCardAbility(cardId,abilityIndex){
     log("未対応の能力コストです："+(ability.costToken||"不明"));return;
   }
   log("「"+card.name+"」の能力を使用"+(ability.costKind==="energy"?"（コスト"+(ability.costValue||0)+"）":"（コスト："+(ability.costToken||"不明")+"）"));
+  if(isBlueFlowerTrapHeal){state.players[1].life+=700;broadcastEffectDelta({target:"ownLife",delta:700});if(!onlinePlayerId)resolveTrapTriggers(2,"opponentHeal");log("碧い花の効果で700回復しました");state.selected={p:1,z:selected.z,id:card.id};render();return}
   if(isKingdomArcherDamage&&!kingdomArcherCandidates.length){
     log("選択できる相手モンスターがいないため、対象を選ばずに処理を終了しました");
     state.selected={p:1,z:selected.z,id:card.id};
