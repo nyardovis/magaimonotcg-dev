@@ -879,7 +879,7 @@ function resolvePendingEffectTarget(cardId){
   log("「"+sourceCard.name+"」の効果で相手の「"+target.name+"」に"+amount+"ダメージ");
   state.selected={p:1,z:"monsters",id:sourceCard.id};
  }
- render();
+ render();sendPendingAttackResponseIfReady();
 }
 function resolveSummonEffects(text,p,sourceCard){
  const own=state.players[p],sourcePattern=/自分の(手札かデッキか捨て札|手札かデッキ|デッキか捨て札|手札か捨て札|手札|デッキ|捨て札)から([\s\S]*?)(\d+)(体|枚)(?:まで)?(?:を場に|を)出す/g;
