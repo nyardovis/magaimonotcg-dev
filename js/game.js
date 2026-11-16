@@ -1828,8 +1828,9 @@ function exposeAnkrEffectTestApi(){
   },
   logs(){return debugLogEntries.map(e=>({category:e.category,status:e.status,message:e.message,details:e.details}))},
   auditBatch(cases,fixture){
-   const results=[];
+   const results=[],originalPrompt=window.prompt;
    for(const item of cases){
+    let promptCount=0;window.prompt=()=>{promptCount++;return null};
     this.reset();
     for(const entry of fixture||[])this.addCard(entry.name,entry.owner,entry.zone,entry.id);
     const sourceId=this.addCard(item.cardName,1,item.sourceZone||"monsters","audit-source");
@@ -1839,10 +1840,10 @@ function exposeAnkrEffectTestApi(){
     const logs=this.logs(),after=JSON.stringify(this.snapshot());
     const pending=!!pendingEffectTarget,picker=!!document.querySelector("#effectDeckPicker");
     const unimplemented=logs.some(e=>e.status==="unimplemented"||e.message.includes("未対応の効果"));
-    const status=error?"runtime_error":unimplemented?"unimplemented":picker?"needs_card_selection":pending?"needs_board_target":logs.some(e=>e.message.includes("選択"))?"needs_choice":before!==after?"executed":"no_state_change";
-    results.push({cardId:item.cardId,cardName:item.cardName,clauseIndex:item.clauseIndex,text:item.text,status,error,logs:logs.filter(e=>e.status==="error"||e.status==="unimplemented"||e.message.includes("未対応")).map(e=>e.message)});
+    const status=error?"runtime_error":unimplemented?"unimplemented":picker?"needs_card_selection":pending?"needs_board_target":promptCount>0?"needs_choice":before!==after?"executed":"no_state_change";
+    results.push({cardId:item.cardId,cardName:item.cardName,clauseIndex:item.clauseIndex,text:item.text,status,promptCount,error,logs:logs.filter(e=>e.status==="error"||e.status==="unimplemented"||e.message.includes("未対応")).map(e=>e.message)});
    }
-   return results;
+   window.prompt=originalPrompt;return results;
   }
  };
 }
