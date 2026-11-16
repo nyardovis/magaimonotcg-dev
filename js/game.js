@@ -12,6 +12,7 @@ let devToolsOpenDuringMulligan=false;
 let cardChoiceHiddenFor=null;
 let pendingAttack=null;
 let pendingEffectTarget=null;
+let pendingDefenseAttackResponse=null;
 let rematchStateResetPending=false;
 
 function getPublicState(){
@@ -246,7 +247,7 @@ function connectGameServer(){
           if(message.playerId!==onlinePlayerId&&state.turnPlayer===1)endTurn();
         }
         else if(message.type==="operation"&&message.action==="attack_declared"&&!devLocalMode){
-          if(message.playerId!==onlinePlayerId){const attacker=state.players[2].monsters.find(c=>c.id===message.cardId);if(attacker)attacker.tapped=true;const defender=message.targetCardId?state.players[1].monsters.find(c=>c.id===message.targetCardId):null;resolveTrapTriggers(1,"opponentAttack",attacker||null);if(defender)resolveCardTrigger(defender,1,"attack");const response={type:"operation",action:"attack_response",attackId:message.attackId,damageOverride:Number.isFinite(attacker?.nextAttackDamage)?attacker.nextAttackDamage:null};if(gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify(response));render();}
+          if(message.playerId!==onlinePlayerId){const attacker=state.players[2].monsters.find(c=>c.id===message.cardId);if(attacker)attacker.tapped=true;const defender=message.targetCardId?state.players[1].monsters.find(c=>c.id===message.targetCardId):null;resolveTrapTriggers(1,"opponentAttack",attacker||null);if(defender)resolveCardTrigger(defender,1,"attack");pendingDefenseAttackResponse={attackId:message.attackId,attacker};sendPendingAttackResponseIfReady();render();}
         }
         else if(message.type==="operation"&&message.action==="attack_response"&&!devLocalMode){
           if(message.playerId!==onlinePlayerId&&pendingAttack?.awaitingResponse)resolveAttack(pendingAttack.targetMonsterId,{attackId:message.attackId,damageOverride:message.damageOverride});
@@ -644,7 +645,7 @@ function move(dest){
 function drawCards(n,p=1){if(!Number.isInteger(n)||n<=0)return log("ドロー枚数は1以上の整数にしてください");drawEffectCards(p,n);state.selected=null;render()}
 function ensureDiscardWarning(){if(document.querySelector("#discardWarning"))return;const e=document.createElement("div");e.id="discardWarning";e.hidden=true;e.style.cssText="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9999;background:#8b0000;color:#fff;padding:10px 18px;border:2px solid #f33;border-radius:6px;font-weight:700;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.45);";document.body.appendChild(e)}
 function startTurn(p,showLog=true,skipInitialDraw=false){if(state.phase!=="playing")return;debugLog("ターン開始処理: "+(state.players[p]?.name||("プレイヤー"+p)),"state","info",{player:p,phase:state.phase});const skipDraw=skipInitialDraw;state.firstTurnPending=false;const x=state.players[p];x.energyPlacedThisTurn=false;x.extraEnergyPlacements=0;x.energyPool=0;if(p===1)broadcastEnergyPool();x.monsters.forEach(m=>{m.tapped=false;m.summonedThisTurn=false;m.canAttackOnSummon=false;m.attacksThisTurn=0;m.cannotAttackUntilTurnEnd=false});x.energy.forEach(e=>e.tapped=false);if(x.deck.length===0){const winner=p===1?2:1;state.gameOver={winner,reason:"deck_empty"};state.phase="finished";render();log(x.name+"はターン開始時に山札が0枚だったため、"+state.players[winner].name+"の勝利です");return}if(!skipDraw&&x.deck.length&&x.hand.length>=MAX.hand){state.pendingDiscardPlayer=p;state.pendingDiscardReason="turn_start";state.pendingDrawCount=1;state.selected=null;render();log(x.name+"はドロー前に手札を1枚捨てる必要があります。手札のカードをクリックしてください");return}if(!skipDraw&&x.deck.length&&x.hand.length<MAX.hand)drawCards(1,p);if(skipDraw)debugLog("先攻の最初のターンのため通常ドローをスキップ","state","info",{player:p});resolveTurnTriggers(p,"start");render();if(showLog)log(x.name+" のターン開始")}
-function completePendingDiscard(p,id){if(p!==1)return false;if(state.pendingDiscardPlayer!==p)return false;const x=state.players[p],i=x.hand.findIndex(c=>c.id===id);if(i<0)return true;const discarded=x.hand.splice(i,1)[0],reason=state.pendingDiscardReason,remaining=state.pendingDrawCount;moveToDiscard(p,discarded,"手札上限による破棄");state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.selected=null;log(x.name+"は「"+discarded.name+"」を捨てました");if(reason==="effect_draw"){if(remaining>0)drawEffectCards(p,remaining);render();return true}if(x.deck.length&&x.hand.length<MAX.hand)drawCards(1,p);resolveTurnTriggers(p,"start");render();log(x.name+" のターン開始");return true}
+function completePendingDiscard(p,id){if(p!==1)return false;if(state.pendingDiscardPlayer!==p)return false;const x=state.players[p],i=x.hand.findIndex(c=>c.id===id);if(i<0)return true;const discarded=x.hand.splice(i,1)[0],reason=state.pendingDiscardReason,remaining=state.pendingDrawCount;moveToDiscard(p,discarded,"手札上限による破棄");state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.selected=null;log(x.name+"は「"+discarded.name+"」を捨てました");if(reason==="effect_draw"){if(remaining>0)drawEffectCards(p,remaining);render();sendPendingAttackResponseIfReady();return true}if(x.deck.length&&x.hand.length<MAX.hand)drawCards(1,p);resolveTurnTriggers(p,"start");render();sendPendingAttackResponseIfReady();log(x.name+" のターン開始");return true}
 function processScheduledEndTurnEffects(p){const x=state.players[p];for(const owner of [1,2])for(const zone of ["monsters","energy","field"])for(const card of state.players[owner][zone])if(card.cannotAttackUntilPlayerTurnEnd===p)delete card.cannotAttackUntilPlayerTurnEnd;for(const card of [...x.monsters,...x.energy,...x.field]){if(!card.destroyAtTurnEnd)continue;card.destroyAtTurnEnd=false;for(const zone of ["monsters","energy","field"]){const i=x[zone].findIndex(c=>c.id===card.id);if(i>=0){x[zone].splice(i,1);moveToDiscard(p,card,"ターン終了時効果");if(zone==="monsters")resolveCardTrigger(card,p,"destroy");break}}}}
 function endTurn(){const localPlayer=1;if(state.turnPlayer!==localPlayer||state.pendingDiscardPlayer!==null||state.phase!=="playing")return;if(onlinePlayerId!==null&&!devLocalMode){if(!gameSocket||gameSocket.readyState!==WebSocket.OPEN)return log("オンラインサーバーに接続されていません");resolveTurnTriggers(1,"end");processScheduledEndTurnEffects(1);state.players[1].monsters.forEach(m=>{m.damage=0});render();gameSocket.send(JSON.stringify({type:"operation",action:"end_turn"}));return}const p=state.turnPlayer,x=state.players[p];resolveTurnTriggers(p,"end");processScheduledEndTurnEffects(p);x.monsters.forEach(m=>{m.damage=0});state.turnPlayer=p===1?2:1;startTurn(state.turnPlayer)}
 
@@ -665,6 +666,7 @@ function effectiveCardCost(card,p=1){
 }
 function broadcastEnergyPool(){if(!devLocalMode&&onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"energy_pool",value:state.players[1].energyPool||0}))}
 function broadcastEffectDelta(delta){if(!devLocalMode&&onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN)gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",...delta}))}
+function sendPendingAttackResponseIfReady(){if(!pendingDefenseAttackResponse||pendingEffectTarget||state.pendingDiscardPlayer!==null||document.querySelector("#effectDeckPicker")||!gameSocket||gameSocket.readyState!==WebSocket.OPEN)return;const pending=pendingDefenseAttackResponse;pendingDefenseAttackResponse=null;gameSocket.send(JSON.stringify({type:"operation",action:"attack_response",attackId:pending.attackId,damageOverride:Number.isFinite(pending.attacker?.nextAttackDamage)?pending.attacker.nextAttackDamage:null}))}
 function applyEffectDelta(message){
  const actorIsLocal=message.playerId===onlinePlayerId;
  const targetPlayer=["ownLife","ownEnergyPool","ownMonsterDamage"].includes(message.target)?(actorIsLocal?1:2):(actorIsLocal?2:1);
@@ -771,6 +773,8 @@ function activateCardAbility(cardId,abilityIndex){
   const ability=abilities[abilityIndex];if(!ability)return;
   const isKingdomArcherDamage=cardDefinition(card)?.id==="card_0079"&&/相手のモンスター\s*1体に\s*[（(]これのパワー[）)]\s*ダメージ/.test(ability.body);
   const kingdomArcherCandidates=isKingdomArcherDamage?state.players[2].monsters.filter(target=>!target.cannotBeChosenByOpponent):[];
+  const isKingdomCaptainDamage=card.name==="王国の騎士団長"&&/相手のモンスター\s*1体に\s*[（(]自分のモンスターの数\s*[×x*]\s*300[）)]\s*ダメージ/.test(ability.body);
+  const kingdomCaptainCandidates=isKingdomCaptainDamage?state.players[2].monsters.filter(target=>!target.cannotBeChosenByOpponent):[];
   const abilityDestroyMatch=ability.body.match(/「([^」]+)」を持つモンスター1体を破壊する/);
   const abilityDestroyCandidates=abilityDestroyMatch?[...state.players[1].monsters.map(target=>({target,owner:1})),...state.players[2].monsters.map(target=>({target,owner:2}))].filter(entry=>{
    const definition=cardDefinition(entry.target),required=abilityDestroyMatch[1];
@@ -805,8 +809,13 @@ function activateCardAbility(cardId,abilityIndex){
     render();
     return;
   }
+  if(isKingdomCaptainDamage){
+    if(!kingdomCaptainCandidates.length){log("選択できる相手モンスターがいないため、効果を終了しました");state.selected={p:1,z:selected.z,id:card.id};render();return}
+    pendingEffectTarget={kind:"formulaMonsterDamage",player:2,zone:"monsters",sourceZone:selected.z,sourceCard:card,amount:state.players[1].monsters.length*300,candidates:kingdomCaptainCandidates.map(target=>({id:target.id,owner:2}))};
+    log("ダメージを与える相手モンスターを盤面からクリックしてください");render();return;
+  }
   if(isKingdomArcherDamage){
-    pendingEffectTarget={kind:"kingdomArcherDamage",player:2,sourceCard:card,candidates:kingdomArcherCandidates.map(target=>({id:target.id}))};
+    pendingEffectTarget={kind:"kingdomArcherDamage",player:2,sourceCard:card,candidates:kingdomArcherCandidates.map(target=>({id:target.id,owner:2}))};
     log("ダメージを与える相手モンスターを盤面からクリックしてください");
     render();
     return;
@@ -851,6 +860,8 @@ function resolvePendingEffectTarget(cardId){
   checkMonsterDestruction(owner,true);
   log("「"+pending.sourceCard.name+"」の効果で「"+target.name+"」に"+amount+"ダメージ");
   state.selected={p:1,z:pending.sourceZone||"energy",id:pending.sourceCard.id};
+ }else if(pending.kind==="formulaMonsterDamage"){
+  const amount=Math.max(0,Number(pending.amount)||0);target.damage=(Number(target.damage)||0)+amount;if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:amount});checkMonsterDestruction(owner,true);log("「"+pending.sourceCard.name+"」の効果で「"+target.name+"」に"+amount+"ダメージ");state.selected={p:1,z:pending.sourceZone||"monsters",id:pending.sourceCard.id};
  }else if(pending.kind==="abilityDestroy"){
   const zone=state.players[owner].monsters;
   state.players[owner].monsters=zone.filter(card=>card.id!==target.id);
@@ -975,7 +986,7 @@ function openDeckSearchPicker(pending){
   grid.appendChild(button);
  });
  const footer=document.createElement("div");footer.style.cssText="display:flex;justify-content:flex-end;gap:10px;margin-top:16px";
- const cancel=document.createElement("button");cancel.type="button";cancel.textContent="キャンセル";cancel.onclick=()=>{overlay.remove();pendingEffectTarget=null;if(pending.afterDraw)drawEffectCards(pending.player,pending.afterDraw);render()};
+ const cancel=document.createElement("button");cancel.type="button";cancel.textContent="キャンセル";cancel.onclick=()=>{overlay.remove();pendingEffectTarget=null;if(pending.afterDraw)drawEffectCards(pending.player,pending.afterDraw);render();sendPendingAttackResponseIfReady()};
  confirm.onclick=()=>{
   const own=state.players[pending.player],moved=[],sourceZones=pending.sourceZones||[pending.sourceZone||"deck"];
   for(const id of selected){
@@ -995,7 +1006,7 @@ function openDeckSearchPicker(pending){
   overlay.remove();pendingEffectTarget=null;
   if(moved.length)log(moved.every(item=>item.destination==="facedown")?own.name+"は山札から罠を秘密裏に伏せました":own.name+"は山札などから"+moved.map(item=>"「"+item.card.name+"」").join("、")+"を選んで移動しました");
   if(pending.afterDraw)drawEffectCards(pending.player,pending.afterDraw);
-  state.selected=null;recalculatePlayerPassives();render();
+  state.selected=null;recalculatePlayerPassives();render();sendPendingAttackResponseIfReady();
  };
  [cancel,confirm].forEach(button=>button.style.cssText="padding:9px 14px;border-radius:6px;border:1px solid #aab3c0;background:#394454;color:#fff;cursor:pointer");
  footer.append(cancel,confirm);panel.appendChild(footer);overlay.appendChild(panel);document.body.appendChild(overlay);update();
@@ -1782,7 +1793,7 @@ function exposeAnkrEffectTestApi(){
     x.energyPlacedThisTurn=false;x.extraEnergyPlacements=0;
    }
    state.turnPlayer=1;state.phase="playing";state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.gameOver=null;state.selected=null;
-   pendingEffectTarget=null;pendingAttack=null;debugLogEntries=[];debugLogSequence=0;
+   pendingEffectTarget=null;pendingAttack=null;pendingDefenseAttackResponse=null;debugLogEntries=[];debugLogSequence=0;
    const picker=document.querySelector("#effectDeckPicker");if(picker)picker.remove();
    for(const id of ["prepScreen","deckEditor","discardViewer","deckViewer","roomLobby","mulliganOverlay","roomWaitOverlay","gameOverOverlay","rematchWaitOverlay"]){const element=document.querySelector("#"+id);if(element)element.hidden=true}
    devLocalMode=true;onlinePlayerId=null;gameSocket=null;
@@ -1808,15 +1819,17 @@ function exposeAnkrEffectTestApi(){
   },
   attack(attackerId,targetId=null){const attacker=state.players[1].monsters.find(c=>c.id===attackerId);if(!attacker)throw new Error("attacker not found");pendingAttack={cardId:attacker.id,name:attacker.name};resolveAttack(targetId);return this.snapshot()},
   startTurn(player=1,skipDraw=false){state.phase="playing";startTurn(player,true,skipDraw);return this.snapshot()},
+  removeCard(id,owner=1,zone="monsters"){const list=state.players[owner]?.[zone]||[];const index=list.findIndex(card=>card.id===id);if(index>=0)list.splice(index,1);recalculatePlayerPassives();return this.snapshot()},
+  setEnergyPool(player,value){state.players[player].energyPool=value;return this.snapshot()},
   chooseTarget(cardId){resolvePendingEffectTarget(cardId);return this.snapshot()},
   snapshot(){
    const players={};
    for(const p of [1,2]){
     const x=state.players[p],zones={};
-    for(const z of ["hand","deck","monsters","energy","field","discard","facedown"])zones[z]=(x[z]||[]).map(c=>({id:c.id,name:c.name,tapped:!!c.tapped,damage:Number(c.damage)||0,modification:Number(c.modification)||0,counters:Number(c.counters)||0,power:Number(c.power)||0,effectsDisabled:!!c.effectsDisabled}));
+    for(const z of ["hand","deck","monsters","energy","field","discard","facedown"])zones[z]=(x[z]||[]).map(c=>({id:c.id,name:c.name,tapped:!!c.tapped,damage:Number(c.damage)||0,modification:Number(c.modification)||0,counters:Number(c.counters)||0,power:Number(c.power)||0,effectsDisabled:!!c.effectsDisabled,cannotBeAttacked:!!c.cannotBeAttacked,cannotBeAttackedWhileUntapped:!!c.cannotBeAttackedWhileUntapped,cannotAttack:!!c.cannotAttack,attacksPerTurn:Number(c.attacksPerTurn)||0,damageReduction:Number(c.damageReduction)||0}));
     players[p]={life:x.life,energyPool:x.energyPool,zones};
    }
-   return {players,pendingTarget:pendingEffectTarget?{kind:pendingEffectTarget.kind,candidates:pendingEffectTarget.candidates}:null,pickerOpen:!!document.querySelector("#effectDeckPicker"),gameOver:state.gameOver};
+   recalculatePlayerPassives();return {players,pendingTarget:pendingEffectTarget?{kind:pendingEffectTarget.kind,candidates:pendingEffectTarget.candidates,destination:pendingEffectTarget.destination,maxCount:pendingEffectTarget.maxCount}:null,pickerOpen:!!document.querySelector("#effectDeckPicker"),pendingDiscardPlayer:state.pendingDiscardPlayer,gameOver:state.gameOver};
   },
   logs(){return debugLogEntries.map(e=>({category:e.category,status:e.status,message:e.message,details:e.details}))},
   auditBatch(cases,fixture){
