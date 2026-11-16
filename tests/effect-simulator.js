@@ -9,26 +9,31 @@ function resolve(text,state,choice){
   const clauses=context.CardEffectRuntime.compile(text);
   const results=[];
   for(const clause of clauses){
-    const amount=clause.numeric?.kind==="constant"?clause.numeric.value:
-      clause.numeric?.kind==="sourcePower"?(state.sourcePower||0):null;
+    const amountFor=(action)=>{
+      const pattern=action==="damage"?/(\d+)\s*ダメージ/:action==="heal"?/(\d+)\s*回復/:null;
+      const match=pattern&&clause.text.match(pattern);
+      if(match)return Number(match[1]);
+      return clause.numeric?.kind==="constant"?clause.numeric.value:
+        clause.numeric?.kind==="sourcePower"?(state.sourcePower||0):null;
+    };
     for(const action of clause.actions){
       if(action==="draw"){
-        const n=amount??1; for(let i=0;i<n&&state.deck.length;i++)state.hand.push(state.deck.shift());
+        const n=amountFor(action)??1; for(let i=0;i<n&&state.deck.length;i++)state.hand.push(state.deck.shift());
         results.push({action,count:n});
       }else if(action==="damage"){
         if(clause.target?.selection==="player"||clause.target?.zone==="ライフ"){
           const who=clause.target?.owner==="自分"?"self":"opponent";
-          state.life[who]=Math.max(0,state.life[who]-(amount??0));
+          state.life[who]=Math.max(0,state.life[who]-(amountFor(action)??0));
         }else{
           if(!choice?.targetId)return {status:"needs_target",action};
           const target=state.monsters.find(x=>x.id===choice.targetId);
           if(!target)return {status:"invalid_target",action};
-          target.damage=(target.damage||0)+(amount??0);
+          target.damage=(target.damage||0)+(amountFor(action)??0);
         }
-        results.push({action,amount});
+        results.push({action,amount:amountFor(action)});
       }else if(action==="heal"){
         const who=clause.target?.owner==="相手"?"opponent":"self";
-        state.life[who]+=amount??0; results.push({action,amount});
+        state.life[who]+=amountFor(action)??0; results.push({action,amount:amountFor(action)});
       }else if(action==="moveToHand"){
         const zone=clause.target?.zone==="捨て札"?"discard":"deck";
         if(!choice||!Number.isInteger(choice.index))return {status:"needs_selection",action,zone};
