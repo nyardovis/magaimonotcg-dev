@@ -10,7 +10,7 @@ function resolve(text,state,choice){
   const results=[];
   for(const clause of clauses){
     const amountFor=(action)=>{
-      const pattern=action==="damage"?/(\\d+)\\s*ダメージ/:action==="heal"?/(\\d+)\\s*回復/:null;
+      const pattern=action==="damage"?/(\d+)\s*ダメージ/:action==="heal"?/(\d+)\s*回復/:null;
       const match=pattern&&clause.text.match(pattern);
       if(match)return Number(match[1]);
       return clause.numeric?.kind==="constant"?clause.numeric.value:
