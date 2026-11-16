@@ -28,12 +28,12 @@ function resolve(text,state,choice){
           if(!choice?.targetId)return {status:"needs_target",action};
           const target=state.monsters.find(x=>x.id===choice.targetId);
           if(!target)return {status:"invalid_target",action};
-          target.damage=(target.damage||0)+(amount??0);
+          target.damage=(target.damage||0)+(amountFor(action)??0);
         }
         results.push({action,amount:amountFor(action)});
       }else if(action==="heal"){
         const who=clause.target?.owner==="相手"?"opponent":"self";
-        state.life[who]+=amount??0; results.push({action,amount});
+        state.life[who]+=amountFor(action)??0; results.push({action,amount:amountFor(action)});
       }else if(action==="moveToHand"){
         const zone=clause.target?.zone==="捨て札"?"discard":"deck";
         if(!choice||!Number.isInteger(choice.index))return {status:"needs_selection",action,zone};
