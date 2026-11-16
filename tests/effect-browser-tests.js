@@ -190,6 +190,17 @@ const server=http.createServer((req,res)=>{
   assert.equal(advanced.tenkanPicker,true,"Tenkan energy picker was not displayed");
   assert.equal(advanced.passiveBefore,true,"Kingdom Spearman untapped passive was not recalculated");
   assert.equal(advanced.passiveAfter,false,"Kingdom Spearman passive source removal was not reflected");
+
+  const passiveSources=await page.evaluate(()=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("深森の守護者",1,"monsters","no-direct-attack");const directBefore=api.snapshot().playerPassives[2].opponentMonstersCannotAttackPlayer;api.removeCard("no-direct-attack");const directAfter=api.snapshot().playerPassives[2].opponentMonstersCannotAttackPlayer;api.reset();api.addCard("魔風のハーピー",1,"monsters","trap-lock");const trapBefore=api.snapshot().playerPassives[2].disableOpponentTraps;api.removeCard("trap-lock");const trapAfter=api.snapshot().playerPassives[2].disableOpponentTraps;api.reset();api.addCard("鼓膜破り",1,"monsters","enter-lock");const enterBefore=api.snapshot().playerPassives[2].disableOpponentEnterEffects;api.removeCard("enter-lock");const enterAfter=api.snapshot().playerPassives[2].disableOpponentEnterEffects;api.reset();api.addCard("結界機兵",1,"monsters","damage-reduction");const reductionBefore=api.snapshot().playerPassives[1].damageReduction;api.removeCard("damage-reduction");const reductionAfter=api.snapshot().playerPassives[1].damageReduction;return {directBefore,directAfter,trapBefore,trapAfter,enterBefore,enterAfter,reductionBefore,reductionAfter}});
+  assert.equal(passiveSources.directBefore,true,"Deep Forest Guardian player-level attack restriction was not derived");
+  assert.equal(passiveSources.directAfter,false,"Player-level attack restriction remained after its source left");
+  assert.equal(passiveSources.trapBefore,true,"Harpy trap suppression was not derived");
+  assert.equal(passiveSources.trapAfter,false,"Trap suppression remained after its source left");
+  assert.equal(passiveSources.enterBefore,true,"Enter-effect suppression was not derived");
+  assert.equal(passiveSources.enterAfter,false,"Enter-effect suppression remained after its source left");
+  assert.equal(passiveSources.reductionBefore,300,"Player damage reduction passive was not derived");
+  assert.equal(passiveSources.reductionAfter,0,"Player damage reduction remained after its source left");
+
   assert.equal(advanced.secondTurnHand,1,"second player's first turn did not draw");
   assert.equal(advanced.firstTurnHand,0,"first player's initial turn incorrectly drew");
   assert.equal(advanced.commanderBuffPending,"taggedMonsterBuff","Field Commander did not request a Knight target");
