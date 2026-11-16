@@ -1277,18 +1277,18 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
    log("「"+target.name+"」を条件に合うモンスターとして破壊しました");
   }else log("「"+requiredAbility+"」を持つ破壊対象がいませんでした");
  }
- const search=s.match(/自分の(デッキ|捨て札)から(?:種別を持つ)?(?:(\\d+)コスト以下の)?(?:\\[([^\\]]+)\\]の)?(モンスター|魔法|罠|フィールド|エネルギー)?(\\d+)枚までを手札に加える/);
+ const search=s.match(/自分の(デッキ|捨て札)から(?:種別を持つ)?(?:(\d+)コスト以下の)?(?:\[([^\]]+)\]の)?(モンスター|魔法|罠|フィールド|エネルギー)?(\d+)枚までを手札に加える/);
  if(search&&!(search[1]==="捨て札"&&effectCannotChooseZone(p,"discard"))){
   const sourceZone=search[1]==="デッキ"?"deck":"discard",source=own[sourceZone],max=Number(search[5]),costLimit=search[2]===undefined?Infinity:Number(search[2]),type=search[4],element=search[3];
   const eligible=source.filter(card=>{const d=cardDefinition(card);if(!d||cardCost(card)>costLimit)return false;if(type&&!String(d.tags||"").includes(({モンスター:"#モンスターカード",魔法:"#魔法カード",罠:"#罠カード",フィールド:"#フィールドカード",エネルギー:"#エネルギーカード"})[type]))return false;if(element&&!String(d.types||"").includes(element))return false;return true});
   if(eligible.length&&own.hand.length<MAX.hand){pendingEffectTarget={kind:"deckSearchMove",player:p,sourceZones:[sourceZone],destination:"hand",candidates:eligible.map(card=>({id:card.id,name:card.name})),maxCount:Math.min(max,MAX.hand-own.hand.length),label:"手札に加えるカードを選択してください（最大"+max+"枚）"};openDeckSearchPicker(pendingEffectTarget);handled=true;log("手札に加えるカードを選択してください")}
  }
- const sameNameSearch=s.match(/自分のデッキか捨て札からそれと同名のカード(\\d+)枚までを手札に加える/);
+ const sameNameSearch=s.match(/自分のデッキか捨て札からそれと同名のカード(\d+)枚までを手札に加える/);
  if(sameNameSearch&&revealedCardForEffect&&!effectCannotChooseZone(p,"discard")){
   const max=Number(sameNameSearch[1]),candidates=[...own.deck,...own.discard].filter(card=>card.name===revealedCardForEffect.name);
   if(candidates.length&&own.hand.length<MAX.hand){pendingEffectTarget={kind:"deckSearchMove",player:p,sourceZones:["deck","discard"],destination:"hand",candidates:candidates.map(card=>({id:card.id,name:card.name})),maxCount:Math.min(max,MAX.hand-own.hand.length),label:"公開したカードと同名のカードを選択してください"};openDeckSearchPicker(pendingEffectTarget);handled=true}
  }
- const namedSearch=s.match(/自分の(デッキ|捨て札)から「([^」]+)」(\\d+)枚までを手札に加える/);
+ const namedSearch=s.match(/自分の(デッキ|捨て札)から「([^」]+)」(\d+)枚までを手札に加える/);
  if(namedSearch&&!(namedSearch[1]==="捨て札"&&effectCannotChooseZone(p,"discard"))){
   const sourceZone=namedSearch[1]==="デッキ"?"deck":"discard",max=Number(namedSearch[3]),candidates=own[sourceZone].filter(card=>card.name===namedSearch[2]);
   if(candidates.length&&own.hand.length<MAX.hand){pendingEffectTarget={kind:"deckSearchMove",player:p,sourceZones:[sourceZone],destination:"hand",candidates:candidates.map(card=>({id:card.id,name:card.name})),maxCount:Math.min(max,MAX.hand-own.hand.length),label:"手札に加える「"+namedSearch[2]+"」を選択してください"};openDeckSearchPicker(pendingEffectTarget);handled=true}
@@ -1298,7 +1298,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  if(opponentDraw){const count=Number(opponentDraw[1]);if(!onlinePlayerId)drawEffectCards(p===1?2:1,count);else broadcastEffectDelta({target:"opponentDraw",count});handled=true;log(opp.name+"は"+count+"枚引きます")}
  const opponentDiscard=s.match(/相手の手札から(\d+)枚を捨てる/);
  if(opponentDiscard){const count=Number(opponentDiscard[1]);if(!onlinePlayerId){for(let i=0;i<count&&opp.hand.length;i++){const discarded=chooseEffectTarget(opp.hand,"相手が捨てる手札を選択してください（"+(i+1)+"/"+count+"）",p===1?2:1,sourceCard);if(!discarded)break;const index=opp.hand.findIndex(c=>c.id===discarded.id);if(index<0)break;opp.hand.splice(index,1);moveToDiscard(p===1?2:1,discarded,"効果による手札の破棄")}}else broadcastEffectDelta({target:"opponentDiscard",count});handled=true}
- const energyFromDeck=s.match(/自分のデッキから(?:(\\d+)コスト以下の)?(?:\\[([^\\]]+)\\]の)?エネルギー(\\d+)枚までを(タップして)?出す/);
+ const energyFromDeck=s.match(/自分のデッキから(?:(\d+)コスト以下の)?(?:\[([^\]]+)\]の)?エネルギー(\d+)枚までを(タップして)?出す/);
  if(energyFromDeck){
   const costLimit=energyFromDeck[1]===undefined?Infinity:Number(energyFromDeck[1]),tag=energyFromDeck[2]||"",count=Number(energyFromDeck[3]);
   const eligible=own.deck.filter(card=>cardKind(card)==="energy"&&cardCost(card)<=costLimit&&(!tag||String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)));
@@ -1483,7 +1483,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
    if(summoned){handled=true;log("捨て札から"+summoned+"体を場に出しました")}
   }
  }
- const energyFromHandEffect=s.match(/自分の手札から(?:(?:「([^」]+)」の)?\\[([^\\]]+)\\]の)?エネルギー(\\d+)枚までをタップして出す/);
+ const energyFromHandEffect=s.match(/自分の手札から(?:(?:「([^」]+)」の)?\[([^\]]+)\]の)?エネルギー(\d+)枚までをタップして出す/);
  if(energyFromHandEffect){
   const namePart=energyFromHandEffect[1]||"",tag=energyFromHandEffect[2]||"",max=Number(energyFromHandEffect[3]),eligible=own.hand.filter(card=>cardKind(card)==="energy"&&(!namePart||String(card.name||"").includes(namePart))&&(!tag||String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)));
   if(eligible.length){pendingEffectTarget={kind:"deckSearchMove",player:p,sourceZones:["hand"],destination:"energy",tap:true,candidates:eligible.map(card=>({id:card.id,name:card.name})),maxCount:max,label:"手札から場に出すエネルギーを選択してください（最大"+max+"枚）"};openDeckSearchPicker(pendingEffectTarget);handled=true}
