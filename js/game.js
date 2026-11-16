@@ -999,7 +999,7 @@ function openDeckSearchPicker(pending){
  const grid=document.createElement("div");grid.style.cssText="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px";panel.appendChild(grid);
  const selected=new Set(),cards=pending.candidates||[];
  const destinationLabels={hand:"手札に加える",discard:"捨て札に置く",energy:"エネルギーとして場に出す",monsters:"モンスターとして場に出す",field:"フィールドとして場に出す",facedown:"罠として場に伏せる",auto:"場に出す"};
- const confirm=document.createElement("button");confirm.type="button";confirm.textContent="選択したカードを"+(destinationLabels[pending.destination]||"移動する");confirm.disabled=true;
+ const confirm=document.createElement("button");confirm.type="button";confirm.textContent="選択したカードを"+(pending.confirmLabel||destinationLabels[pending.destination]||"移動する");confirm.disabled=true;
  const update=()=>{help.textContent="選択中："+selected.size+" / "+pending.maxCount+"枚（選択しないこともできます）";confirm.disabled=false};
  cards.forEach(card=>{
   const button=document.createElement("button");button.type="button";button.style.cssText="background:#303844;color:#fff;border:2px solid #697586;border-radius:7px;padding:7px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0";
@@ -1445,7 +1445,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   if(topCardUse&&source[0]){source[0].faceUp=true;source[0].revealed=true;log("山札の一番上を公開しました: "+source[0].name)}
   const topCondition=topCardUse?(topCardUse[2]&&topCardUse[2].includes("5コスト以下")?5:Infinity):Infinity;
   const eligible=source.filter((card,index)=>(!topCardUse||index===0)&&cardCost(card)<=maxCost&&(!topCardUse||cardCost(card)<=topCondition||!cardDefinition(card)?.cost)&&(!namePart||String(card.name||"").includes(namePart))&&(!exactName||String(card.name||"")===exactName)&&(!excludedName||String(card.name||"")!==excludedName)&&(!tag||String(cardDefinition(card)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag))&&(!kindByWord[kindWord]||cardKind(card)===kindByWord[kindWord])&&cardKind(card)!=="unknown");
-  if(eligible.length&&!pendingEffectTarget){pendingEffectTarget={kind:"deckSearchMove",player:p,sourceZones,destination:"auto",candidates:eligible.map(card=>({id:card.id,name:card.name})),maxCount:max,label:"効果で使用するカードを選択してください（最大"+max+"枚）"};openDeckSearchPicker(pendingEffectTarget);handled=true}
+  handled=true;if(eligible.length&&!pendingEffectTarget){pendingEffectTarget={kind:"deckSearchMove",player:p,sourceZones,destination:"auto",confirmLabel:"使用する",candidates:eligible.map(card=>({id:card.id,name:card.name})),maxCount:max,label:"効果で使用するカードを選択してください（最大"+max+"枚）"};openDeckSearchPicker(pendingEffectTarget)}
   else if(!eligible.length)log("使用条件に合うカードが"+zoneName+"にありません");
  }
  const energyFromHandEffect=s.match(/自分の手札から(?:(?:「([^」]+)」の)?\[([^\]]+)\]の)?エネルギー(\d+)枚までをタップして出す/);
