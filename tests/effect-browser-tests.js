@@ -123,7 +123,7 @@ const server=http.createServer((req,res)=>{
   const report={generatedAt:new Date().toISOString(),cardCount:cardsData.cards.length,clauseCount:cases.length,smoke,counts,runtimeErrorCount:errors.length,results};
   const out=process.argv[2]?path.resolve(process.argv[2]):path.join(root,"effect-live-audit-report.json");
   fs.writeFileSync(out,JSON.stringify(report,null,2)+"\n");
-  console.log(JSON.stringify({cardCount:report.cardCount,clauseCount:report.clauseCount,smoke,counts,runtimeErrorCount:errors.length,report:out},null,2));
+  console.log(JSON.stringify({cardCount:report.cardCount,clauseCount:report.clauseCount,smoke,counts,runtimeErrorCount:errors.length,runtimeErrors:errors.map(r=>({cardId:r.cardId,cardName:r.cardName,clauseIndex:r.clauseIndex,text:r.text,error:r.error?.message})),unimplementedExamples:results.filter(r=>r.status==="unimplemented").slice(0,20).map(r=>({cardId:r.cardId,cardName:r.cardName,clauseIndex:r.clauseIndex,text:r.text})),report:out},null,2));
   assert.equal(errors.length,0,"actual game effect resolver threw during card audit; see report");
  }catch(error){console.error(error);process.exitCode=1}
  finally{if(browser)await browser.close();server.close()}
