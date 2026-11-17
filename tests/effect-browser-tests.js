@@ -269,6 +269,18 @@ const server=http.createServer((req,res)=>{
   assert.equal(freeUse.players[2].life,3700,"The spell used from the deck did not resolve");
   assert.equal(freeUse.players[1].energyPool,0,"A card used by an effect incorrectly paid its normal energy cost");
 
+   const attackedTrigger=await page.evaluate(({monsterName,drawName,originalText})=>{
+    const api=window.__ANKR_TEST__;api.reset();
+    api.setCardEffectText(monsterName,"攻撃された時、自分は1枚引く。");
+    api.addCard(monsterName,1,"monsters","attacked-trigger-attacker");
+    api.addCard(monsterName,2,"monsters","attacked-trigger-defender");
+    api.addCard(drawName,2,"deck","attacked-trigger-draw");
+    const result=api.attack("attacked-trigger-attacker","attacked-trigger-defender");
+    api.setCardEffectText(monsterName,originalText);
+    return result.players[2].zones.hand.length;
+   },{monsterName:fixtureCards.monster.name,drawName:fixtureCards.energy.name,originalText:fixtureCards.monster.effect_text||""});
+   assert.equal(attackedTrigger,1,"A defending monster's attacked trigger did not resolve when attacked");
+
   const results=await page.evaluate(({cases,fixture})=>window.__ANKR_TEST__.auditBatch(cases,fixture),{cases,fixture});
   const counts={};for(const result of results)counts[result.status]=(counts[result.status]||0)+1;
   const errors=results.filter(r=>r.status==="runtime_error");
