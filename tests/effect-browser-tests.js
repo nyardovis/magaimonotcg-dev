@@ -299,6 +299,59 @@ const server=http.createServer((req,res)=>{
   assert.equal(manaFormulas.beforeSpend,5,"energy and Plant counts did not increase available mana");
   assert.equal(manaFormulas.afterSpend,0,"spending all remaining mana did not reduce available mana to zero");
 
+  const handDiscard=await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(monsterName,1,"hand","hand-discard-target");api.runEffect("自分は手札から1枚を捨てる。",1);return api.snapshot()},{monsterName:fixtureCards.monster.name});
+  assert.equal(handDiscard.pendingTarget?.kind,"discardHand","one-card hand discard did not request an explicit card selection");
+  await page.locator('.card[data-card-id="hand-discard-target"]').click();
+  let afterHandDiscard=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(afterHandDiscard.players[1].zones.discard.some(c=>c.id==="hand-discard-target"),true,"selected hand card was not moved to discard");
+
+  await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(monsterName,1,"monsters","modifier-own");api.addCard(monsterName,2,"monsters","modifier-opponent");api.runEffect("相手のモンスター1体を-500。",1)},{monsterName:fixtureCards.monster.name});
+  await page.locator('.card[data-card-id="modifier-opponent"]').click();
+  let afterOpponentModifier=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(afterOpponentModifier.players[2].zones.monsters.find(c=>c.id==="modifier-opponent")?.modification,-500,"opponent single-monster modifier did not apply the selected negative modifier");
+
+  await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(monsterName,1,"monsters","return-own");api.runEffect("自分のモンスター1体を手札に戻す。",1)},{monsterName:fixtureCards.monster.name});
+  await page.locator('.card[data-card-id="return-own"]').click();
+  let afterOwnReturn=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(afterOwnReturn.players[1].zones.hand.some(c=>c.id==="return-own"),true,"own monster was not returned to hand");
+
+  await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(monsterName,1,"monsters","return-any-own");api.addCard(monsterName,2,"monsters","return-any-opponent");api.runEffect("モンスター1体を手札に戻す。",1)},{monsterName:fixtureCards.monster.name});
+  await page.locator('.card[data-card-id="return-any-opponent"]').click();
+  let afterOpponentReturn=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(afterOpponentReturn.players[2].zones.hand.some(c=>c.id==="return-any-opponent"),true,"generic return-to-hand effect did not return the selected opponent monster");
+
+  await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(monsterName,1,"monsters","destroy-any-own");api.addCard(monsterName,2,"monsters","destroy-any-opponent");api.runEffect("モンスター1体を破壊する。",1)},{monsterName:fixtureCards.monster.name});
+  await page.locator('.card[data-card-id="destroy-any-opponent"]').click();
+  let afterGenericDestroy=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(afterGenericDestroy.players[2].zones.discard.some(c=>c.id==="destroy-any-opponent"),true,"generic monster destruction did not move the selected opponent monster to discard");
+
+  await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(monsterName,2,"monsters","discard-any-opponent");api.runEffect("場から相手のモンスター1体を捨てる。",1)},{monsterName:fixtureCards.monster.name});
+  await page.locator('.card[data-card-id="discard-any-opponent"]').click();
+  let afterFieldDiscard=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(afterFieldDiscard.players[2].zones.discard.some(c=>c.id==="discard-any-opponent"),true,"field-to-discard effect did not move the selected opponent monster to discard");
+
+  await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(monsterName,1,"monsters","bottom-own");api.addCard(monsterName,2,"monsters","bottom-opponent");api.runEffect("モンスター1体をデッキの下に戻す。",1)},{monsterName:fixtureCards.monster.name});
+  await page.locator('.card[data-card-id="bottom-opponent"]').click();
+  let afterBottomDeck=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(afterBottomDeck.players[2].zones.deck.some(c=>c.id==="bottom-opponent"),true,"generic bottom-deck effect did not move the selected opponent monster to the bottom of the deck");
+
+  await page.evaluate(({energyName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(energyName,2,"energy","destroy-opponent-energy");api.runEffect("相手のエネルギー1枚を破壊する。",1)},{energyName:fixtureCards.energy.name});
+  await page.locator('.card[data-card-id="destroy-opponent-energy"]').click();
+  let afterEnergyDestroy=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(afterEnergyDestroy.players[2].zones.discard.some(c=>c.id==="destroy-opponent-energy"),true,"opponent energy destruction did not move the selected energy to discard");
+
+  const afterFieldDestroy=await page.evaluate(({fieldName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(fieldName,2,"field","destroy-opponent-field");api.runEffect("相手のフィールドを破壊する。",1);return api.snapshot()},{fieldName:fixtureCards.field.name});
+  assert.equal(afterFieldDestroy.players[2].zones.field.length,0,"opponent field destruction left the field card in play");
+  assert.equal(afterFieldDestroy.players[2].zones.discard.some(c=>c.id==="destroy-opponent-field"),true,"opponent field destruction did not move the field card to discard");
+
+  const remoteSync=await page.evaluate(({monsterName,energyName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(monsterName,1,"monsters","sync-return");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterReturnToHand",cardId:"sync-return"});api.addCard(monsterName,1,"monsters","sync-bottom");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterBottomDeck",cardId:"sync-bottom"});api.addCard(monsterName,1,"monsters","sync-discard");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterDiscard",cardId:"sync-discard"});api.addCard(monsterName,1,"monsters","sync-counter");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterCounter",cardId:"sync-counter",delta:1});api.addCard(monsterName,1,"monsters","sync-modifier");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterModifier",cardId:"sync-modifier",delta:-100});api.addCard(energyName,1,"energy","sync-energy");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentCardDestroy",cardId:"sync-energy"});return api.snapshot()},{monsterName:fixtureCards.monster.name,energyName:fixtureCards.energy.name});
+  assert.equal(remoteSync.players[1].zones.hand.some(c=>c.id==="sync-return"),true,"remote return-to-hand effect delta was not applied");
+  assert.equal(remoteSync.players[1].zones.deck.some(c=>c.id==="sync-bottom"),true,"remote bottom-deck effect delta was not applied");
+  assert.equal(remoteSync.players[1].zones.discard.some(c=>c.id==="sync-discard"),true,"remote discard effect delta was not applied");
+  assert.equal(remoteSync.players[1].zones.monsters.find(c=>c.id==="sync-counter")?.counters,1,"remote counter effect delta was not applied");
+  assert.equal(remoteSync.players[1].zones.monsters.find(c=>c.id==="sync-modifier")?.modification,-100,"remote modifier effect delta was not applied");
+  assert.equal(remoteSync.players[1].zones.discard.some(c=>c.id==="sync-energy"),true,"remote card destruction effect delta was not applied");
+
   await page.evaluate(({monsterName,originalText})=>{window.__ANKR_TEST__.setCardEffectText(monsterName,originalText);},{monsterName:fixtureCards.monster.name,originalText:fixtureCards.monster.effect_text||""});
 
   await page.evaluate(({knightName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("王国の騎士団長",1,"monsters","kingdom-commander");api.addCard(knightName,1,"deck","knight-summon-1");api.addCard(knightName,1,"deck","knight-summon-2");api.trigger("kingdom-commander",1,"enter")},{knightName:(cardsData.cards.find(c=>String(c.tags||"").includes("#モンスターカード")&&String(c.types||"").split(/[,、]/).includes("騎士")&&Number(c.cost)<=2&&!String(c.effect_text||"").trim())||fixtureCards.monster).name});

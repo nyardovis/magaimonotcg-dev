@@ -690,8 +690,12 @@ function applyEffectDelta(message){
  if(message.target==="ownLifeSet"){const target=actorIsLocal?1:2;if(Number.isFinite(message.value))state.players[target].life=message.value;render();return}
  if(message.target==="ownMonsterDamage"||message.target==="opponentMonsterDamage"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.damage=(c.damage||0)+(Number(message.delta)||0);checkMonsterDestruction(targetPlayer);render();return}}
  if(message.target==="opponentCardCounter"){const x=state.players[targetPlayer];let card=null;for(const z of ["monsters","energy","field","facedown","hand","discard"]){const i=(x[z]||[]).findIndex(c=>c.id===message.cardId);if(i>=0){card=x[z].splice(i,1)[0];break}}if(card)moveToDiscard(targetPlayer,card,"効果を打ち消された");render();return}
- if(message.target==="opponentMonsterModifier"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.modification=(c.modification||0)+(Number(message.delta)||0);render();return}}
+ if(message.target==="opponentMonsterModifier"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){const base=Number(c.power)||Number(cardDefinition(c)?.power)||0;c.modification=Math.max(-base,(Number(c.modification)||0)+(Number(message.delta)||0));render();return}}
  if(message.target==="opponentMonsterCounter"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.counters=Math.max(0,(Number(c.counters)||0)+(Number(message.delta)||0));render();return}}
+ if(message.target==="opponentMonsterReturnToHand"){const x=state.players[targetPlayer],index=x.monsters.findIndex(m=>m.id===message.cardId);if(index>=0){const card=x.monsters.splice(index,1)[0];resetGrantedCardInformation(card);card.damage=0;card.modification=0;card.counters=0;card.tapped=false;card.faceUp=true;card.revealed=false;x.hand.push(card);render();return}}
+ if(message.target==="opponentMonsterBottomDeck"){const x=state.players[targetPlayer],index=x.monsters.findIndex(m=>m.id===message.cardId);if(index>=0){const card=x.monsters.splice(index,1)[0];resetGrantedCardInformation(card);card.damage=0;card.modification=0;card.counters=0;card.tapped=false;x.deck.push(card);render();return}}
+ if(message.target==="opponentMonsterDiscard"){const x=state.players[targetPlayer],index=x.monsters.findIndex(m=>m.id===message.cardId);if(index>=0){const card=x.monsters.splice(index,1)[0];moveToDiscard(targetPlayer,card,"効果による捨て札移動");render();return}}
+ if(message.target==="opponentCardDestroy"){const x=state.players[targetPlayer];let card=null;for(const z of ["energy","field","facedown"]){const index=(x[z]||[]).findIndex(c=>c.id===message.cardId);if(index>=0){card=x[z].splice(index,1)[0];break}}if(card){moveToDiscard(targetPlayer,card,"効果による破壊");render();return}}
  if(message.target==="opponentDisable"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.effectsDisabled=true;render();return}}
  if(message.target==="opponentAttackDamageZero"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.nextAttackDamage=0;render();return}}
  if(message.target==="opponentMonsterTap"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.tapped=true;render();return}}
@@ -877,10 +881,30 @@ function resolvePendingEffectTarget(cardId){
   if(owner!==pending.player&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterCounter",cardId:target.id,delta:amount});
   log("「"+target.name+"」にカウンター"+amount+"個を乗せました");
  }else if(pending.kind==="monsterModifier"){
-  const delta=Number(pending.delta)||0;
-  target.modification=(Number(target.modification)||0)+delta;
-  if(owner!==pending.player&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterModifier",cardId:target.id,delta});
-  log("「"+target.name+"」のパワーを"+(delta>=0?"+":"")+delta+"変更しました");
+  const delta=Number(pending.delta)||0,base=Number(target.power)||Number(cardDefinition(target)?.power)||0;
+  const previous=Number(target.modification)||0;
+  target.modification=Math.max(-base,previous+delta);
+  const applied=target.modification-previous;
+  if(owner!==pending.player&&onlinePlayerId&&applied)broadcastEffectDelta({target:"opponentMonsterModifier",cardId:target.id,delta:applied});
+  log("「"+target.name+"」のパワーを"+(applied>=0?"+":"")+applied+"変更しました");
+ }else if(pending.kind==="discardHand"){
+  const list=state.players[owner].hand,index=list.findIndex(card=>card.id===target.id);
+  if(index>=0){const discarded=list.splice(index,1)[0];moveToDiscard(owner,discarded,"効果による手札破棄");log("「"+discarded.name+"」を手札から捨てました")}
+ }else if(pending.kind==="returnMonsterToHand"){
+  const list=state.players[owner].monsters,index=list.findIndex(card=>card.id===target.id);
+  if(index>=0){const returned=list.splice(index,1)[0];resetGrantedCardInformation(returned);returned.damage=0;returned.modification=0;returned.counters=0;returned.tapped=false;returned.faceUp=true;returned.revealed=false;state.players[owner].hand.push(returned);if(owner!==pending.player&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterReturnToHand",cardId:returned.id});log("「"+returned.name+"」を手札に戻しました")}
+ }else if(pending.kind==="destroyMonster"){
+  const list=state.players[owner].monsters,index=list.findIndex(card=>card.id===target.id);
+  if(index>=0){const destroyed=list.splice(index,1)[0];moveToDiscard(owner,destroyed,"効果による破壊");if(owner!==pending.player&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:destroyed.id});else{resolveCardTrigger(destroyed,owner,"destroy");resolveTrapTriggers(owner,"ownDestroy")}if(owner!==pending.player)resolveTrapTriggers(pending.player,"opponentDestroy");log("「"+destroyed.name+"」を破壊しました")}
+ }else if(pending.kind==="discardMonster"){
+  const list=state.players[owner].monsters,index=list.findIndex(card=>card.id===target.id);
+  if(index>=0){const discarded=list.splice(index,1)[0];moveToDiscard(owner,discarded,"効果による捨て札移動");if(owner!==pending.player&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDiscard",cardId:discarded.id});log("「"+discarded.name+"」を捨て札に置きました")}
+ }else if(pending.kind==="bottomDeck"){
+  const list=state.players[owner].monsters,index=list.findIndex(card=>card.id===target.id);
+  if(index>=0){const returned=list.splice(index,1)[0];resetGrantedCardInformation(returned);returned.damage=0;returned.modification=0;returned.counters=0;returned.tapped=false;state.players[owner].deck.push(returned);if(owner!==pending.player&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterBottomDeck",cardId:returned.id});log("「"+returned.name+"」を山札の下に戻しました")}
+ }else if(pending.kind==="destroyCard"){
+  const list=state.players[owner][pending.zone||"energy"],index=list.findIndex(card=>card.id===target.id);
+  if(index>=0){const destroyed=list.splice(index,1)[0];moveToDiscard(owner,destroyed,"効果による破壊");if(owner!==pending.player&&onlinePlayerId)broadcastEffectDelta({target:"opponentCardDestroy",cardId:destroyed.id});log("「"+destroyed.name+"」を破壊しました")}
  }else if(pending.kind==="healMonster"){
   const removed=Math.max(0,Number(target.damage)||0);
   target.damage=0;
@@ -1148,6 +1172,13 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   }
   handled=true;log(scope==="お互いの"?"お互いの使用可能エネルギーを"+(delta>=0?"+"+delta:delta)+"変更しました":(scope==="相手の"?opp.name:own.name)+"の使用可能エネルギーを"+(delta>=0?"+"+delta:delta)+"変更しました");
  }
+ const handDiscard=/^(?:自分は|自分の)手札から1枚を捨てる/.test(s);
+ if(handDiscard){
+  const candidates=effectCannotChooseZone(p,"hand")?[]:own.hand.map(card=>({id:card.id,owner:p}));
+  if(candidates.length){pendingEffectTarget={kind:"discardHand",player:p,players:[p],zone:"hand",sourceCard,candidates};log("手札から捨てるカードをクリックしてください");render()}
+  else log("捨てられる手札がありません");
+  handled=true;
+ }
  const manaSpendAll=s.match(/自分のマナ\s*-\s*[（(]自分の残りマナ[）)]/);
  if(manaSpendAll){const delta=-(Number(own.energyPool)||0);own.energyPool=0;if(onlinePlayerId&&delta)broadcastEffectDelta({target:"ownEnergyPool",delta});handled=true;log("自分の残りマナを全て消費しました")}
  const manaFromEnergy=s.match(/自分のマナ\s*\+\s*[（(]自分のエネルギーの数[）)]/);
@@ -1232,6 +1263,14 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  }
  const ownBuff=s.match(/自分のモンスター(?:全て|1体|1体まで)を\s*\+(\d+)/);
  if(ownBuff){const targets=/全て/.test(s)?own.monsters:[chooseEffectTarget(own.monsters,"パワーを上げる自分のモンスターを選択してください",p,sourceCard)].filter(Boolean);targets.forEach(mon=>{mon.modification=(mon.modification||0)+Number(ownBuff[1])});if(targets.length)handled=true}
+ const opponentMonsterModifier=s.match(/^相手のモンスター1体を\s*([＋+\-−])\s*(\d+)/);
+ if(opponentMonsterModifier){
+  const opponentOwner=p===1?2:1,delta=(opponentMonsterModifier[1]==="-"||opponentMonsterModifier[1]==="−"?-1:1)*Number(opponentMonsterModifier[2]);
+  const candidates=effectCannotChooseZone(p,"monsters")?[]:opp.monsters.filter(mon=>!mon.cannotBeChosenByOpponent).map(mon=>({id:mon.id,owner:opponentOwner}));
+  if(candidates.length){pendingEffectTarget={kind:"monsterModifier",player:p,players:[opponentOwner],zone:"monsters",sourceCard,delta,candidates};log("パワーを変更する相手のモンスターをクリックしてください");render()}
+  else log("パワーを変更できる相手のモンスターがいません");
+  handled=true;
+ }
  const genericMonsterModifier=s.match(/^モンスター1体を\s*([＋+\-−])\s*(\d+)/);
  if(genericMonsterModifier){
   const opponentOwner=p===1?2:1,delta=(genericMonsterModifier[1]==="-"||genericMonsterModifier[1]==="−"?-1:1)*Number(genericMonsterModifier[2]);
@@ -1262,6 +1301,52 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   ];
   if(candidates.length){pendingEffectTarget={kind:"counterMonster",player:p,players:[p,opponentOwner],zone:"monsters",sourceCard,amount:Number(genericMonsterCounter[1]),candidates};log("カウンターを乗せるモンスターを盤面からクリックしてください");render()}
   else log("カウンターを乗せられるモンスターがいません");
+  handled=true;
+ }
+ const ownReturnMonster=/^自分のモンスター1体を手札に戻す/.test(s);
+ const anyReturnMonster=/^モンスター1体を手札に戻す/.test(s);
+ if(ownReturnMonster||anyReturnMonster){
+  const opponentOwner=p===1?2:1,owners=ownReturnMonster?[p]:[p,opponentOwner];
+  const candidates=effectCannotChooseZone(p,"monsters")?[]:owners.flatMap(owner=>state.players[owner].monsters.filter(mon=>owner===p||!mon.cannotBeChosenByOpponent).map(mon=>({id:mon.id,owner})));
+  if(candidates.length){pendingEffectTarget={kind:"returnMonsterToHand",player:p,players:owners,zone:"monsters",sourceCard,candidates};log("手札に戻すモンスターを盤面からクリックしてください");render()}
+  else log("手札に戻せるモンスターがいません");
+  handled=true;
+ }
+ const genericDestroyMonster=/^モンスター1体を破壊する/.test(s);
+ if(genericDestroyMonster){
+  const opponentOwner=p===1?2:1,owners=[p,opponentOwner];
+  const candidates=effectCannotChooseZone(p,"monsters")?[]:owners.flatMap(owner=>state.players[owner].monsters.filter(mon=>owner===p||!mon.cannotBeChosenByOpponent).map(mon=>({id:mon.id,owner})));
+  if(candidates.length){pendingEffectTarget={kind:"destroyMonster",player:p,players:owners,zone:"monsters",sourceCard,candidates};log("破壊するモンスターを盤面からクリックしてください");render()}
+  else log("破壊できるモンスターがいません");
+  handled=true;
+ }
+ const discardMonsterMatch=s.match(/^(?:場から)?(?:(自分の|相手の))?モンスター1体を捨てる/);
+ if(discardMonsterMatch){
+  const opponentOwner=p===1?2:1,scope=discardMonsterMatch[1]||"",owners=scope==="自分の"?[p]:scope==="相手の"?[opponentOwner]:[p,opponentOwner];
+  const candidates=effectCannotChooseZone(p,"monsters")?[]:owners.flatMap(owner=>state.players[owner].monsters.filter(mon=>owner===p||!mon.cannotBeChosenByOpponent).map(mon=>({id:mon.id,owner})));
+  if(candidates.length){pendingEffectTarget={kind:"discardMonster",player:p,players:owners,zone:"monsters",sourceCard,candidates};log("捨て札に置くモンスターを盤面からクリックしてください");render()}
+  else log("捨て札に置けるモンスターがいません");
+  handled=true;
+ }
+ const bottomDeckMonster=/^モンスター1体をデッキの下に戻す/.test(s);
+ if(bottomDeckMonster){
+  const opponentOwner=p===1?2:1,owners=[p,opponentOwner];
+  const candidates=effectCannotChooseZone(p,"monsters")?[]:owners.flatMap(owner=>state.players[owner].monsters.filter(mon=>owner===p||!mon.cannotBeChosenByOpponent).map(mon=>({id:mon.id,owner})));
+  if(candidates.length){pendingEffectTarget={kind:"bottomDeck",player:p,players:owners,zone:"monsters",sourceCard,candidates};log("山札の下に戻すモンスターを盤面からクリックしてください");render()}
+  else log("山札の下に戻せるモンスターがいません");
+  handled=true;
+ }
+ const opponentEnergyDestroy=/^相手のエネルギー1枚を破壊する/.test(s);
+ if(opponentEnergyDestroy){
+  const opponentOwner=p===1?2:1,candidates=effectCannotChooseZone(p,"energy")?[]:opp.energy.map(card=>({id:card.id,owner:opponentOwner}));
+  if(candidates.length){pendingEffectTarget={kind:"destroyCard",player:p,players:[opponentOwner],zone:"energy",sourceCard,candidates};log("破壊する相手のエネルギーをクリックしてください");render()}
+  else log("破壊できる相手のエネルギーがありません");
+  handled=true;
+ }
+ const opponentFieldDestroy=/^相手のフィールドを破壊する/.test(s);
+ if(opponentFieldDestroy){
+  if(!effectCannotChooseZone(p,"field")&&opp.field.length){const destroyed=opp.field.shift();moveToDiscard(p===1?2:1,destroyed,"効果による破壊");if(onlinePlayerId)broadcastEffectDelta({target:"opponentCardDestroy",cardId:destroyed.id});log("相手のフィールド「"+destroyed.name+"」を破壊しました")}
+  else log("破壊できる相手のフィールドがありません");
   handled=true;
  }
  const ownMonsterCounter=s.match(/自分の(?:\[([^\]]+)\])?モンスター1体にカウンター(\d+)個を乗せる/);
@@ -1863,6 +1948,7 @@ function exposeAnkrEffectTestApi(){
   setCardState(id,owner=1,zone="monsters",values={}){const card=(state.players[owner]?.[zone]||[]).find(c=>c.id===id);if(!card)throw new Error("test card not found: "+id);Object.assign(card,values||{});return this.snapshot()},
   activatedAbilities(name){return CardEffectEngine.activatedAbilities(cardDefinition(name)?.effect_text||"").map(a=>({raw:a.raw,body:a.body,costKind:a.costKind,costValue:a.costValue}))},
   chooseTarget(cardId){resolvePendingEffectTarget(cardId);return this.snapshot()},
+  applyEffectDeltaForTest(message){applyEffectDelta(message);return this.snapshot()},
   snapshot(){
    recalculatePlayerPassives();
    const players={};
