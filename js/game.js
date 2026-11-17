@@ -1817,7 +1817,7 @@ function exposeAnkrEffectTestApi(){
     else if((/幸せ|※/.test(raw))&&/[（(][^）)]*(?:選び|選んで|選ばれなかった|選択)[^）)]*[）)]/.test(String(item.cardEffectText||"")))auditClass="explanatory_fragment";
     else if(hasTrigger)auditClass=needsSelection?"trigger_selection_requested":"trigger_not_exercised";
     else if(hasActivation)auditClass=needsSelection?"activation_selection_requested":"activation_entry_not_exercised";
-    else if(/攻撃されない|攻撃できない|これにしか攻撃できない|場に出たターンでも攻撃できる|モンスターとの戦闘時、戦闘相手のパワーで戦闘する|相手の罠は発動しない|相手の[^。]{0,30}効果は発動しない|相手の効果で選ばれない|効果を受けない|受けるダメージ[-−=]\d+|これが受けるダメージ|ダメージ.{0,12}軽減|アンタップ中|コスト[-−+]\s*\d+|コスト[+＋]\s*\d+|手札にある時|手札の.{0,30}コスト|相手の手札の.{0,20}コスト|アンタップは|最古のエネルギー|エネルギーはタップして場に出る|これはタップして場に出る|この効果は消えない|働かない|場にこれのコスト=/.test(raw))auditClass="passive_or_continuous_rule";
+    else if(/攻撃されない|攻撃できない|これにしか攻撃できない|場に出たターンでも攻撃できる|モンスターとの戦闘時、戦闘相手のパワーで戦闘する|相手の罠は発動しない|相手の[^。]{0,30}効果は発動しない|相手の効果で選ばれない|効果を受けない|受けるダメージ[-−=+＋]\d+|これが受けるダメージ|ダメージ.{0,12}軽減|アンタップ中|コスト[-−+]\s*\d+|コスト[+＋]\s*\d+|手札にある時|手札の.{0,30}コスト|相手の手札の.{0,20}コスト|アンタップは|最古のエネルギー|エネルギーはタップして場に出る|これはタップして場に出る|この効果は消えない|働かない|場にこれのコスト=/.test(raw))auditClass="passive_or_continuous_rule";
     else if(/使用できない|使用できず|場に出せない|発動できない|使えない|選ばれない/.test(raw))auditClass="play_restriction_requires_entry_test";
     else if(/共鳴召喚|以下からランダム|ランダムに|これを\d+回行う|これのパワー|自分のモンスターの数|これのカウンターの数|攻撃回数もリセット/.test(raw))auditClass="special_resolution_requires_fixture";
     else if(/(?:\[[^\]]+\]|名前に「[^」]+」を含む|「[^」]+」|コスト(?:以下|以上)|タップ中|ランダムな)/.test(raw)&&/(?:体|枚|全て|すべて)/.test(raw))auditClass="fixture_may_lack_filtered_target";
