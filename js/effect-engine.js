@@ -50,8 +50,8 @@
       const costToken=costMatch?costMatch[1].replace(/\s+/g,""):null;
       const body=costMatch?raw.slice(costMatch[0].length).trim():raw.trim();
       let trigger=null;
-      if(/自分の[^。]*?モンスターが場に出た(?:時|とき)/.test(body))trigger="allyEnter";
-      else if(/相手の[^。]*?モンスターが場に出た(?:時|とき)/.test(body))trigger="opponentEnter";
+      if(/自分の[^。]*?が場に出た(?:時|とき)/.test(body))trigger="allyEnter";
+      else if(/相手の[^。]*?が場に出た(?:時|とき)/.test(body))trigger="opponentEnter";
       else if(/モンスターが場に出た(?:時|とき)/.test(body))trigger="anyEnter";
       if(trigger===null){
         const entries=Object.entries(TRIGGERS).sort((a,b)=>Math.max(...b[1].map(x=>x.length))-Math.max(...a[1].map(x=>x.length)));
