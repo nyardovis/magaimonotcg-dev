@@ -826,7 +826,7 @@ function resolveOtherMonsterEnterTriggers(enteringPlayer,enteringCard){
     for(const sourceCard of sources){
       if(sourceCard.effectsDisabled)continue;
       const text=String(cardDefinition(sourceCard)?.effect_text||"");
-      const triggers=[owner===enteringPlayer?(owner===1||owner===2?"allyEnter":"allyEnter"):"opponentEnter","anyEnter"];
+      const triggers=[owner===enteringPlayer?"allyEnter":"opponentEnter","anyEnter"];
       for(const trigger of triggers){
         for(const ability of CardEffectEngine.forTrigger(text,trigger)){
           if(!entryTriggerMatches(ability.body,sourceCard,enteringCard))continue;
