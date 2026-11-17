@@ -292,6 +292,9 @@ const server=http.createServer((req,res)=>{
   assert.equal(results.find(r=>r.cardName==="苔木蜘蛛"&&r.clauseIndex===0)?.auditClass,"trigger_not_exercised","Triggered clauses must not be counted as directly-tested implementations");
    assert.equal(results.find(r=>r.cardName==="碧い花"&&r.clauseIndex===1)?.auditClass,"activation_entry_not_exercised","Costed abilities must be separated from direct effect-text execution");
    assert.equal(results.find(r=>r.cardName==="竹の魔物"&&r.text.includes("何枚でも"))?.auditClass,"deckbuilding_rule","Deckbuilding rules must not be counted as unimplemented effects");
+   assert.equal(results.find(r=>r.cardName==="氷壁"&&r.clauseIndex===0)?.auditClass,"trigger_not_exercised","Bracketed trap timing must be classified as a trigger, not an unsupported immediate effect");
+   assert.equal(results.find(r=>r.cardName==="マントゴブリン"&&r.text.includes("場に出たターンでも"))?.auditClass,"passive_or_continuous_rule","Haste permissions must not be counted as unimplemented immediate effects");
+   assert.equal(results.find(r=>r.cardName==="竜討毒の鳥"&&r.text.startsWith("①"))?.auditClass,"activation_entry_not_exercised","Circled-number abilities must be classified as activation-entry effects");
    assert.equal(errors.length,0,"actual game effect resolver threw during card audit; see report");
  }catch(error){console.error(error);process.exitCode=1}
  finally{if(browser)await browser.close();server.close()}
