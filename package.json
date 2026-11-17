@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "test:effects": "node tests/effect-tests.js && node tests/effect-execution-tests.js && node tests/effect-browser-tests.js",
-    "test:all": "node tests/effect-tests.js && node tests/effect-execution-tests.js && node tests/effect-audit.js effect-compiler-audit-report.json && node tests/effect-browser-tests.js effect-live-audit-report.json && node tests/online-attack-integration.js"
+    "test:all": "npm run check:syntax && node tests/effect-tests.js && node tests/effect-execution-tests.js && node tests/effect-audit.js effect-compiler-audit-report.json && node tests/effect-browser-tests.js effect-live-audit-report.json && node tests/online-attack-integration.js",
+    "check:syntax": "node --check js/effect-engine.js && node --check js/effect-runtime.js && node --check js/game.js"
   },
   "devDependencies": {
     "playwright": "1.56.1"
