@@ -1860,6 +1860,7 @@ function exposeAnkrEffectTestApi(){
   removeCard(id,owner=1,zone="monsters"){const list=state.players[owner]?.[zone]||[];const index=list.findIndex(card=>card.id===id);if(index>=0)list.splice(index,1);recalculatePlayerPassives();return this.snapshot()},
   setEnergyPool(player,value){state.players[player].energyPool=value;return this.snapshot()},
   setCardPower(id,owner=1,power=0){const card=[...state.players[owner].monsters,...state.players[owner].energy,...state.players[owner].field].find(c=>c.id===id);if(card)card.power=Number(power)||0;return this.snapshot()},
+  setCardState(id,owner=1,zone="monsters",values={}){const card=(state.players[owner]?.[zone]||[]).find(c=>c.id===id);if(!card)throw new Error("test card not found: "+id);Object.assign(card,values||{});return this.snapshot()},
   activatedAbilities(name){return CardEffectEngine.activatedAbilities(cardDefinition(name)?.effect_text||"").map(a=>({raw:a.raw,body:a.body,costKind:a.costKind,costValue:a.costValue}))},
   chooseTarget(cardId){resolvePendingEffectTarget(cardId);return this.snapshot()},
   snapshot(){
@@ -1878,7 +1879,7 @@ function exposeAnkrEffectTestApi(){
    for(const item of cases){
     let promptCount=0;window.prompt=()=>{promptCount++;return null};
     this.reset();
-    for(const entry of fixture||[])this.addCard(entry.name,entry.owner,entry.zone,entry.id);
+    for(const entry of fixture||[]){const id=this.addCard(entry.name,entry.owner,entry.zone,entry.id);if(entry.state){const card=(state.players[entry.owner]?.[entry.zone]||[]).find(c=>c.id===id);if(card)Object.assign(card,entry.state)}}
     const sourceCard=newCard(item.cardName,"audit-source");
     const before=JSON.stringify(this.snapshot());
     let error=null;
