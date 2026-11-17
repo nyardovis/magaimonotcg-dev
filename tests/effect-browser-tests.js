@@ -276,6 +276,21 @@ const server=http.createServer((req,res)=>{
   assert.equal(costReduction.withArena,Math.max(0,emptyBaseCost-1),"Arena of the Unpossessing did not reduce the cost of an effectless monster");
   assert.equal(costReduction.afterArenaDisabled,emptyBaseCost,"An effect-disabled Arena continued reducing costs");
 
+  const onlineEntryTrigger=await page.evaluate(({machineName})=>{
+   const api=window.__ANKR_TEST__;
+   api.reset();
+   api.addCard("火口の溶魚",1,"monsters","online-lava-source");
+   api.addCard("プラスラッシャー",2,"monsters","remote-plus-source");
+   api.setOnlineTestMode();
+   const state=api.applyOpponentMonsterForTest(machineName,"online-machine-entered");
+   return {
+    enteringDamage:state.players[2].zones.monsters.find(c=>c.id==="online-machine-entered")?.damage||0,
+    remoteSourceModification:state.players[2].zones.monsters.find(c=>c.id==="remote-plus-source")?.modification||0
+   };
+  },{machineName:fixtureCards.machine.name});
+  assert.equal(onlineEntryTrigger.enteringDamage,300,"Local player's opponent-entry trigger did not resolve from an online public-state update");
+  assert.equal(onlineEntryTrigger.remoteSourceModification,0,"The local client incorrectly executed the remote player's own ally-entry trigger");
+
   assert.equal(advanced.secondTurnHand,1,"second player's first turn did not draw");
   assert.equal(advanced.firstTurnHand,0,"first player's initial turn incorrectly drew");
   assert.equal(advanced.commanderBuffPending,"taggedMonsterBuff","Field Commander did not request a Knight target");
