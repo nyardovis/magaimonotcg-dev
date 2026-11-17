@@ -14,6 +14,7 @@ test("runtime built-in self tests",()=>{const result=runtime.selfTest();assert.e
 test("Japanese sentence splitting respects quoted punctuation",()=>{const parts=engine.splitAbilities("「海底調査。深海」1枚を手札に加える。カードを1枚引く。");assert.equal(parts.length,2)});
 test("activation energy cost is parsed",()=>{const a=engine.activatedAbilities("(2) 相手に300ダメージ。");assert.equal(a.length,1);assert.equal(a[0].costKind,"energy");assert.equal(a[0].costValue,2)});
 test("tap activation cost is parsed",()=>{const a=engine.activatedAbilities("(これをタップ) 相手に300ダメージ。");assert.equal(a[0].costKind,"tap")});
+test("attacked trigger is parsed separately from attack",()=>{assert.equal(engine.forTrigger("攻撃された時、自分は1枚引く。","attacked").length,1);assert.equal(engine.forTrigger("攻撃された時、自分は1枚引く。","attack").length,0)});
 test("player-selected deck search is identified",()=>{const c=runtime.compile("自分のデッキから魔法1枚までを手札に加える。")[0];assert.equal(c.actions.includes("moveToHand"),true);assert.equal(c.target.selection,"player");assert.equal(c.target.zone,"デッキ")});
 test("randomized effects are distinguished from player choice",()=>{const c=runtime.compile("自分のデッキからランダムに1枚を選ぶ。")[0];assert.equal(c.target.selection,"random")});
 test("damage action is classified",()=>{const c=runtime.compile("相手のモンスター1体に300ダメージ。")[0];assert.equal(c.actions.includes("damage"),true);assert.equal(c.target.owner,"相手");assert.equal(c.target.zone,"モンスター")});
