@@ -15,32 +15,56 @@ const excludedNames=new Set(["愛おしき放課後","いぬ"]);
 const deckRuleNames=new Set(["量産型タイロス","ノーマルエネルギー"]);
 const first=(predicate)=>cardsData.cards.find(predicate)||cardsData.cards.find(c=>predicate(c,false));
 const byTag=(tag)=>cardsData.cards.find(c=>String(c.tags||"").includes(tag)&&!String(c.effect_text||"").trim())||first(c=>String(c.tags||"").includes(tag));
+const byType=(tag,type,preferred)=>{const matches=c=>String(c.tags||"").includes(tag)&&String(c.types||"").split(/[,、]/).map(v=>v.trim()).includes(type);return cardsData.cards.find(c=>matches(c)&&c.name===preferred)||cardsData.cards.find(c=>matches(c)&&!String(c.effect_text||"").trim())||cardsData.cards.find(matches)};
 const fixtureCards={
  monster:cardsData.cards.find(c=>String(c.tags||"").includes("#モンスターカード")&&!String(c.effect_text||"").trim()&&Number(c.power)>=600)||byTag("#モンスターカード"),
  energy:byTag("#エネルギーカード"),
  spell:byTag("#魔法カード"),
  trap:byTag("#罠カード"),
- field:byTag("#フィールドカード")
+ field:byTag("#フィールドカード"),
+ dragon:byType("#モンスターカード","ドラゴン","チビドラゴン"),
+ plant:byType("#モンスターカード","植物","羊歯の魔物"),
+ insect:byType("#モンスターカード","虫","テントウムシ"),
+ beast:byType("#モンスターカード","獣","イノシシ"),
+ darkSpell:byType("#魔法カード","闇","暗殺"),
+ waterEnergy:byType("#エネルギーカード","水","マリンエネルギー"),
+ earthEnergy:byType("#エネルギーカード","地","フォレストエネルギー")
 };
 for(const [kind,card] of Object.entries(fixtureCards))if(!card)throw new Error("fixture card missing: "+kind);
 const fixture=[
- {name:fixtureCards.monster.name,owner:1,zone:"monsters",id:"fx-p1-m1"},
+ {name:fixtureCards.monster.name,owner:1,zone:"monsters",id:"fx-p1-m1",state:{damage:300,tapped:true,counters:1}},
  {name:fixtureCards.monster.name,owner:1,zone:"monsters",id:"fx-p1-m2"},
+ {name:fixtureCards.plant.name,owner:1,zone:"monsters",id:"fx-p1-plant"},
+ {name:fixtureCards.insect.name,owner:1,zone:"monsters",id:"fx-p1-insect"},
+ {name:fixtureCards.dragon.name,owner:1,zone:"monsters",id:"fx-p1-dragon"},
+ {name:fixtureCards.beast.name,owner:1,zone:"monsters",id:"fx-p1-beast"},
  {name:fixtureCards.energy.name,owner:1,zone:"energy",id:"fx-p1-e1"},
  {name:fixtureCards.energy.name,owner:1,zone:"energy",id:"fx-p1-e2"},
+ {name:fixtureCards.waterEnergy.name,owner:1,zone:"energy",id:"fx-p1-water"},
+ {name:fixtureCards.earthEnergy.name,owner:1,zone:"energy",id:"fx-p1-earth"},
  {name:fixtureCards.monster.name,owner:1,zone:"hand",id:"fx-p1-h1"},
  {name:fixtureCards.spell.name,owner:1,zone:"deck",id:"fx-p1-d1"},
  {name:fixtureCards.monster.name,owner:1,zone:"deck",id:"fx-p1-d2"},
  {name:fixtureCards.energy.name,owner:1,zone:"deck",id:"fx-p1-d3"},
+ {name:fixtureCards.trap.name,owner:1,zone:"deck",id:"fx-p1-d4"},
+ {name:fixtureCards.darkSpell.name,owner:1,zone:"deck",id:"fx-p1-d5"},
+ {name:fixtureCards.beast.name,owner:1,zone:"deck",id:"fx-p1-d6"},
+ {name:fixtureCards.monster.name,owner:1,zone:"deck",id:"fx-p1-d7"},
+ {name:fixtureCards.monster.name,owner:1,zone:"deck",id:"fx-p1-d8"},
+ {name:fixtureCards.monster.name,owner:1,zone:"deck",id:"fx-p1-d9"},
  {name:fixtureCards.spell.name,owner:1,zone:"discard",id:"fx-p1-x1"},
+ {name:fixtureCards.field.name,owner:1,zone:"discard",id:"fx-p1-x2"},
+ {name:fixtureCards.monster.name,owner:1,zone:"discard",id:"fx-p1-x3"},
  {name:fixtureCards.trap.name,owner:1,zone:"facedown",id:"fx-p1-t1"},
  {name:fixtureCards.field.name,owner:1,zone:"field",id:"fx-p1-f1"},
- {name:fixtureCards.monster.name,owner:2,zone:"monsters",id:"fx-p2-m1"},
+ {name:fixtureCards.monster.name,owner:2,zone:"monsters",id:"fx-p2-m1",state:{tapped:true}},
  {name:fixtureCards.monster.name,owner:2,zone:"monsters",id:"fx-p2-m2"},
  {name:fixtureCards.energy.name,owner:2,zone:"energy",id:"fx-p2-e1"},
  {name:fixtureCards.monster.name,owner:2,zone:"hand",id:"fx-p2-h1"},
  {name:fixtureCards.spell.name,owner:2,zone:"deck",id:"fx-p2-d1"},
- {name:fixtureCards.spell.name,owner:2,zone:"discard",id:"fx-p2-x1"}
+ {name:fixtureCards.spell.name,owner:2,zone:"discard",id:"fx-p2-x1"},
+ {name:fixtureCards.field.name,owner:2,zone:"field",id:"fx-p2-f1"},
+ {name:fixtureCards.trap.name,owner:2,zone:"facedown",id:"fx-p2-t1"}
 ];
 const cases=[];
 for(const card of cardsData.cards){
@@ -219,12 +243,63 @@ const server=http.createServer((req,res)=>{
   const mossChosen=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
   assert.equal(mossChosen.players[1].zones.facedown.some(c=>c.id==="moss-trap"),true,"Moss Tree Spider did not set the selected trap face down");
 
-  await page.evaluate(({energyName,monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("転換",1,"hand","tenkan-source");api.addCard(energyName,1,"energy","tenkan-cost");api.addCard(energyName,1,"deck","tenkan-energy");api.addCard(monsterName,1,"deck","tenkan-draw");api.runEffect("自分のエネルギーが場に無い時使用できない。自分のエネルギー1枚を破壊する。自分のデッキからエネルギー1枚までをタップして出す。自分は1枚引く。",1,"tenkan-source");api.chooseTarget("tenkan-cost")},{energyName:fixtureCards.energy.name,monsterName:fixtureCards.monster.name});
+  await page.evaluate(({energyName,monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("転換",1,"hand","tenkan-source");api.addCard(energyName,1,"energy","tenkan-cost");api.addCard(energyName,1,"deck","tenkan-energy");api.addCard(monsterName,1,"deck","tenkan-draw");api.runEffect("自分のエネルギーが場に無い時使用できない。自分のエネルギー1枚を破壊する。自分のデッキからエネルギー1枚までをタップして出す。自分は1枚引く。",1,"tenkan-source")},{energyName:fixtureCards.energy.name,monsterName:fixtureCards.monster.name});
+  await page.locator('.card[data-card-id="tenkan-cost"]').click();
   await page.locator('#effectDeckPicker button[data-card-id="tenkan-energy"]').click();
   await page.locator("#effectDeckPicker button").filter({hasText:"選択したカードをエネルギーとして場に出す"}).click();
   const tenkanChosen=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
   assert.equal(tenkanChosen.players[1].zones.energy.some(c=>c.id==="tenkan-energy"&&c.tapped),true,"Tenkan did not deploy the selected energy tapped");
   assert.equal(tenkanChosen.players[1].zones.hand.length,1,"Tenkan did not draw after its energy selection");
+
+  await page.evaluate(({trapName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("蜘蛛の目",1,"hand","spider-eye-source");api.addCard(trapName,1,"deck","spider-eye-trap");api.runEffect("自分のデッキから罠1枚までを秘密裏に伏せる。",1,"spider-eye-source")},{trapName:fixtureCards.trap.name});
+  assert.equal(await page.locator("#effectDeckPicker").isVisible().catch(()=>false),true,"Spider's Eye did not open a trap selection picker");
+  await page.locator('#effectDeckPicker button[data-card-id="spider-eye-trap"]').click();
+  await page.locator("#effectDeckPicker button").filter({hasText:"選択したカードを罠として場に伏せる"}).click();
+  assert.equal((await page.evaluate(()=>window.__ANKR_TEST__.snapshot())).players[1].zones.facedown.some(c=>c.id==="spider-eye-trap"),true,"Spider's Eye did not set the selected trap face down");
+
+  await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.setCardEffectText(monsterName,"攻撃できない。");api.addCard(monsterName,1,"monsters","erase-own");api.addCard(monsterName,2,"monsters","erase-opponent");api.addCard("光の蝕み",1,"hand","light-erosion");api.runEffect("モンスター1体の効果を消す。",1,"light-erosion")},{monsterName:fixtureCards.monster.name});
+  assert.equal(await page.locator('.card[data-card-id="erase-opponent"]').isVisible().catch(()=>false),true,"generic effect erasure did not expose board targets");
+  await page.locator('.card[data-card-id="erase-opponent"]').click();
+  let erased=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(erased.players[2].zones.monsters.find(c=>c.id==="erase-opponent")?.effectsDisabled,true,"Light Erosion did not disable the selected opponent monster");
+
+  const counterTest=await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(monsterName,1,"monsters","counter-own");api.addCard(monsterName,2,"monsters","counter-opponent");api.runEffect("モンスター1体にカウンターを1個を乗せる。",1);return api.snapshot()},{monsterName:fixtureCards.monster.name});
+  assert.equal(counterTest.pendingTarget?.kind,"counterMonster","generic counter effect did not request a board target");
+  await page.locator('.card[data-card-id="counter-own"]').click();
+  assert.equal((await page.evaluate(()=>window.__ANKR_TEST__.snapshot())).players[1].zones.monsters.find(c=>c.id==="counter-own")?.counters,1,"generic counter effect did not add a counter to the selected monster");
+
+  await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(monsterName,1,"monsters","heal-target");api.setCardState("heal-target",1,"monsters",{damage:300});api.runEffect("自分のモンスター1体を全回復。",1)},{monsterName:fixtureCards.monster.name});
+  assert.equal(await page.locator('.card[data-card-id="heal-target"]').isVisible().catch(()=>false),true,"single-monster full heal did not request a board target");
+  await page.locator('.card[data-card-id="heal-target"]').click();
+  assert.equal((await page.evaluate(()=>window.__ANKR_TEST__.snapshot())).players[1].zones.monsters.find(c=>c.id==="heal-target")?.damage,0,"single-monster full heal did not clear damage");
+
+  const allCounters=await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(monsterName,1,"monsters","counter-all-1");api.addCard(monsterName,1,"monsters","counter-all-2");api.runEffect("自分のモンスター全てにカウンター1個を乗せる。",1);return api.snapshot()},{monsterName:fixtureCards.monster.name});
+  assert.equal(allCounters.players[1].zones.monsters.every(c=>c.counters===1),true,"group counter effect did not update every own monster");
+
+  const allDisabled=await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.setCardEffectText(monsterName,"攻撃できない。");api.addCard(monsterName,1,"monsters","disable-all-own");api.addCard(monsterName,2,"monsters","disable-all-opponent");api.runEffect("モンスター全ての効果を消す。",1);return api.snapshot()},{monsterName:fixtureCards.monster.name});
+  assert.equal(allDisabled.players[1].zones.monsters[0].effectsDisabled,true,"Wind Erosion did not disable own monster effects");
+  assert.equal(allDisabled.players[2].zones.monsters[0].effectsDisabled,true,"Wind Erosion did not disable opponent monster effects");
+
+  const selfDisabled=await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.setCardEffectText(monsterName,"攻撃できない。");api.addCard(monsterName,1,"monsters","disable-self-own");api.addCard(monsterName,2,"monsters","disable-self-opponent");api.runEffect("自分のモンスター全ての効果を消す。",1);return api.snapshot()},{monsterName:fixtureCards.monster.name});
+  assert.equal(selfDisabled.players[1].zones.monsters[0].effectsDisabled,true,"Supercritical did not disable own monster effects");
+  assert.equal(selfDisabled.players[2].zones.monsters[0].effectsDisabled,false,"Supercritical incorrectly disabled opponent monster effects");
+
+  const allUntapped=await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(monsterName,1,"monsters","untap-target");api.setCardState("untap-target",1,"monsters",{tapped:true});api.runEffect("自分のモンスター全てをアンタップする。",1);return api.snapshot()},{monsterName:fixtureCards.monster.name});
+  assert.equal(allUntapped.players[1].zones.monsters[0].tapped,false,"Clockwork Package did not untap all own monsters");
+
+  const drawToLimit=await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();for(let i=0;i<8;i++)api.addCard(monsterName,1,"hand","limit-hand-"+i);for(let i=0;i<8;i++)api.addCard(monsterName,1,"deck","limit-deck-"+i);api.runEffect("自分は上限まで引く。",1);return api.snapshot()},{monsterName:fixtureCards.monster.name});
+  assert.equal(drawToLimit.players[1].zones.hand.length,9,"Heavenly Revelation did not draw up to the hand limit");
+  assert.equal(drawToLimit.players[1].zones.deck.length,7,"Heavenly Revelation drew more than the number needed to reach the hand limit");
+
+  const formulaEffects=await page.evaluate(({dragonName,drawName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(dragonName,1,"monsters","formula-dragon-1");api.addCard(dragonName,1,"monsters","formula-dragon-2");api.addCard(drawName,1,"deck","formula-draw-1");api.addCard(drawName,1,"deck","formula-draw-2");api.runEffect("自分に1000ダメージ。",1);api.runEffect("自分は（自分の[ドラゴン]の数）枚引く。",1);api.runEffect("自分を（自分の[ドラゴン]の数×300）回復。",1);return api.snapshot()},{dragonName:fixtureCards.dragon.name,drawName:fixtureCards.monster.name});
+  assert.equal(formulaEffects.players[1].zones.hand.length,2,"Dragon-count draw did not draw the matching number of cards");
+  assert.equal(formulaEffects.players[1].life,3600,"Dragon-count healing did not use the current number of Dragon monsters");
+
+  const manaFormulas=await page.evaluate(({energyName,plantName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(energyName,1,"energy","formula-energy-1");api.addCard(energyName,1,"energy","formula-energy-2");api.addCard(plantName,1,"monsters","formula-plant-1");api.addCard(plantName,1,"monsters","formula-plant-2");api.setEnergyPool(1,1);api.runEffect("自分のマナ+（自分のエネルギーの数）。",1);api.runEffect("自分のマナ+（自分の[植物]の数）。",1);const beforeSpend=api.snapshot().players[1].energyPool;api.runEffect("自分のマナ-（自分の残りマナ）。",1);return {beforeSpend,afterSpend:api.snapshot().players[1].energyPool}},{energyName:fixtureCards.energy.name,plantName:fixtureCards.plant.name});
+  assert.equal(manaFormulas.beforeSpend,5,"energy and Plant counts did not increase available mana");
+  assert.equal(manaFormulas.afterSpend,0,"spending all remaining mana did not reduce available mana to zero");
+
+  await page.evaluate(({monsterName,originalText})=>{window.__ANKR_TEST__.setCardEffectText(monsterName,originalText);},{monsterName:fixtureCards.monster.name,originalText:fixtureCards.monster.effect_text||""});
 
   await page.evaluate(({knightName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("王国の騎士団長",1,"monsters","kingdom-commander");api.addCard(knightName,1,"deck","knight-summon-1");api.addCard(knightName,1,"deck","knight-summon-2");api.trigger("kingdom-commander",1,"enter")},{knightName:(cardsData.cards.find(c=>String(c.tags||"").includes("#モンスターカード")&&String(c.types||"").split(/[,、]/).includes("騎士")&&Number(c.cost)<=2&&!String(c.effect_text||"").trim())||fixtureCards.monster).name});
   const summonPickerVisible=await page.locator("#effectDeckPicker").isVisible().catch(()=>false);
@@ -289,7 +364,7 @@ const server=http.createServer((req,res)=>{
   const out=process.argv[2]?path.resolve(process.argv[2]):path.join(root,"effect-live-audit-report.json");
   fs.writeFileSync(out,JSON.stringify(report,null,2)+"\n");
   console.log(JSON.stringify({cardCount:report.cardCount,clauseCount:report.clauseCount,smoke,counts,runtimeErrorCount:errors.length,runtimeErrors:errors.map(r=>({cardId:r.cardId,cardName:r.cardName,clauseIndex:r.clauseIndex,text:r.text,error:r.error?.message})),auditClassCounts,unimplementedCandidateCount:unimplementedCandidates.length,unimplementedExamples:unimplementedCandidates.slice(0,20).map(r=>({cardId:r.cardId,cardName:r.cardName,clauseIndex:r.clauseIndex,text:r.text})),report:out},null,2));
-  assert.equal(results.find(r=>r.cardName==="苔木蜘蛛"&&r.clauseIndex===0)?.auditClass,"trigger_not_exercised","Triggered clauses must not be counted as directly-tested implementations");
+  assert.equal(results.find(r=>r.cardName==="苔木蜘蛛"&&r.clauseIndex===0)?.auditClass,"trigger_selection_requested","A triggered deck-search effect should be classified as a trigger that requests player selection, not as an unimplemented effect");
    assert.equal(results.find(r=>r.cardName==="碧い花"&&r.clauseIndex===1)?.auditClass,"activation_entry_not_exercised","Costed abilities must be separated from direct effect-text execution");
    assert.equal(results.find(r=>r.cardName==="竹の魔物"&&r.text.includes("何枚でも"))?.auditClass,"deckbuilding_rule","Deckbuilding rules must not be counted as unimplemented effects");
    assert.equal(results.find(r=>r.cardName==="氷壁"&&r.clauseIndex===0)?.auditClass,"trigger_not_exercised","Bracketed trap timing must be classified as a trigger, not an unsupported immediate effect");
@@ -299,6 +374,9 @@ const server=http.createServer((req,res)=>{
    assert.equal(results.find(r=>r.cardName==="誤射"&&r.clauseIndex===0)?.auditClass,"explanatory_fragment","Explanatory text backed by an operational parenthetical must not be counted as an independent effect");
    assert.equal(results.find(r=>r.cardName==="ボルケーノエネルギー"&&r.clauseIndex===0)?.auditClass,"deckbuilding_rule","Alternate spelling of the deckbuilding rule must be recognized");
    assert.equal(results.find(r=>r.cardName==="古びた駆動部品"&&r.clauseIndex===0)?.auditClass,"fixture_may_lack_filtered_target","Tag-filtered targets absent from the generic fixture must be reported as unverified");
+   const spiderEyeSearch=results.find(r=>r.cardName==="蜘蛛の目"&&r.text.includes("秘密裏に伏せる"));
+   assert.equal(spiderEyeSearch?.status,"needs_card_selection","Spider's Eye must request a trap selection when a trap exists in the fixture deck");
+   assert.notEqual(spiderEyeSearch?.auditClass,"unimplemented_candidate","Spider's Eye's selection effect must not be mislabeled as unimplemented");
    assert.equal(errors.length,0,"actual game effect resolver threw during card audit; see report");
  }catch(error){console.error(error);process.exitCode=1}
  finally{if(browser)await browser.close();server.close()}
