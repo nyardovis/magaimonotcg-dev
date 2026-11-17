@@ -1968,7 +1968,7 @@ function exposeAnkrEffectTestApi(){
     x.energyPlacedThisTurn=false;x.extraEnergyPlacements=0;
    }
    state.turnPlayer=1;state.phase="playing";state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.gameOver=null;state.selected=null;
-   pendingEffectTarget=null;pendingAttack=null;pendingDefenseAttackResponse=null;debugLogEntries=[];debugLogSequence=0;
+   pendingEffectTarget=null;pendingAttack=null;pendingDefenseAttackResponse=null;debugLogEntries=[];debugLogSequence=0;hasReceivedOpponentPublicState=false;state._previousOpponentMonsters=[];
    const picker=document.querySelector("#effectDeckPicker");if(picker)picker.remove();
    for(const id of ["prepScreen","deckEditor","discardViewer","deckViewer","roomLobby","mulliganOverlay","roomWaitOverlay","gameOverOverlay","rematchWaitOverlay"]){const element=document.querySelector("#"+id);if(element)element.hidden=true}
    devLocalMode=true;onlinePlayerId=null;gameSocket=null;
@@ -2003,6 +2003,8 @@ function exposeAnkrEffectTestApi(){
   setCardPower(id,owner=1,power=0){const card=[...state.players[owner].monsters,...state.players[owner].energy,...state.players[owner].field].find(c=>c.id===id);if(card)card.power=Number(power)||0;return this.snapshot()},
   setCardState(id,owner=1,zone="monsters",values={}){const card=(state.players[owner]?.[zone]||[]).find(c=>c.id===id);if(!card)throw new Error("test card not found: "+id);Object.assign(card,values||{});return this.snapshot()},
   effectiveCost(cardId,owner=1){const card=(state.players[owner]?.hand||[]).find(c=>c.id===cardId);if(!card)throw new Error("test hand card not found: "+cardId);return effectiveCardCost(card,owner)},
+  setOnlineTestMode(){onlinePlayerId="player1";devLocalMode=false;hasReceivedOpponentPublicState=true;return true},
+  applyOpponentMonsterForTest(name,id){const x=state.players[2],card=newCard(name,id||"online-test-opponent-monster");const publicState={life:x.life,pendingDiscard:false,handCount:x.hand.length,handIds:x.hand.map(c=>c.id),deckCount:x.deck.length,deckCounters:x.deckCounters,deckHorizontal:x.deckHorizontal,monsters:[...x.monsters,card],energy:x.energy,field:x.field,discard:x.discard,facedownCount:x.facedown.length,facedownPublic:x.facedown.filter(c=>c.faceUp).map(c=>({id:c.id,name:c.name}))};applyPublicState("player2",publicState);return this.snapshot()},
   activatedAbilities(name){return CardEffectEngine.activatedAbilities(cardDefinition(name)?.effect_text||"").map(a=>({raw:a.raw,body:a.body,costKind:a.costKind,costValue:a.costValue}))},
   chooseTarget(cardId){resolvePendingEffectTarget(cardId);return this.snapshot()},
   applyEffectDeltaForTest(message){applyEffectDelta(message);return this.snapshot()},
