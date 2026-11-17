@@ -27,6 +27,8 @@ const fixtureCards={
  insect:byType("#モンスターカード","虫","テントウムシ"),
  beast:byType("#モンスターカード","獣","イノシシ"),
  darkSpell:byType("#魔法カード","闇","暗殺"),
+ machine:byType("#モンスターカード","機械","戦闘兵器 : C"),
+ effectfulMonster:cardsData.cards.find(c=>String(c.tags||"").includes("#モンスターカード")&&String(c.effect_text||"").trim()&&Number(c.cost)>0),
  waterEnergy:byType("#エネルギーカード","水","マリンエネルギー"),
  earthEnergy:byType("#エネルギーカード","地","フォレストエネルギー")
 };
@@ -224,6 +226,55 @@ const server=http.createServer((req,res)=>{
   assert.equal(passiveSources.enterAfter,false,"Enter-effect suppression remained after its source left");
   assert.equal(passiveSources.reductionBefore,300,"Player damage reduction passive was not derived");
   assert.equal(passiveSources.reductionAfter,0,"Player damage reduction remained after its source left");
+
+  const entryTriggers=await page.evaluate(({machineName,beastName})=>{
+   const api=window.__ANKR_TEST__;
+   api.reset();
+   api.addCard("プラスラッシャー",1,"monsters","plus-source");
+   api.trigger("plus-source",1,"enter");
+   const plusSelf=api.snapshot().players[1].zones.monsters.find(c=>c.id==="plus-source")?.modification||0;
+   api.addCard(machineName,1,"monsters","plus-entered");
+   api.trigger("plus-entered",1,"enter");
+   const plusAfter=api.snapshot().players[1].zones.monsters.find(c=>c.id==="plus-source")?.modification||0;
+   api.reset();
+   api.addCard("火口の溶魚",1,"monsters","lava-source");
+   api.addCard(beastName,2,"monsters","opponent-entered");
+   api.trigger("opponent-entered",2,"enter");
+   const lavaDamage=api.snapshot().players[2].zones.monsters.find(c=>c.id==="opponent-entered")?.damage||0;
+   api.reset();
+   api.addCard("還り門の森",1,"field","forest-field");
+   api.addCard(beastName,1,"monsters","forest-entered");
+   api.trigger("forest-entered",1,"enter");
+   const fieldBuff=api.snapshot().players[1].zones.monsters.find(c=>c.id==="forest-entered")?.modification||0;
+   return {plusSelf,plusAfter,lavaDamage,fieldBuff};
+  },{machineName:fixtureCards.machine.name,beastName:fixtureCards.beast.name});
+  assert.equal(entryTriggers.plusSelf,0,"Plus Slasher incorrectly triggered on itself despite the 'other' qualifier");
+  assert.equal(entryTriggers.plusAfter,100,"Plus Slasher did not trigger when another Machine monster entered");
+  assert.equal(entryTriggers.lavaDamage,300,"Crater Fish did not damage an opponent monster entering the field");
+  assert.equal(entryTriggers.fieldBuff,100,"Returning Forest did not buff an entering Beast");
+
+  const costReduction=await page.evaluate(({emptyName,effectfulName})=>{
+   const api=window.__ANKR_TEST__;
+   api.reset();
+   api.addCard("雲のゴーレム",1,"monsters","golem-source");
+   const golemEmpty=api.addCard(emptyName,1,"hand","golem-empty");
+   const golemEffectful=api.addCard(effectfulName,1,"hand","golem-effectful");
+   const withGolemEmpty=api.effectiveCost(golemEmpty);
+   const withGolemEffectful=api.effectiveCost(golemEffectful);
+   api.reset();
+   api.addCard("持たざる者の闘技場",1,"field","arena-source");
+   const arenaEmpty=api.addCard(emptyName,1,"hand","arena-empty");
+   const withArena=api.effectiveCost(arenaEmpty);
+   api.setCardState("arena-source",1,"field",{effectsDisabled:true});
+   const afterArenaDisabled=api.effectiveCost(arenaEmpty);
+   return {withGolemEmpty,withGolemEffectful,withArena,afterArenaDisabled};
+  },{emptyName:fixtureCards.monster.name,effectfulName:fixtureCards.effectfulMonster.name});
+  const emptyBaseCost=Number(cardsData.cards.find(c=>c.name===fixtureCards.monster.name)?.cost)||0;
+  const effectfulBaseCost=Number(fixtureCards.effectfulMonster.cost)||0;
+  assert.equal(costReduction.withGolemEmpty,Math.max(0,emptyBaseCost-1),"Cloud Golem did not reduce the cost of an effectless monster");
+  assert.equal(costReduction.withGolemEffectful,effectfulBaseCost,"Cloud Golem incorrectly reduced the cost of a monster with an effect");
+  assert.equal(costReduction.withArena,Math.max(0,emptyBaseCost-1),"Arena of the Unpossessing did not reduce the cost of an effectless monster");
+  assert.equal(costReduction.afterArenaDisabled,emptyBaseCost,"An effect-disabled Arena continued reducing costs");
 
   assert.equal(advanced.secondTurnHand,1,"second player's first turn did not draw");
   assert.equal(advanced.firstTurnHand,0,"first player's initial turn incorrectly drew");
