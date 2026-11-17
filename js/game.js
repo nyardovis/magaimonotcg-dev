@@ -792,7 +792,7 @@ function resolveCardTrigger(card,p,trigger){
   if(monsterEnter)resolveOtherMonsterEnterTriggers(p,card);
 }
 function entryTriggerMatches(body,sourceCard,enteringCard){
-  const marker=body.search(/(?:モンスター|カード)が場に出た/);
+  const marker=body.indexOf("が場に出た");
   const prefix=marker>=0?body.slice(0,marker):body;
   if(prefix.includes("他の")&&sourceCard.id===enteringCard.id)return false;
   const enteringTypes=String(cardDefinition(enteringCard)?.types||"").split(/[,、]/).map(value=>value.trim()).filter(Boolean);
