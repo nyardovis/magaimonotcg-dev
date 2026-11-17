@@ -1948,6 +1948,7 @@ function exposeAnkrEffectTestApi(){
   setCardState(id,owner=1,zone="monsters",values={}){const card=(state.players[owner]?.[zone]||[]).find(c=>c.id===id);if(!card)throw new Error("test card not found: "+id);Object.assign(card,values||{});return this.snapshot()},
   activatedAbilities(name){return CardEffectEngine.activatedAbilities(cardDefinition(name)?.effect_text||"").map(a=>({raw:a.raw,body:a.body,costKind:a.costKind,costValue:a.costValue}))},
   chooseTarget(cardId){resolvePendingEffectTarget(cardId);return this.snapshot()},
+  applyEffectDeltaForTest(message){applyEffectDelta(message);return this.snapshot()},
   snapshot(){
    recalculatePlayerPassives();
    const players={};
