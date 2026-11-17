@@ -1345,7 +1345,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  }
  const opponentFieldDestroy=/^相手のフィールドを破壊する/.test(s);
  if(opponentFieldDestroy){
-  if(!effectCannotChooseZone(p,"field")&&opp.field.length){const destroyed=opp.field.shift();moveToDiscard(opponentOwner=>(p===1?2:1),destroyed,"効果による破壊");if(onlinePlayerId)broadcastEffectDelta({target:"opponentCardDestroy",cardId:destroyed.id});log("相手のフィールド「"+destroyed.name+"」を破壊しました")}
+  if(!effectCannotChooseZone(p,"field")&&opp.field.length){const destroyed=opp.field.shift();moveToDiscard(p===1?2:1,destroyed,"効果による破壊");if(onlinePlayerId)broadcastEffectDelta({target:"opponentCardDestroy",cardId:destroyed.id});log("相手のフィールド「"+destroyed.name+"」を破壊しました")}
   else log("破壊できる相手のフィールドがありません");
   handled=true;
  }
