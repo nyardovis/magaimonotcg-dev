@@ -51,7 +51,7 @@ for(const card of cardsData.cards){
  for(const ability of engine.splitAbilities(effect)){
   const text=String(ability.body||ability.raw||"").trim();
   if(!text)continue;
-  cases.push({cardId:card.id,cardName:card.name,sourceZone,clauseIndex:ability.index,text,raw:ability.raw,trigger:ability.trigger,isActivated:ability.isActivated,costKind:ability.costKind});
+  cases.push({cardId:card.id,cardName:card.name,sourceZone,clauseIndex:ability.index,text,raw:ability.raw,cardEffectText:effect,trigger:ability.trigger,isActivated:ability.isActivated,costKind:ability.costKind});
  }
 }
 function mime(file){return file.endsWith(".html")?"text/html":file.endsWith(".js")?"text/javascript":file.endsWith(".json")?"application/json":file.endsWith(".css")?"text/css":"text/plain"}
@@ -295,6 +295,10 @@ const server=http.createServer((req,res)=>{
    assert.equal(results.find(r=>r.cardName==="氷壁"&&r.clauseIndex===0)?.auditClass,"trigger_not_exercised","Bracketed trap timing must be classified as a trigger, not an unsupported immediate effect");
    assert.equal(results.find(r=>r.cardName==="マントゴブリン"&&r.text.includes("場に出たターンでも"))?.auditClass,"passive_or_continuous_rule","Haste permissions must not be counted as unimplemented immediate effects");
    assert.equal(results.find(r=>r.cardName==="竜討毒の鳥"&&r.text.startsWith("①"))?.auditClass,"activation_entry_not_exercised","Circled-number abilities must be classified as activation-entry effects");
+   assert.equal(results.find(r=>r.cardName==="誤射"&&r.clauseIndex===2)?.status,"needs_choice","A cancelled target prompt must not be reported as an unimplemented effect");
+   assert.equal(results.find(r=>r.cardName==="誤射"&&r.clauseIndex===0)?.auditClass,"explanatory_fragment","Explanatory text backed by an operational parenthetical must not be counted as an independent effect");
+   assert.equal(results.find(r=>r.cardName==="ボルケーノエネルギー"&&r.clauseIndex===0)?.auditClass,"deckbuilding_rule","Alternate spelling of the deckbuilding rule must be recognized");
+   assert.equal(results.find(r=>r.cardName==="古びた駆動部品"&&r.clauseIndex===0)?.auditClass,"fixture_may_lack_filtered_target","Tag-filtered targets absent from the generic fixture must be reported as unverified");
    assert.equal(errors.length,0,"actual game effect resolver threw during card audit; see report");
  }catch(error){console.error(error);process.exitCode=1}
  finally{if(browser)await browser.close();server.close()}
