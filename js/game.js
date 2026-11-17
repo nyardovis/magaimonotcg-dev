@@ -876,6 +876,11 @@ function resolvePendingEffectTarget(cardId){
   target.counters=(Number(target.counters)||0)+amount;
   if(owner!==pending.player&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterCounter",cardId:target.id,delta:amount});
   log("「"+target.name+"」にカウンター"+amount+"個を乗せました");
+ }else if(pending.kind==="monsterModifier"){
+  const delta=Number(pending.delta)||0;
+  target.modification=(Number(target.modification)||0)+delta;
+  if(owner!==pending.player&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterModifier",cardId:target.id,delta});
+  log("「"+target.name+"」のパワーを"+(delta>=0?"+":"")+delta+"変更しました");
  }else if(pending.kind==="healMonster"){
   const removed=Math.max(0,Number(target.damage)||0);
   target.damage=0;
@@ -1227,6 +1232,17 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  }
  const ownBuff=s.match(/自分のモンスター(?:全て|1体|1体まで)を\s*\+(\d+)/);
  if(ownBuff){const targets=/全て/.test(s)?own.monsters:[chooseEffectTarget(own.monsters,"パワーを上げる自分のモンスターを選択してください",p,sourceCard)].filter(Boolean);targets.forEach(mon=>{mon.modification=(mon.modification||0)+Number(ownBuff[1])});if(targets.length)handled=true}
+ const genericMonsterModifier=s.match(/^モンスター1体を\s*([＋+\-−])\s*(\d+)/);
+ if(genericMonsterModifier){
+  const opponentOwner=p===1?2:1,delta=(genericMonsterModifier[1]==="-"||genericMonsterModifier[1]==="−"?-1:1)*Number(genericMonsterModifier[2]);
+  const candidates=effectCannotChooseZone(p,"monsters")?[]:[
+   ...own.monsters.map(mon=>({id:mon.id,owner:p})),
+   ...opp.monsters.filter(mon=>!mon.cannotBeChosenByOpponent).map(mon=>({id:mon.id,owner:opponentOwner}))
+  ];
+  if(candidates.length){pendingEffectTarget={kind:"monsterModifier",player:p,zone:"monsters",sourceCard,delta,candidates};log("パワーを変更するモンスターを盤面からクリックしてください");render()}
+  else log("パワーを変更できるモンスターがいません");
+  handled=true;
+ }
  const ownTaggedMonsterBuff=s.match(/自分の\[([^\]]+)\]\s*1体を\s*[＋+](\d+)/);
  if(ownTaggedMonsterBuff){
   const tag=ownTaggedMonsterBuff[1],amount=Number(ownTaggedMonsterBuff[2]);
@@ -1235,6 +1251,8 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   else log("効果の対象となる["+tag+"]モンスターがいないため、パワー上昇を行えませんでした");
  }
  /* Counter, formula, and tagged-monster effects. */
+ const allMonsterCounter=s.match(/自分のモンスター全てにカウンター(\d+)個を乗せる/);
+ if(allMonsterCounter){const amount=Number(allMonsterCounter[1]);own.monsters.forEach(mon=>mon.counters=(Number(mon.counters)||0)+amount);handled=true;log("自分のモンスター全てにカウンター"+amount+"個を乗せました")}
  const genericMonsterCounter=s.match(/^モンスター1体にカウンター(?:を)?(\d+)個を乗せる/);
  if(genericMonsterCounter){
   const opponentOwner=p===1?2:1;
