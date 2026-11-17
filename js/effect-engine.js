@@ -17,7 +17,8 @@
     opponentHeal:["相手が回復した時","相手が回復したとき"],
     ownDamaged:["自分がダメージを受けた時","自分がダメージを受けたとき"],
     opponentDamaged:["相手がダメージを受けた時","相手がダメージを受けたとき"],
-    anyDestroy:["モンスターの破壊時","モンスターが破壊された時","モンスターが破壊されたとき","自分のモンスターの破壊時"]
+    anyDestroy:["モンスターの破壊時","モンスターが破壊された時","モンスターが破壊されたとき","自分のモンスターの破壊時"],
+    anyEnter:["モンスターが場に出た時","モンスターが場に出たとき"]
   };
   function splitEffectSentences(text) {
     const source=String(text||"");
@@ -49,8 +50,13 @@
       const costToken=costMatch?costMatch[1].replace(/\s+/g,""):null;
       const body=costMatch?raw.slice(costMatch[0].length).trim():raw.trim();
       let trigger=null;
-      const entries=Object.entries(TRIGGERS).sort((a,b)=>Math.max(...b[1].map(x=>x.length))-Math.max(...a[1].map(x=>x.length)));
-      for(const [name,phrases] of entries){if(phrases.some(phrase=>body.includes(phrase))){trigger=name;break}}
+      if(/自分の[^。]*?モンスターが場に出た(?:時|とき)/.test(body))trigger="allyEnter";
+      else if(/相手の[^。]*?モンスターが場に出た(?:時|とき)/.test(body))trigger="opponentEnter";
+      else if(/モンスターが場に出た(?:時|とき)/.test(body))trigger="anyEnter";
+      if(trigger===null){
+        const entries=Object.entries(TRIGGERS).sort((a,b)=>Math.max(...b[1].map(x=>x.length))-Math.max(...a[1].map(x=>x.length)));
+        for(const [name,phrases] of entries){if(phrases.some(phrase=>body.includes(phrase))){trigger=name;break}}
+      }
       let costKind=null,costValue=null,energyCost=null;
       if(costToken!==null){
         if(/^\d+$/.test(costToken)){costKind="energy";costValue=Number(costToken);energyCost=Number(costToken)}
