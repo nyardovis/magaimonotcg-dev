@@ -51,7 +51,7 @@ for(const card of cardsData.cards){
  for(const ability of engine.splitAbilities(effect)){
   const text=String(ability.body||ability.raw||"").trim();
   if(!text)continue;
-  cases.push({cardId:card.id,cardName:card.name,sourceZone,clauseIndex:ability.index,text});
+  cases.push({cardId:card.id,cardName:card.name,sourceZone,clauseIndex:ability.index,text,raw:ability.raw,trigger:ability.trigger,isActivated:ability.isActivated,costKind:ability.costKind});
  }
 }
 function mime(file){return file.endsWith(".html")?"text/html":file.endsWith(".js")?"text/javascript":file.endsWith(".json")?"application/json":file.endsWith(".css")?"text/css":"text/plain"}
@@ -282,13 +282,17 @@ const server=http.createServer((req,res)=>{
    assert.equal(attackedTrigger,1,"A defending monster's attacked trigger did not resolve when attacked");
 
   const results=await page.evaluate(({cases,fixture})=>window.__ANKR_TEST__.auditBatch(cases,fixture),{cases,fixture});
-  const counts={};for(const result of results)counts[result.status]=(counts[result.status]||0)+1;
+  const counts={},auditClassCounts={};for(const result of results){counts[result.status]=(counts[result.status]||0)+1;auditClassCounts[result.auditClass]=(auditClassCounts[result.auditClass]||0)+1}
   const errors=results.filter(r=>r.status==="runtime_error");
-  const report={generatedAt:new Date().toISOString(),cardCount:cardsData.cards.length,clauseCount:cases.length,smoke,counts,runtimeErrorCount:errors.length,results};
+  const unimplementedCandidates=results.filter(r=>r.auditClass==="unimplemented_candidate");
+   const report={generatedAt:new Date().toISOString(),cardCount:cardsData.cards.length,clauseCount:cases.length,smoke,counts,auditClassCounts,unimplementedCandidateCount:unimplementedCandidates.length,runtimeErrorCount:errors.length,results};
   const out=process.argv[2]?path.resolve(process.argv[2]):path.join(root,"effect-live-audit-report.json");
   fs.writeFileSync(out,JSON.stringify(report,null,2)+"\n");
-  console.log(JSON.stringify({cardCount:report.cardCount,clauseCount:report.clauseCount,smoke,counts,runtimeErrorCount:errors.length,runtimeErrors:errors.map(r=>({cardId:r.cardId,cardName:r.cardName,clauseIndex:r.clauseIndex,text:r.text,error:r.error?.message})),unimplementedExamples:results.filter(r=>r.status==="unimplemented").slice(0,20).map(r=>({cardId:r.cardId,cardName:r.cardName,clauseIndex:r.clauseIndex,text:r.text})),report:out},null,2));
-  assert.equal(errors.length,0,"actual game effect resolver threw during card audit; see report");
+  console.log(JSON.stringify({cardCount:report.cardCount,clauseCount:report.clauseCount,smoke,counts,runtimeErrorCount:errors.length,runtimeErrors:errors.map(r=>({cardId:r.cardId,cardName:r.cardName,clauseIndex:r.clauseIndex,text:r.text,error:r.error?.message})),auditClassCounts,unimplementedCandidateCount:unimplementedCandidates.length,unimplementedExamples:unimplementedCandidates.slice(0,20).map(r=>({cardId:r.cardId,cardName:r.cardName,clauseIndex:r.clauseIndex,text:r.text})),report:out},null,2));
+  assert.equal(results.find(r=>r.cardName==="苔木蜘蛛"&&r.clauseIndex===0)?.auditClass,"trigger_not_exercised","Triggered clauses must not be counted as directly-tested implementations");
+   assert.equal(results.find(r=>r.cardName==="碧い花"&&r.clauseIndex===1)?.auditClass,"activation_entry_not_exercised","Costed abilities must be separated from direct effect-text execution");
+   assert.equal(results.find(r=>r.cardName==="竹の魔物"&&r.text.includes("何枚でも"))?.auditClass,"deckbuilding_rule","Deckbuilding rules must not be counted as unimplemented effects");
+   assert.equal(errors.length,0,"actual game effect resolver threw during card audit; see report");
  }catch(error){console.error(error);process.exitCode=1}
  finally{if(browser)await browser.close();server.close()}
 })();
