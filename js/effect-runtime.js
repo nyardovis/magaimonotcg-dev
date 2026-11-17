@@ -51,8 +51,8 @@
   const COST = /^\s*[（(]\s*(\d+|これをタップ|これを破壊|カウンター\s*\d+|手札から\d+枚捨てる)\s*[）)]\s*/;
   function detectTrigger(text){
     const source=String(text||"");
-    if(/自分の[^。]*?モンスターが場に出た(?:時|とき)/.test(source))return "allyEnter";
-    if(/相手の[^。]*?モンスターが場に出た(?:時|とき)/.test(source))return "opponentEnter";
+    if(/自分の[^。]*?が場に出た(?:時|とき)/.test(source))return "allyEnter";
+    if(/相手の[^。]*?が場に出た(?:時|とき)/.test(source))return "opponentEnter";
     if(/モンスターが場に出た(?:時|とき)/.test(source))return "anyEnter";
     for(const [type,phrases] of TRIGGERS) if(phrases.some(p=>source.includes(p))) return type;
     return null;
