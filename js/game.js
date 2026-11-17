@@ -1758,6 +1758,10 @@ function exposeAnkrEffectTestApi(){
    const card=newCard(name,id||("test-"+owner+"-"+zone+"-"+Math.random().toString(36).slice(2)));
    state.players[owner][zone].push(card);return card.id;
   },
+  setCardEffectText(name,text){
+   const definition=cardDefinition(name);if(!definition)throw new Error("card definition not found: "+name);
+   definition.effect_text=String(text||"");definition.abilities=CardEffectEngine.splitAbilities(definition.effect_text).map(ability=>ability.raw);return true;
+  },
   runEffect(text,owner=1,sourceId=null){
    const source=sourceId?[1,2].flatMap(p=>["hand","deck","monsters","energy","field","discard","facedown"].flatMap(z=>state.players[p][z]||[])).find(c=>c.id===sourceId):null;
    resolveEffectText(text,owner,source||null);
