@@ -441,14 +441,14 @@ function recalculatePlayerPassives(){
    if(text.includes("相手のモンスターはプレイヤーに攻撃できない")&&p!==owner)player.opponentMonstersCannotAttackPlayer=true;
    if(text.includes("相手の罠は発動しない")&&p!==owner)player.disableOpponentTraps=true;
    if(text.includes("相手の「場に出た時」の効果は発動しない")&&p!==owner)player.disableOpponentEnterEffects=true;
-   if(text.includes("自分が受けるダメージ-")&&p===owner){const m=text.match(/自分が受けるダメージ-(\\d+)/);if(m)player.passiveDamageReduction=Math.max(player.passiveDamageReduction,Number(m[1]))}
+   if(text.includes("自分が受けるダメージ-")&&p===owner){const m=text.match(/自分が受けるダメージ-(\d+)/);if(m)player.passiveDamageReduction=Math.max(player.passiveDamageReduction,Number(m[1]))}
   }
  }
  for(const owner of [1,2])for(const card of [...(state.players[owner]?.monsters||[]),...(state.players[owner]?.energy||[]),...(state.players[owner]?.field||[])]){
   const text=String(cardDefinition(card)?.effect_text||"");
   if(card.effectsDisabled){
-   if(/(?:^|。)\\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(text))delete card.cannotAttack;
-   if(/(?:^|。)\\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(text))delete card.cannotBeAttacked;
+   if(/(?:^|。)\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(text))delete card.cannotAttack;
+   if(/(?:^|。)\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(text))delete card.cannotBeAttacked;
    if(text.includes("アンタップ中は攻撃されない"))delete card.cannotBeAttackedWhileUntapped;
    if(text.includes("相手のモンスターはこれにしか攻撃できない"))delete card.mustBeAttacked;
    if(text.includes("相手の効果で選ばれない"))delete card.cannotBeChosenByOpponent;
@@ -458,15 +458,15 @@ function recalculatePlayerPassives(){
    if(text.includes("これが受けるダメージ-"))delete card.passiveDamageReduction;
    continue;
   }
-  if(/(?:^|。)\\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(text))card.cannotAttack=true;
-  if(/(?:^|。)\\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(text))card.cannotBeAttacked=true;
+  if(/(?:^|。)\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(text))card.cannotAttack=true;
+  if(/(?:^|。)\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(text))card.cannotBeAttacked=true;
   if(text.includes("アンタップ中は攻撃されない"))card.cannotBeAttackedWhileUntapped=true;
   if(text.includes("相手のモンスターはこれにしか攻撃できない"))card.mustBeAttacked=true;
   if(text.includes("相手の効果で選ばれない"))card.cannotBeChosenByOpponent=true;
   if(text.includes("モンスターとの戦闘時、戦闘相手のパワーで戦闘する"))card.combatPowerUsesOpponent=true;
   if(text.includes("モンスターとの戦闘時、これのパワーの代わりに0パワーで戦闘する"))card.combatPowerOverride=0;
-  const repeat=text.match(/1ターンに(\\d+)回攻撃できる/);if(repeat)card.attacksPerTurn=Number(repeat[1]);
-  const reduction=text.match(/これが受けるダメージ-(\\d+)/);if(reduction)card.passiveDamageReduction=Number(reduction[1]);
+  const repeat=text.match(/1ターンに(\d+)回攻撃できる/);if(repeat)card.attacksPerTurn=Number(repeat[1]);
+  const reduction=text.match(/これが受けるダメージ-(\d+)/);if(reduction)card.passiveDamageReduction=Number(reduction[1]);
  }
 }
 function render(){
@@ -785,7 +785,7 @@ function activateCardAbility(cardId,abilityIndex){
   if(card.name==="碧い花"&&abilityIndex===0){if(!state.players[1].facedown.length){log("自分の罠が場にないため、この能力は使用できません");return}if(!useEnergyCost(1,2))return;state.players[1].life+=700;broadcastEffectDelta({target:"ownLife",delta:700});if(!onlinePlayerId)resolveTrapTriggers(2,"opponentHeal");log("碧い花の効果で700回復しました");state.selected={p:1,z:selected.z,id:card.id};render();return}
   const abilities=CardEffectEngine.activatedAbilities(cardDefinition(card)?.effect_text||"");
   const ability=abilities[abilityIndex];if(!ability)return;
-  const isBlueFlowerTrapHeal=card.name==="碧い花"&&ability.body.includes("自分の罠が場にあるなら")&&/自分を\\s*700回復/.test(ability.body);
+  const isBlueFlowerTrapHeal=card.name==="碧い花"&&ability.body.includes("自分の罠が場にあるなら")&&/自分を\s*700回復/.test(ability.body);
   if((isBlueFlowerTrapHeal||ability.body.includes("自分の罠が場にあるなら"))&&!state.players[1].facedown.length){log("自分の罠が場にないため、この能力は使用できません");return}
   const isKingdomArcherDamage=cardDefinition(card)?.id==="card_0079"&&/相手のモンスター\s*1体に\s*[（(]これのパワー[）)]\s*ダメージ/.test(ability.body);
   const kingdomArcherCandidates=isKingdomArcherDamage?state.players[2].monsters.filter(target=>!target.cannotBeChosenByOpponent):[];
@@ -899,19 +899,19 @@ function resolvePendingEffectTarget(cardId){
  render();sendPendingAttackResponseIfReady();
 }
 function resolveSummonEffects(text,p,sourceCard){
- const own=state.players[p],sourcePattern=/自分の(手札かデッキか捨て札|手札かデッキ|デッキか捨て札|手札か捨て札|手札|デッキ|捨て札)から([\\s\\S]*?)(\\d+)(体|枚)(?:まで)?(?:を場に|を)出す/g;
+ const own=state.players[p],sourcePattern=/自分の(手札かデッキか捨て札|手札かデッキ|デッキか捨て札|手札か捨て札|手札|デッキ|捨て札)から([\s\S]*?)(\d+)(体|枚)(?:まで)?(?:を場に|を)出す/g;
  let matched=false;
  for(const match of String(text||"").matchAll(sourcePattern)){
   matched=true;
   const sourceNames=match[1].split("か"),qualifier=match[2]||"",limit=Number(match[3]),unit=match[4];
-  const maxCostMatch=qualifier.match(/(\\d+)コスト以下/),minCostMatch=qualifier.match(/(\\d+)コスト以上/),maxPowerMatch=qualifier.match(/(\\d+)パワー以下/);
+  const maxCostMatch=qualifier.match(/(\d+)コスト以下/),minCostMatch=qualifier.match(/(\d+)コスト以上/),maxPowerMatch=qualifier.match(/(\d+)パワー以下/);
   const maxCost=maxCostMatch?Number(maxCostMatch[1]):Infinity,minCost=minCostMatch?Number(minCostMatch[1]):0,maxPower=maxPowerMatch?Number(maxPowerMatch[1]):Infinity;
   const includeNameMatch=qualifier.match(/名前に「([^」]+)」を含む/),excludedNameMatch=qualifier.match(/「([^」]+)」以外/),requiredAbilityMatch=qualifier.match(/「([^」]+)」を持つ/);
   const quotedNames=[...qualifier.matchAll(/「([^」]+)」/g)].map(m=>m[1]);
   const exactName=quotedNames.find(name=>name!==excludedNameMatch?.[1]&&name!==includeNameMatch?.[1]&&name!==requiredAbilityMatch?.[1]);
   const includeName=includeNameMatch?.[1]||null,requiredAbility=requiredAbilityMatch?.[1]||null;
-  const requiredTypes=[...qualifier.matchAll(/\\[([^\\]]+)\\]/g)].map(m=>m[1].trim()).filter(Boolean);
-  const orTypes=/\\[[^\\]]+\\]か\\[[^\\]]+\\]/.test(qualifier);
+  const requiredTypes=[...qualifier.matchAll(/\[([^\]]+)\]/g)].map(m=>m[1].trim()).filter(Boolean);
+  const orTypes=/\[[^\]]+\]か\[[^\]]+\]/.test(qualifier);
   const kindWord=qualifier.match(/(モンスター|エネルギー|魔法|罠|フィールド)/)?.[1]||null,kindMap={モンスター:"monster",エネルギー:"energy",魔法:"spell",罠:"trap",フィールド:"field"};
   const requiredKind=kindWord?kindMap[kindWord]:(unit==="体"?"monster":null);
   const sourceZones=sourceNames.map(name=>name==="手札"?"hand":name==="デッキ"?"deck":"discard").filter(zone=>zone!=="discard"||!effectCannotChooseZone(p,"discard"));
@@ -1434,12 +1434,12 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   if(target){if(disableCardEffects(target)){const targetOwner=own.monsters.some(mon=>mon.id===target.id)?p:(p===1?2:1);if(targetOwner!==p&&onlinePlayerId)broadcastEffectDelta({target:"opponentDisable",cardId:target.id});handled=true;log("「"+target.name+"」の効果を無効にしました")}else log("「"+target.name+"」は効果を消されません")}
  }
  /* 「使用する」は効果による使用なので、通常のエネルギーコストを支払わない。対象の種類に応じて使用処理を共通化する。 */
- const genericUse=s.match(/自分の(デッキか捨て札|デッキ|捨て札|手札)から(?:(\\d+|[（(]自分のマナの数[）)])コスト以下の)?(?:名前に「([^」]+)」を含む)?(?:「([^」]+)」以外の)?(?:「([^」]+)」)?(?:\\[([^\\]]+)\\](?:の)?)?(モンスター|魔法|罠|フィールド|エネルギー)?(\\d+)(枚|体)までを使用する/);
- const topCardUse=s.match(/自分のデッキの上(\\d+)枚を公開し、(?:それが([^、]+)なら、)?(?:それ)?1枚までを使用する/);
+ const genericUse=s.match(/自分の(デッキか捨て札|デッキ|捨て札|手札)から(?:(\d+|[（(]自分のマナの数[）)])コスト以下の)?(?:名前に「([^」]+)」を含む)?(?:「([^」]+)」以外の)?(?:「([^」]+)」)?(?:\[([^\]]+)\](?:の)?)?(モンスター|魔法|罠|フィールド|エネルギー)?(\d+)(枚|体)までを使用する/);
+ const topCardUse=s.match(/自分のデッキの上(\d+)枚を公開し、(?:それが([^、]+)なら、)?(?:それ)?1枚までを使用する/);
  if(genericUse||topCardUse){
   const zoneName=genericUse?genericUse[1]:"デッキ",costText=genericUse?genericUse[2]:null,maxCost=costText==null?Infinity:costText.includes("自分のマナ")?(Number(own.energyPool)||0):Number(costText);
   const namePart=genericUse?(genericUse[3]||""):"",excludedName=genericUse?(genericUse[4]||""):"",exactName=genericUse?(genericUse[5]||""):"",tag=genericUse?(genericUse[6]||""):"",kindWord=genericUse?(genericUse[7]||""):"";
-  const repeatMatch=s.match(/これを(\\d+)回行う/),max=(topCardUse?1:Number(genericUse[8]))*(repeatMatch?Number(repeatMatch[1]):1),kindByWord={モンスター:"monster",魔法:"spell",罠:"trap",フィールド:"field",エネルギー:"energy"};
+  const repeatMatch=s.match(/これを(\d+)回行う/),max=(topCardUse?1:Number(genericUse[8]))*(repeatMatch?Number(repeatMatch[1]):1),kindByWord={モンスター:"monster",魔法:"spell",罠:"trap",フィールド:"field",エネルギー:"energy"};
   const sourceZones=topCardUse?["deck"]:zoneName==="デッキか捨て札"?(effectCannotChooseZone(p,"discard")?["deck"]:["deck","discard"]):zoneName==="デッキ"?["deck"]:zoneName==="捨て札"?(effectCannotChooseZone(p,"discard")?[]:["discard"]):["hand"];
   const source=sourceZones.flatMap(zone=>own[zone]||[]);
   if(topCardUse&&source[0]){source[0].faceUp=true;source[0].revealed=true;log("山札の一番上を公開しました: "+source[0].name)}
