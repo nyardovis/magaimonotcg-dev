@@ -247,7 +247,7 @@ function connectGameServer(){
           if(message.playerId!==onlinePlayerId&&state.turnPlayer===1)endTurn();
         }
         else if(message.type==="operation"&&message.action==="attack_declared"&&!devLocalMode){
-          if(message.playerId!==onlinePlayerId){const attacker=state.players[2].monsters.find(c=>c.id===message.cardId);if(attacker)attacker.tapped=true;const defender=message.targetCardId?state.players[1].monsters.find(c=>c.id===message.targetCardId):null;resolveTrapTriggers(1,"opponentAttack",attacker||null);if(defender)resolveCardTrigger(defender,1,"attack");pendingDefenseAttackResponse={attackId:message.attackId,attacker};sendPendingAttackResponseIfReady();render();}
+          if(message.playerId!==onlinePlayerId){const attacker=state.players[2].monsters.find(c=>c.id===message.cardId);if(attacker)attacker.tapped=true;const defender=message.targetCardId?state.players[1].monsters.find(c=>c.id===message.targetCardId):null;resolveTrapTriggers(1,"opponentAttack",attacker||null);if(defender)resolveCardTrigger(defender,1,"attacked");pendingDefenseAttackResponse={attackId:message.attackId,attacker};sendPendingAttackResponseIfReady();render();}
         }
         else if(message.type==="operation"&&message.action==="attack_response"&&!devLocalMode){
           if(message.playerId!==onlinePlayerId&&pendingAttack?.awaitingResponse)resolveAttack(pendingAttack.targetMonsterId,{attackId:message.attackId,damageOverride:message.damageOverride});
@@ -1543,7 +1543,7 @@ function resolveAttack(targetMonsterId,defenseResponse=null){
     gameSocket.send(JSON.stringify({type:"operation",action:"attack_declared",attackId,cardId:attacker.id,targetCardId:defender?.id||null}));
     log("攻撃を宣言しました。相手の防御側効果の処理を待っています");render();return;
    }
-   resolveTrapTriggers(nonActive,"opponentAttack",attacker);if(defender)resolveCardTrigger(defender,nonActive,"attack");
+   resolveTrapTriggers(nonActive,"opponentAttack",attacker);if(defender)resolveCardTrigger(defender,nonActive,"attacked");
   }
   const attack=attacker.nextAttackDamage!==undefined?Math.max(0,Number(attacker.nextAttackDamage)||0):(attacker.combatPowerUsesOpponent&&defender?attackPower(defender):attackPower(attacker));delete attacker.nextAttackDamage;
   debugLog("戦闘ダメージを計算","combat","info",{attacker:attacker.name,attackerPower:attack,defender:defender?.name||"プレイヤー",defenderPower:defender?attackPower(defender):null});
