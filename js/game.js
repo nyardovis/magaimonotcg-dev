@@ -1807,7 +1807,20 @@ function exposeAnkrEffectTestApi(){
     const pending=!!pendingEffectTarget,picker=!!document.querySelector("#effectDeckPicker");
     const unimplemented=logs.some(e=>e.status==="unimplemented"||e.message.includes("未対応の効果"));
     const status=error?"runtime_error":unimplemented?"unimplemented":picker?"needs_card_selection":pending?"needs_board_target":promptCount>0?"needs_choice":before!==after?"executed":"no_state_change";
-    results.push({cardId:item.cardId,cardName:item.cardName,clauseIndex:item.clauseIndex,text:item.text,status,promptCount,error,logs:logs.filter(e=>e.status==="error"||e.status==="unimplemented"||e.message.includes("未対応")).map(e=>e.message)});
+    const raw=String(item.raw||item.text||"");
+    const needsSelection=["needs_card_selection","needs_board_target","needs_choice"].includes(status);
+    let auditClass;
+    if(error)auditClass="runtime_error";
+    else if(/何枚でもデッキに入れることができる/.test(raw))auditClass="deckbuilding_rule";
+    else if(item.trigger)auditClass=needsSelection?"trigger_selection_requested":"trigger_not_exercised";
+    else if(item.isActivated)auditClass=needsSelection?"activation_selection_requested":"activation_entry_not_exercised";
+    else if(/攻撃されない|攻撃できない|これにしか攻撃できない|相手の罠は発動しない|相手の[^。]{0,30}効果は発動しない|相手の効果で選ばれない|効果を受けない|受けるダメージ[-−]\d+|ダメージ.{0,12}軽減|アンタップ中/.test(raw))auditClass="passive_or_continuous_rule";
+    else if(/使用できない|使用できず|場に出せない|発動できない|使えない/.test(raw))auditClass="play_restriction_requires_entry_test";
+    else if(needsSelection)auditClass=status+"_requested_not_resolved_by_batch";
+    else if(status==="no_state_change")auditClass="fixture_or_condition_not_met";
+    else if(status==="executed")auditClass="state_change_observed_not_full_proof";
+    else auditClass="unimplemented_candidate";
+    results.push({cardId:item.cardId,cardName:item.cardName,clauseIndex:item.clauseIndex,text:item.text,raw:item.raw||item.text,trigger:item.trigger||null,isActivated:!!item.isActivated,costKind:item.costKind||null,status,auditClass,promptCount,error,logs:logs.filter(e=>e.status==="error"||e.status==="unimplemented"||e.message.includes("未対応")).map(e=>e.message)});
    }
    window.prompt=originalPrompt;return results;
   }
