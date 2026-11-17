@@ -1239,7 +1239,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
    ...own.monsters.map(mon=>({id:mon.id,owner:p})),
    ...opp.monsters.filter(mon=>!mon.cannotBeChosenByOpponent).map(mon=>({id:mon.id,owner:opponentOwner}))
   ];
-  if(candidates.length){pendingEffectTarget={kind:"monsterModifier",player:p,zone:"monsters",sourceCard,delta,candidates};log("パワーを変更するモンスターを盤面からクリックしてください");render()}
+  if(candidates.length){pendingEffectTarget={kind:"monsterModifier",player:p,players:[p,opponentOwner],zone:"monsters",sourceCard,delta,candidates};log("パワーを変更するモンスターを盤面からクリックしてください");render()}
   else log("パワーを変更できるモンスターがいません");
   handled=true;
  }
@@ -1260,7 +1260,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
    ...own.monsters.map(mon=>({id:mon.id,owner:p})),
    ...opp.monsters.filter(mon=>!mon.cannotBeChosenByOpponent).map(mon=>({id:mon.id,owner:opponentOwner}))
   ];
-  if(candidates.length){pendingEffectTarget={kind:"counterMonster",player:p,zone:"monsters",sourceCard,amount:Number(genericMonsterCounter[1]),candidates};log("カウンターを乗せるモンスターを盤面からクリックしてください");render()}
+  if(candidates.length){pendingEffectTarget={kind:"counterMonster",player:p,players:[p,opponentOwner],zone:"monsters",sourceCard,amount:Number(genericMonsterCounter[1]),candidates};log("カウンターを乗せるモンスターを盤面からクリックしてください");render()}
   else log("カウンターを乗せられるモンスターがいません");
   handled=true;
  }
@@ -1499,7 +1499,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
    ...own.monsters.filter(mon=>!mon.effectsDisabled).map(mon=>({id:mon.id,owner:p})),
    ...opp.monsters.filter(mon=>!mon.effectsDisabled&&!mon.cannotBeChosenByOpponent).map(mon=>({id:mon.id,owner:opponentOwner}))
   ];
-  if(candidates.length){pendingEffectTarget={kind:"disableMonsterEffect",player:p,zone:"monsters",sourceCard,candidates};log("効果を消すモンスターを盤面からクリックしてください");render()}
+  if(candidates.length){pendingEffectTarget={kind:"disableMonsterEffect",player:p,players:[p,opponentOwner],zone:"monsters",sourceCard,candidates};log("効果を消すモンスターを盤面からクリックしてください");render()}
   else log("効果を消せるモンスターがいません");
   handled=true;
  }
