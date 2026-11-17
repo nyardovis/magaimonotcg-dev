@@ -364,7 +364,7 @@ const server=http.createServer((req,res)=>{
   const out=process.argv[2]?path.resolve(process.argv[2]):path.join(root,"effect-live-audit-report.json");
   fs.writeFileSync(out,JSON.stringify(report,null,2)+"\n");
   console.log(JSON.stringify({cardCount:report.cardCount,clauseCount:report.clauseCount,smoke,counts,runtimeErrorCount:errors.length,runtimeErrors:errors.map(r=>({cardId:r.cardId,cardName:r.cardName,clauseIndex:r.clauseIndex,text:r.text,error:r.error?.message})),auditClassCounts,unimplementedCandidateCount:unimplementedCandidates.length,unimplementedExamples:unimplementedCandidates.slice(0,20).map(r=>({cardId:r.cardId,cardName:r.cardName,clauseIndex:r.clauseIndex,text:r.text})),report:out},null,2));
-  assert.equal(results.find(r=>r.cardName==="苔木蜘蛛"&&r.clauseIndex===0)?.auditClass,"trigger_not_exercised","Triggered clauses must not be counted as directly-tested implementations");
+  assert.equal(results.find(r=>r.cardName==="苔木蜘蛛"&&r.clauseIndex===0)?.auditClass,"trigger_selection_requested","A triggered deck-search effect should be classified as a trigger that requests player selection, not as an unimplemented effect");
    assert.equal(results.find(r=>r.cardName==="碧い花"&&r.clauseIndex===1)?.auditClass,"activation_entry_not_exercised","Costed abilities must be separated from direct effect-text execution");
    assert.equal(results.find(r=>r.cardName==="竹の魔物"&&r.text.includes("何枚でも"))?.auditClass,"deckbuilding_rule","Deckbuilding rules must not be counted as unimplemented effects");
    assert.equal(results.find(r=>r.cardName==="氷壁"&&r.clauseIndex===0)?.auditClass,"trigger_not_exercised","Bracketed trap timing must be classified as a trigger, not an unsupported immediate effect");
