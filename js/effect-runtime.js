@@ -10,6 +10,9 @@
     ["start",["自分のターンの開始時","自分のターン開始時"]],
     ["end",["自分のターンの終了時","自分のターン終了時"]],
     ["enter",["場に出た時","場に出たとき","場に出した時","場に出したとき"]],
+    ["allyEnter",["自分の他の","自分のモンスターが場に出た時"]],
+    ["opponentEnter",["相手のモンスターが場に出た時"]],
+    ["anyEnter",["モンスターが場に出た時"]],
     ["destroy",["破壊された時","破壊されたとき","破壊時"]],
     ["attack",["攻撃した時","攻撃したとき","攻撃時"]],
     ["attacked",["攻撃された時","攻撃されたとき","攻撃を受けた時","攻撃を受けたとき"]]
@@ -47,7 +50,11 @@
   ];
   const COST = /^\s*[（(]\s*(\d+|これをタップ|これを破壊|カウンター\s*\d+|手札から\d+枚捨てる)\s*[）)]\s*/;
   function detectTrigger(text){
-    for(const [type,phrases] of TRIGGERS) if(phrases.some(p=>text.includes(p))) return type;
+    const source=String(text||"");
+    if(/自分の[^。]*?モンスターが場に出た(?:時|とき)/.test(source))return "allyEnter";
+    if(/相手の[^。]*?モンスターが場に出た(?:時|とき)/.test(source))return "opponentEnter";
+    if(/モンスターが場に出た(?:時|とき)/.test(source))return "anyEnter";
+    for(const [type,phrases] of TRIGGERS) if(phrases.some(p=>source.includes(p))) return type;
     return null;
   }
   function detectActions(text){
@@ -132,6 +139,9 @@
   function selfTest(){
     const cases=[
       {text:"場に出た時、カードを2枚引く。",trigger:"enter",action:"draw"},
+      {text:"自分の[水]のモンスターが場に出た時、これを+100。",trigger:"allyEnter",action:"modifyPower"},
+      {text:"相手の[神]モンスターが場に出た時、それに300ダメージ。",trigger:"opponentEnter",action:"damage"},
+      {text:"7コスト以上のモンスターが場に出た時、それを捨てる。",trigger:"anyEnter",action:"discard"},
       {text:"攻撃時、相手に300ダメージ。",trigger:"attack",action:"damage"},
       {text:"自分のデッキから魔法1枚までを手札に加える。",trigger:null,action:"moveToHand",targetZone:"デッキ",targetOwner:"自分"},
       {text:"相手のモンスターはこれにしか攻撃できない。",trigger:null,action:"preventAttack"},
