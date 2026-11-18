@@ -50,7 +50,8 @@ function applyPublicState(playerId,publicState){
   x.facedown=Array.from({length:Math.max(0,Number(publicState.facedownCount)||0)},(_,i)=>{const card=newCard("",playerId+"f"+i);card.faceUp=false;return card});
   if(Array.isArray(publicState.facedownPublic))publicState.facedownPublic.forEach(card=>{if(!card||typeof card.id!=="string")return;const target=x.facedown.find(c=>c.id===card.id)||x.facedown.find(c=>c.faceUp===false);if(!target)return;target.id=card.id;target.name=typeof card.name==="string"?card.name:"";target.faceUp=true});
   if(hadOpponentPublicState&&state.phase==="playing"){
-    const entered=x.monsters.find(c=>!oldOpponentMonsterIds.has(c.id));if(entered)resolveTrapTriggers(1,"opponentEnter",entered);
+    const enteredCards=x.monsters.filter(c=>!oldOpponentMonsterIds.has(c.id));
+    for(const entered of enteredCards){resolveTrapTriggers(1,"opponentEnter",entered);resolveOtherMonsterEnterTriggers(2,entered)}
     for(const oldCard of previousOpponentMonsters){const updated=x.monsters.find(c=>c.id===oldCard.id);if(updated&&(Number(updated.damage)||0)<(Number(oldCard.damage)||0))resolveTrapTriggers(1,"opponentHeal",updated)}
     const newCards=[...x.monsters,...x.energy,...x.field,...x.discard].filter(c=>!oldOpponentCardIds.has(c.id));
     const newSpell=newCards.find(c=>x.discard.some(d=>d.id===c.id)&&cardKind(c)==="spell");if(newSpell)resolveTrapTriggers(1,"opponentSpell",newSpell);
@@ -669,9 +670,13 @@ function effectiveCardCost(card,p=1){
  let cost=cardCost(card);const player=state.players[p];if(!player)return cost;
  const data=cardDefinition(card),types=String(data?.types||"");
  for(const source of [...player.monsters,...player.field]){
+  if(source.effectsDisabled)continue;
   const text=String(cardDefinition(source)?.effect_text||"");
   const reduction=text.match(/自分の手札の\[([^\]]+)\]のコスト-(\d+)/);
   if(reduction&&types.includes(reduction[1]))cost-=Number(reduction[2]);
+  const normalOnly=text.match(/(?:自分の)?手札の効果(?:の無い|のない|を持たない)モンスターのコスト[-−](\d+)/);
+  const cardEffect=String(data?.effect_text||"").trim();
+  if(normalOnly&&cardKind(card)==="monster"&&(!cardEffect||cardEffect==="効果なし"||cardEffect.startsWith("※")))cost-=Number(normalOnly[1]);
  }
  const ownFormula=String(data?.effect_text||"").match(/手札にある時、これのコスト-\s*[（(]自分のパワー-(\d+)の\[([^\]]+)\]の数[）)]/);
  if(ownFormula){const threshold=Number(ownFormula[1]),tag=ownFormula[2],count=player.monsters.filter(m=>String(cardDefinition(m)?.types||"").includes(tag)&&(Number(m.power)||Number(cardDefinition(m)?.power)||0)>=threshold).length;cost-=count}
@@ -755,9 +760,10 @@ function checkMonsterDestruction(p,triggerEffects=true){const x=state.players[p]
 function drawEffectCards(p,n){const x=state.players[p],total=Math.max(0,Math.floor(n));for(let i=0;i<total;i++){if(!x.deck.length){const winner=p===1?2:1;state.gameOver={winner,reason:"deck_empty"};state.phase="finished";log(x.name+"は山札が0枚の状態でドローしようとしたため、"+state.players[winner].name+"の勝利です");break}if(x.hand.length>=MAX.hand){if(p===1){state.pendingDiscardPlayer=1;state.pendingDiscardReason="effect_draw";state.pendingDrawCount=total-i;state.selected=null;render();log(x.name+"は効果のドロー前に手札を1枚捨てる必要があります");return}const discarded=x.hand.shift();moveToDiscard(p,discarded,"手札上限による自動破棄")}x.hand.push(x.deck.shift())}}
 function resolveCardTrigger(card,p,trigger){
   const data=cardDefinition(card);
-  if(!data||!data.effect_text||card.effectsDisabled||!window.CardEffectEngine)return;
-  const text=String(data.effect_text);
-  if(trigger==="enter"){
+  if(!data||!window.CardEffectEngine)return;
+  const text=String(data.effect_text||"");
+  const monsterEnter=trigger==="enter"&&cardKind(card)==="monster";
+  if(trigger==="enter"&&!card.effectsDisabled){
     if(/(?:^|。)\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(text))card.cannotAttack=true;
     if(/(?:^|。)\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(text))card.cannotBeAttacked=true;
     if(text.includes("アンタップ中は攻撃されない"))card.cannotBeAttackedWhileUntapped=true;
@@ -775,11 +781,61 @@ function resolveCardTrigger(card,p,trigger){
     const ownCardReduction=text.match(/これが受けるダメージ-(\d+)/);
     if(ownCardReduction)card.passiveDamageReduction=Math.max(Number(card.passiveDamageReduction)||0,Number(ownCardReduction[1]));
   }
-  if(trigger==="enter"&&state.players[p===1?2:1].disableOpponentEnterEffects){debugLog("相手の効果により場に出た時効果を無効化: "+card.name,"effect","skipped",{player:p,card:card.name});return}
-  if(trigger==="spell"&&data.name==="転換"){resolveEffectText(text,p,card);return}
-  const abilities=trigger==="spell"?CardEffectEngine.immediateAbilities(text):CardEffectEngine.forTrigger(text,trigger);
-  if(!abilities.length)debugLog("カード効果の発動条件に一致なし: "+card.name+" / "+trigger,"effect","skipped",{player:p,card:card.name,trigger});
-  abilities.forEach(ability=>{debugLog("カード効果を発動: "+card.name+" / "+trigger,"effect","info",{player:p,card:card.name,trigger,ability:ability.body});resolveEffectText(ability.body,p,card)});
+  const enterSuppressed=trigger==="enter"&&state.players[p===1?2:1].disableOpponentEnterEffects;
+  if(enterSuppressed)debugLog("相手の効果により場に出た時効果を無効化: "+card.name,"effect","skipped",{player:p,card:card.name});
+  else if(!card.effectsDisabled){
+    if(trigger==="spell"&&data.name==="転換"){resolveEffectText(text,p,card);return}
+    const abilities=trigger==="spell"?CardEffectEngine.immediateAbilities(text):CardEffectEngine.forTrigger(text,trigger);
+    if(abilities.length===0&&text)debugLog("カード効果の発動条件に一致なし: "+card.name+" / "+trigger,"effect","skipped",{player:p,card:card.name,trigger});
+    abilities.forEach(ability=>{debugLog("カード効果を発動: "+card.name+" / "+trigger,"effect","info",{player:p,card:card.name,trigger,ability:ability.body});resolveEffectText(ability.body,p,card)});
+  }
+  if(monsterEnter)resolveOtherMonsterEnterTriggers(p,card);
+}
+function entryTriggerMatches(body,sourceCard,enteringCard){
+  const marker=body.indexOf("が場に出た");
+  const prefix=marker>=0?body.slice(0,marker):body;
+  if(prefix.includes("他の")&&sourceCard.id===enteringCard.id)return false;
+  const enteringTypes=String(cardDefinition(enteringCard)?.types||"").split(/[,、]/).map(value=>value.trim()).filter(Boolean);
+  const groups=[...prefix.matchAll(/\[([^\]]+)\]/g)].map(match=>match[1].split(/[,、]/).map(value=>value.trim()).filter(Boolean));
+  if(groups.length){
+    const matches=groups.map(group=>group.every(type=>enteringTypes.includes(type)));
+    const isOr=/\]\s*か\s*\[/.test(prefix);
+    if(isOr?!matches.some(Boolean):!matches.every(Boolean))return false;
+  }
+  const nameMatch=prefix.match(/名前に「([^」]+)」を含む/);
+  if(nameMatch&&!String(enteringCard.name||"").includes(nameMatch[1]))return false;
+  const minCost=prefix.match(/(\d+)コスト以上/);
+  if(minCost&&cardCost(enteringCard)<Number(minCost[1]))return false;
+  const maxCost=prefix.match(/(\d+)コスト以下/);
+  if(maxCost&&cardCost(enteringCard)>Number(maxCost[1]))return false;
+  const minPower=prefix.match(/(\d+)パワー以上/);
+  if(minPower&&(Number(cardDefinition(enteringCard)?.power)||0)<Number(minPower[1]))return false;
+  const maxPower=prefix.match(/(\d+)パワー以下/);
+  if(maxPower&&(Number(cardDefinition(enteringCard)?.power)||0)>Number(maxPower[1]))return false;
+  if(/効果の無い|効果のない|効果を持たない/.test(prefix)){
+    const effect=String(cardDefinition(enteringCard)?.effect_text||"").trim();
+    if(effect&&effect!=="効果なし"&&!effect.startsWith("※"))return false;
+  }
+  return true;
+}
+function resolveOtherMonsterEnterTriggers(enteringPlayer,enteringCard){
+  if(cardKind(enteringCard)!=="monster"||!window.CardEffectEngine)return;
+  const owners=onlinePlayerId?[1]:[1,2];
+  for(const owner of owners){
+    const sources=[...(state.players[owner]?.monsters||[]),...(state.players[owner]?.energy||[]),...(state.players[owner]?.field||[])];
+    for(const sourceCard of sources){
+      if(sourceCard.effectsDisabled)continue;
+      const text=String(cardDefinition(sourceCard)?.effect_text||"");
+      const triggers=[owner===enteringPlayer?"allyEnter":"opponentEnter","anyEnter"];
+      for(const trigger of triggers){
+        for(const ability of CardEffectEngine.forTrigger(text,trigger)){
+          if(!entryTriggerMatches(ability.body,sourceCard,enteringCard))continue;
+          debugLog("モンスター登場時の誘発効果: "+sourceCard.name+" / "+trigger,"effect","info",{player:owner,card:sourceCard.name,trigger,enteringCard:enteringCard.name,ability:ability.body});
+          resolveEffectText(ability.body,owner,sourceCard,enteringCard);
+        }
+      }
+    }
+  }
 }
 function activateCardAbility(cardId,abilityIndex){
   if(state.phase!=="playing"||state.pendingDiscardPlayer!==null)return;
@@ -1912,7 +1968,7 @@ function exposeAnkrEffectTestApi(){
     x.energyPlacedThisTurn=false;x.extraEnergyPlacements=0;
    }
    state.turnPlayer=1;state.phase="playing";state.pendingDiscardPlayer=null;state.pendingDiscardReason=null;state.pendingDrawCount=0;state.gameOver=null;state.selected=null;
-   pendingEffectTarget=null;pendingAttack=null;pendingDefenseAttackResponse=null;debugLogEntries=[];debugLogSequence=0;
+   pendingEffectTarget=null;pendingAttack=null;pendingDefenseAttackResponse=null;debugLogEntries=[];debugLogSequence=0;hasReceivedOpponentPublicState=false;state._previousOpponentMonsters=[];
    const picker=document.querySelector("#effectDeckPicker");if(picker)picker.remove();
    for(const id of ["prepScreen","deckEditor","discardViewer","deckViewer","roomLobby","mulliganOverlay","roomWaitOverlay","gameOverOverlay","rematchWaitOverlay"]){const element=document.querySelector("#"+id);if(element)element.hidden=true}
    devLocalMode=true;onlinePlayerId=null;gameSocket=null;
@@ -1946,6 +2002,9 @@ function exposeAnkrEffectTestApi(){
   setEnergyPool(player,value){state.players[player].energyPool=value;return this.snapshot()},
   setCardPower(id,owner=1,power=0){const card=[...state.players[owner].monsters,...state.players[owner].energy,...state.players[owner].field].find(c=>c.id===id);if(card)card.power=Number(power)||0;return this.snapshot()},
   setCardState(id,owner=1,zone="monsters",values={}){const card=(state.players[owner]?.[zone]||[]).find(c=>c.id===id);if(!card)throw new Error("test card not found: "+id);Object.assign(card,values||{});return this.snapshot()},
+  effectiveCost(cardId,owner=1){const card=(state.players[owner]?.hand||[]).find(c=>c.id===cardId);if(!card)throw new Error("test hand card not found: "+cardId);return effectiveCardCost(card,owner)},
+  setOnlineTestMode(){onlinePlayerId="player1";devLocalMode=false;hasReceivedOpponentPublicState=true;return true},
+  applyOpponentMonsterForTest(name,id){const x=state.players[2],card=newCard(name,id||"online-test-opponent-monster");const publicState={life:x.life,pendingDiscard:false,handCount:x.hand.length,handIds:x.hand.map(c=>c.id),deckCount:x.deck.length,deckCounters:x.deckCounters,deckHorizontal:x.deckHorizontal,monsters:[...x.monsters,card],energy:x.energy,field:x.field,discard:x.discard,facedownCount:x.facedown.length,facedownPublic:x.facedown.filter(c=>c.faceUp).map(c=>({id:c.id,name:c.name}))};applyPublicState("player2",publicState);return this.snapshot()},
   activatedAbilities(name){return CardEffectEngine.activatedAbilities(cardDefinition(name)?.effect_text||"").map(a=>({raw:a.raw,body:a.body,costKind:a.costKind,costValue:a.costValue}))},
   chooseTarget(cardId){resolvePendingEffectTarget(cardId);return this.snapshot()},
   applyEffectDeltaForTest(message){applyEffectDelta(message);return this.snapshot()},
