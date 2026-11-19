@@ -410,13 +410,24 @@ const server=http.createServer((req,res)=>{
   assert.equal(afterFieldDestroy.players[2].zones.field.length,0,"opponent field destruction left the field card in play");
   assert.equal(afterFieldDestroy.players[2].zones.discard.some(c=>c.id==="destroy-opponent-field"),true,"opponent field destruction did not move the field card to discard");
 
-  const remoteSync=await page.evaluate(({monsterName,energyName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(monsterName,1,"monsters","sync-return");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterReturnToHand",cardId:"sync-return"});api.addCard(monsterName,1,"monsters","sync-bottom");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterBottomDeck",cardId:"sync-bottom"});api.addCard(monsterName,1,"monsters","sync-discard");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterDiscard",cardId:"sync-discard"});api.addCard(monsterName,1,"monsters","sync-counter");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterCounter",cardId:"sync-counter",delta:1});api.addCard(monsterName,1,"monsters","sync-modifier");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterModifier",cardId:"sync-modifier",delta:-100});api.addCard(energyName,1,"energy","sync-energy");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentCardDestroy",cardId:"sync-energy"});return api.snapshot()},{monsterName:fixtureCards.monster.name,energyName:fixtureCards.energy.name});
+  const boardWipe=await page.evaluate(({monsterName,trapName,fieldName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(monsterName,1,"monsters","blast-own-monster");api.addCard(monsterName,2,"monsters","blast-opponent-monster");api.addCard(trapName,1,"facedown","blast-own-trap");api.addCard(trapName,2,"facedown","blast-opponent-trap");api.addCard(fieldName,1,"field","blast-own-field");api.addCard(fieldName,2,"field","blast-opponent-field");api.runEffect("モンスターと罠とフィールド全てを破壊する。",1);return api.snapshot()},{monsterName:fixtureCards.monster.name,trapName:fixtureCards.trap.name,fieldName:fixtureCards.field.name});
+  for(const id of ["blast-own-monster","blast-own-trap","blast-own-field"])assert.equal(boardWipe.players[1].zones.discard.some(c=>c.id===id),true,"Super Explosion did not discard own "+id);
+  for(const id of ["blast-opponent-monster","blast-opponent-trap","blast-opponent-field"])assert.equal(boardWipe.players[2].zones.discard.some(c=>c.id===id),true,"Super Explosion did not discard opponent "+id);
+  assert.equal(boardWipe.players[1].zones.monsters.length,0,"Super Explosion left own monsters in play");
+  assert.equal(boardWipe.players[2].zones.monsters.length,0,"Super Explosion left opponent monsters in play");
+  assert.equal(boardWipe.players[1].zones.facedown.length,0,"Super Explosion left own traps set");
+  assert.equal(boardWipe.players[2].zones.facedown.length,0,"Super Explosion left opponent traps set");
+  assert.equal(boardWipe.players[1].zones.field.length,0,"Super Explosion left own field in play");
+  assert.equal(boardWipe.players[2].zones.field.length,0,"Super Explosion left opponent field in play");
+
+  const remoteSync=await page.evaluate(({monsterName,energyName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(monsterName,1,"monsters","sync-return");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterReturnToHand",cardId:"sync-return"});api.addCard(monsterName,1,"monsters","sync-bottom");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterBottomDeck",cardId:"sync-bottom"});api.addCard(monsterName,1,"monsters","sync-discard");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterDiscard",cardId:"sync-discard"});api.addCard(monsterName,1,"monsters","sync-counter");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterCounter",cardId:"sync-counter",delta:1});api.addCard(monsterName,1,"monsters","sync-modifier");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterModifier",cardId:"sync-modifier",delta:-100});api.addCard(energyName,1,"energy","sync-energy");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentCardDestroy",cardId:"sync-energy"});api.addCard(monsterName,2,"monsters","sync-own-destroy");api.applyEffectDeltaForTest({playerId:"remote",target:"ownMonsterDestroy",cardId:"sync-own-destroy"});return api.snapshot()},{monsterName:fixtureCards.monster.name,energyName:fixtureCards.energy.name});
   assert.equal(remoteSync.players[1].zones.hand.some(c=>c.id==="sync-return"),true,"remote return-to-hand effect delta was not applied");
   assert.equal(remoteSync.players[1].zones.deck.some(c=>c.id==="sync-bottom"),true,"remote bottom-deck effect delta was not applied");
   assert.equal(remoteSync.players[1].zones.discard.some(c=>c.id==="sync-discard"),true,"remote discard effect delta was not applied");
   assert.equal(remoteSync.players[1].zones.monsters.find(c=>c.id==="sync-counter")?.counters,1,"remote counter effect delta was not applied");
   assert.equal(remoteSync.players[1].zones.monsters.find(c=>c.id==="sync-modifier")?.modification,-100,"remote modifier effect delta was not applied");
   assert.equal(remoteSync.players[1].zones.discard.some(c=>c.id==="sync-energy"),true,"remote card destruction effect delta was not applied");
+  assert.equal(remoteSync.players[2].zones.discard.some(c=>c.id==="sync-own-destroy"),true,"remote own-monster destruction effect delta was not applied");
 
   await page.evaluate(({monsterName,originalText})=>{window.__ANKR_TEST__.setCardEffectText(monsterName,originalText);},{monsterName:fixtureCards.monster.name,originalText:fixtureCards.monster.effect_text||""});
 
@@ -496,6 +507,8 @@ const server=http.createServer((req,res)=>{
    const spiderEyeSearch=results.find(r=>r.cardName==="蜘蛛の目"&&r.text.includes("秘密裏に伏せる"));
    assert.equal(spiderEyeSearch?.status,"needs_card_selection","Spider's Eye must request a trap selection when a trap exists in the fixture deck");
    assert.notEqual(spiderEyeSearch?.auditClass,"unimplemented_candidate","Spider's Eye's selection effect must not be mislabeled as unimplemented");
+   const superExplosion=results.find(r=>r.cardName==="超爆発"&&r.text.includes("モンスターと罠とフィールド全てを破壊する"));
+   assert.notEqual(superExplosion?.auditClass,"unimplemented_candidate","Super Explosion should not remain an unimplemented candidate after its board-wipe regression");
    assert.equal(errors.length,0,"actual game effect resolver threw during card audit; see report");
  }catch(error){console.error(error);process.exitCode=1}
  finally{if(browser)await browser.close();server.close()}
