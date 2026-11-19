@@ -705,6 +705,7 @@ function applyEffectDelta(message){
  if(message.target==="opponentAttackDamageZero"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.nextAttackDamage=0;render();return}}
  if(message.target==="opponentMonsterTap"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.tapped=true;render();return}}
  if(message.target==="opponentMill"){const x=state.players[targetPlayer];for(let i=0;i<Math.max(0,Number(message.count)||0)&&x.deck.length;i++)x.discard.push(x.deck.shift());render();return}
+ if(message.target==="ownMonsterDestroy"){const owner=actorIsLocal?1:2,x=state.players[owner],c=x.monsters.find(m=>m.id===message.cardId);if(c){x.monsters=x.monsters.filter(m=>m.id!==c.id);moveToDiscard(owner,c,"効果による破壊");resolveTrapTriggers(owner===1?2:1,"opponentDestroy");render();return}}
  if(message.target==="opponentMonsterDestroy"){const x=state.players[targetPlayer],c=x.monsters.find(m=>m.id===message.cardId);if(c){x.monsters=x.monsters.filter(m=>m.id!==c.id);moveToDiscard(targetPlayer,c,"効果による破壊");resolveCardTrigger(c,targetPlayer,"destroy");if(targetPlayer===1)resolveTrapTriggers(1,"ownDestroy");render()}}
 }
 function checkLifeWinner(p){if(state.players[p].life<=0){if(!onlinePlayerId||p===1)resolveTrapTriggers(p,"ownLifeZero");if(state.players[p].life>0)return;const winner=p===1?2:1;state.gameOver={winner,reason:"life_zero"};state.phase="finished";log(state.players[p].name+"のライフが0以下になったため、"+state.players[winner].name+"の勝利です")}}
@@ -1300,6 +1301,37 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  if(/このターンを終了する/.test(s)){state.forceEndTurnAfterEffect=true;handled=true}
  const lifeSet=s.match(/自分のライフ\s*=\s*(\d+)/);
  if(lifeSet){const value=Number(lifeSet[1]),delta=value-own.life;own.life=value;if(onlinePlayerId)broadcastEffectDelta({target:"ownLifeSet",value});else if(delta)broadcastEffectDelta({target:"ownLife",delta});handled=true;log(own.name+"のライフを"+value+"に設定しました")}
+ /* 「超爆発」: destroy every monster, set trap, and field on both sides. */
+ const destroyAllBoardTypes=/モンスターと罠とフィールド全てを破壊する/.test(s);
+ if(destroyAllBoardTypes){
+  const otherPlayer=p===1?2:1;
+  for(const owner of [p,otherPlayer]){
+   const player=state.players[owner];
+   const monsters=[...player.monsters];
+   player.monsters=[];
+   for(const target of monsters){
+    moveToDiscard(owner,target,"超爆発の効果による破壊");
+    if(onlinePlayerId)broadcastEffectDelta({target:owner===p?"ownMonsterDestroy":"opponentMonsterDestroy",cardId:target.id});
+    if(!onlinePlayerId||owner===p){resolveCardTrigger(target,owner,"destroy");resolveTrapTriggers(owner,"ownDestroy")}
+    if(!onlinePlayerId)resolveTrapTriggers(owner===p?otherPlayer:p,"opponentDestroy");
+    else if(owner!==p)resolveTrapTriggers(p,"opponentDestroy");
+   }
+   const traps=[...player.facedown];
+   player.facedown=[];
+   for(const trap of traps){
+    moveToDiscard(owner,trap,"超爆発の効果による罠の破壊");
+    if(onlinePlayerId&&owner!==p)broadcastEffectDelta({target:"opponentCardCounter",cardId:trap.id,zone:"facedown"});
+   }
+   const fields=[...player.field];
+   player.field=[];
+   for(const field of fields){
+    moveToDiscard(owner,field,"超爆発の効果によるフィールド破壊");
+    if(onlinePlayerId&&owner!==p)broadcastEffectDelta({target:"opponentCardDestroy",cardId:field.id});
+   }
+  }
+  handled=true;
+  log("超爆発の効果で両プレイヤーのモンスター・罠・フィールドを全て破壊しました");
+ }
  if(/相手のモンスター全てを破壊/.test(s)){for(const target of [...opp.monsters]){opp.monsters=opp.monsters.filter(c=>c.id!==target.id);moveToDiscard(p===1?2:1,target,"効果による破壊");if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDestroy",cardId:target.id});else resolveCardTrigger(target,p===1?2:1,"destroy");handled=true}if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentDestroy")}
  for(const m of s.matchAll(/自分は\s*(\d+)枚引く/g)){drawEffectCards(p,Number(m[1]));handled=true}
  const formulaTagDraw=s.match(/自分は\s*[（(]自分の\[([^\]]+)\]の数[）)]\s*枚引く/);
