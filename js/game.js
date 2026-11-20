@@ -702,6 +702,7 @@ function applyEffectDelta(message){
  if(message.target==="opponentMonsterBottomDeck"){const x=state.players[targetPlayer],index=x.monsters.findIndex(m=>m.id===message.cardId);if(index>=0){const card=x.monsters.splice(index,1)[0];resetGrantedCardInformation(card);card.damage=0;card.modification=0;card.counters=0;card.tapped=false;x.deck.push(card);render();return}}
  if(message.target==="opponentMonsterDiscard"){const x=state.players[targetPlayer],index=x.monsters.findIndex(m=>m.id===message.cardId);if(index>=0){const card=x.monsters.splice(index,1)[0];moveToDiscard(targetPlayer,card,"効果による捨て札移動");render();return}}
  if(message.target==="opponentCardDestroy"){const x=state.players[targetPlayer];let card=null;for(const z of ["energy","field","facedown"]){const index=(x[z]||[]).findIndex(c=>c.id===message.cardId);if(index>=0){card=x[z].splice(index,1)[0];break}}if(card){moveToDiscard(targetPlayer,card,"効果による破壊");render();return}}
+ if(message.target==="opponentDiscardToDeck"){const x=state.players[targetPlayer],returned=x.discard.splice(0);x.deck.push(...returned.map(card=>{resetGrantedCardInformation(card);return card}));render();return}
  if(message.target==="opponentDisable"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.effectsDisabled=true;render();return}}
  if(message.target==="opponentAttackDamageZero"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.nextAttackDamage=0;render();return}}
  if(message.target==="opponentMonsterTap"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.tapped=true;render();return}}
@@ -1633,14 +1634,15 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
    resetGrantedCardInformation(target);targetPlayer.deck.push(target);
    handled=true;log("「"+target.name+"」をデッキの下に戻しました");
   }else if(target&&owner!==p&&onlinePlayerId){
-   log("オンライン対戦中の相手モンスターをデッキに戻す同期は未対応です。手動で処理してください");
+   broadcastEffectDelta({target:"opponentMonsterBottomDeck",cardId:target.id});
+   handled=true;log("相手の「"+target.name+"」をデッキの下に戻す処理を同期しました");
   }
  }
  if(/自分と相手の捨て札全てをデッキに戻す/.test(s)){
   own.deck.push(...own.discard.splice(0).map(card=>{resetGrantedCardInformation(card);return card;}));
   if(!onlinePlayerId){opp.deck.push(...opp.discard.splice(0).map(card=>{resetGrantedCardInformation(card);return card;}));}
-  else log("オンライン対戦中の相手の捨て札を山札に戻す同期は未対応です");
-  handled=true;log("自分の捨て札を全て山札の下に戻しました"+(onlinePlayerId?"":"（相手の捨て札も戻しました）"));
+  else if(p===1)broadcastEffectDelta({target:"opponentDiscardToDeck"});
+  handled=true;log("自分の捨て札を全て山札の下に戻しました"+(onlinePlayerId?"（相手側にも同期要求を送りました）":"（相手の捨て札も戻しました）"));
  }
  const summonHandled=resolveSummonEffects(s,p,sourceCard);if(summonHandled)handled=true;
  /* Additional broadly reusable effect patterns. */
