@@ -1143,7 +1143,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const own=state.players[p],opp=state.players[p===1?2:1];let s=String(text||"");let handled=false,revealedCardForEffect=null;
  const countNamed=(list,name)=>list.filter(c=>String(c.name||"").includes(name)).length;
  /* Effect-created Knight tokens are virtual card definitions shared by both clients. */
- const knightTokenSummon=s.match(/騎士・トークン\\s*[（(]\\s*(\\d+)\\s*\\/\\s*(\\d+)\\s*\\/\\s*([^）)]+)\\s*[）)]\\s*(\\d+)\\s*体(まで)?を出す/);
+ const knightTokenSummon=s.match(/騎士・トークン\s*[（(]\s*(\d+)\s*\/\s*(\d+)\s*\/\s*([^）)]+)\s*[）)]\s*(\d+)\s*体(まで)?を出す/);
  if(knightTokenSummon){
   const requestedMaximum=Number(knightTokenSummon[4]),availableSlots=Math.max(0,MAX.monsters-own.monsters.length);
   let summonCount=Math.min(requestedMaximum,availableSlots);
