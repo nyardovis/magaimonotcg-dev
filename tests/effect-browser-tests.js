@@ -449,6 +449,28 @@ const server=http.createServer((req,res)=>{
   const afterStrongAssault=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
   assert.equal(afterStrongAssault.players[2].zones.monsters.find(c=>c.id==="strong-assault-target")?.damage,700,"Strong Assault did not damage the selected opponent monster");
 
+  const voidEffectStart=await page.evaluate(({energyName,monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("VOID",1,"discard","void-source");api.addCard(energyName,1,"energy","void-own-energy");api.addCard(energyName,2,"energy","void-opponent-energy");api.addCard(monsterName,1,"hand","void-own-hand");api.addCard(monsterName,2,"hand","void-opponent-hand");api.addCard(monsterName,1,"discard","void-own-discard");api.addCard(monsterName,2,"discard","void-opponent-discard");api.trigger("void-source",1,"spell");return api.snapshot()},{energyName:fixtureCards.energy.name,monsterName:fixtureCards.monster.name});
+  assert.equal(voidEffectStart.pendingTarget?.kind,"voidEnergyDestroy","VOID did not request both energy targets");
+  await page.locator('.card[data-card-id="void-opponent-energy"]').click();
+  const voidAfterFirst=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(voidAfterFirst.pendingTarget?.kind,"voidEnergyDestroy","VOID did not continue to the second energy target");
+  assert.equal(voidAfterFirst.pendingTarget?.candidates.length,1,"VOID did not restrict the second selection to the other player's energy");
+  assert.equal(voidAfterFirst.pendingTarget?.candidates[0]?.id,"void-own-energy","VOID requested the wrong second energy target");
+  await page.locator('.card[data-card-id="void-own-energy"]').click();
+  const voidAfterResolution=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(voidAfterResolution.pendingTarget,null,"VOID left an energy target selection pending");
+  assert.equal(voidAfterResolution.players[1].zones.hand.every(c=>c.revealed),true,"VOID did not reveal the local hand");
+  assert.equal(voidAfterResolution.players[2].zones.hand.every(c=>c.revealed),true,"VOID did not reveal the opponent hand");
+  assert.equal(voidAfterResolution.players[1].zones.discard.length,0,"VOID did not return the local discard pile to the deck");
+  assert.equal(voidAfterResolution.players[2].zones.discard.length,0,"VOID did not return the opponent discard pile to the deck");
+  assert.equal(voidAfterResolution.players[1].zones.deck.length,3,"VOID did not shuffle all local discard cards into the deck");
+  assert.equal(voidAfterResolution.players[2].zones.deck.length,2,"VOID did not shuffle all opponent discard cards into the deck");
+
+  const remoteVoidSync=await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(monsterName,1,"hand","remote-void-hand");api.addCard(monsterName,1,"discard","remote-void-discard");api.setOnlineTestMode();api.applyEffectDeltaForTest({playerId:"remote-player",target:"opponentRevealHand"});const revealed=api.snapshot().players[1].zones.hand[0]?.revealed;api.applyEffectDeltaForTest({playerId:"remote-player",target:"opponentDiscardToDeck"});return {revealed,snapshot:api.snapshot()}},{monsterName:fixtureCards.monster.name});
+  assert.equal(remoteVoidSync.revealed,true,"remote VOID hand-reveal delta did not reveal the receiving player's own hand");
+  assert.equal(remoteVoidSync.snapshot.players[1].zones.discard.length,0,"remote VOID discard-to-deck delta did not clear the receiving player's discard");
+  assert.equal(remoteVoidSync.snapshot.players[1].zones.deck.length,1,"remote VOID discard-to-deck delta did not add cards to the receiving player's deck");
+
   const remoteKnightToken=await page.evaluate(()=>{const api=window.__ANKR_TEST__;api.reset();api.setOnlineTestMode();return api.applyPublicStateForTest("player2",{life:4000,handCount:0,deckCount:0,deckCounters:0,deckHorizontal:false,facedownCount:0,monsters:[{id:"remote-knight-token",name:"騎士・トークン",faceUp:true,revealed:false,tapped:false,counters:0,damage:0,modification:0}],energy:[],field:[],discard:[],pendingDiscard:false,gameOver:null})});
   assert.equal(remoteKnightToken.players[2].zones.monsters[0]?.name,"騎士・トークン","sanitized opponent public state lost the Knight token name");
   assert.equal(remoteKnightToken.players[2].zones.monsters[0]?.power,300,"remote client did not reconstruct the Knight token's printed power from its shared definition");
