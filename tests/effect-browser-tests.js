@@ -420,6 +420,39 @@ const server=http.createServer((req,res)=>{
   assert.equal(boardWipe.players[1].zones.field.length,0,"Super Explosion left own field in play");
   assert.equal(boardWipe.players[2].zones.field.length,0,"Super Explosion left opponent field in play");
 
+  const oneKnightToken=await page.evaluate(()=>{const api=window.__ANKR_TEST__;api.reset();api.runEffect("騎士・トークン (1/300/ヒト,騎士) 1体を出す。",1);return api.snapshot()});
+  const oneToken=oneKnightToken.players[1].zones.monsters;
+  assert.equal(oneToken.length,1,"Knight token summon did not create one monster");
+  assert.equal(oneToken[0].name,"騎士・トークン","created token has the wrong name");
+  assert.equal(oneToken[0].power,300,"created token did not use its printed 300 power");
+
+  const threeKnightTokens=await page.evaluate(()=>{const api=window.__ANKR_TEST__;api.reset();api.runEffect("騎士・トークン (1/300/ヒト,騎士) 3体を出す。",1);return api.snapshot()});
+  const threeTokens=threeKnightTokens.players[1].zones.monsters;
+  assert.equal(threeTokens.length,3,"Three Swords Will did not create three Knight tokens");
+  assert.equal(new Set(threeTokens.map(c=>c.id)).size,3,"Knight token IDs are not unique");
+  assert.equal(threeTokens.every(c=>c.power===300),true,"one or more Knight tokens have the wrong power");
+
+  const cappedKnightTokens=await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();for(let i=0;i<6;i++)api.addCard(monsterName,1,"monsters","token-cap-"+i);api.runEffect("騎士・トークン (1/300/ヒト,騎士) 3体を出す。",1);return api.snapshot()},{monsterName:fixtureCards.monster.name});
+  assert.equal(cappedKnightTokens.players[1].zones.monsters.length,7,"Knight token generation exceeded the seven-monster zone limit");
+  assert.equal(cappedKnightTokens.players[1].zones.monsters.filter(c=>c.name==="騎士・トークン").length,1,"Knight token generation did not stop at the available zone capacity");
+
+  const upToKnightTokens=await page.evaluate(()=>{const api=window.__ANKR_TEST__,originalPrompt=window.prompt;api.reset();window.prompt=()=> "4";try{api.runEffect("騎士・トークン (1/300/ヒト,騎士) 10体までを出す。",1)}finally{window.prompt=originalPrompt}return api.snapshot()});
+  assert.equal(upToKnightTokens.players[1].zones.monsters.filter(c=>c.name==="騎士・トークン").length,4,"Start of War did not honor the selected token count");
+
+  const cappedUpToKnightTokens=await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__,originalPrompt=window.prompt;api.reset();for(let i=0;i<6;i++)api.addCard(monsterName,1,"monsters","token-up-to-cap-"+i);window.prompt=()=> "1";try{api.runEffect("騎士・トークン (1/300/ヒト,騎士) 10体までを出す。",1)}finally{window.prompt=originalPrompt}return api.snapshot()},{monsterName:fixtureCards.monster.name});
+  assert.equal(cappedUpToKnightTokens.players[1].zones.monsters.length,7,"up-to token generation exceeded the monster zone limit");
+
+  const strongAssault=await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("強襲",1,"hand","strong-assault-source");api.addCard(monsterName,2,"monsters","strong-assault-target");api.setCardPower("strong-assault-target",2,1000);api.runEffect("騎士・トークン (1/300/ヒト,騎士) 1体を出す。相手のモンスター1体に700ダメージ。",1,"strong-assault-source");return api.snapshot()},{monsterName:fixtureCards.monster.name});
+  assert.equal(strongAssault.players[1].zones.monsters.some(c=>c.name==="騎士・トークン"),true,"Strong Assault did not create its Knight token before resolving its damage effect");
+  assert.equal(strongAssault.pendingTarget?.kind,"monsterDamage","Strong Assault did not request an explicit opponent monster target");
+  await page.locator('.card[data-card-id="strong-assault-target"]').click();
+  const afterStrongAssault=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(afterStrongAssault.players[2].zones.monsters.find(c=>c.id==="strong-assault-target")?.damage,700,"Strong Assault did not damage the selected opponent monster");
+
+  const remoteKnightToken=await page.evaluate(()=>{const api=window.__ANKR_TEST__;api.reset();api.setOnlineTestMode();return api.applyPublicStateForTest("player2",{life:4000,handCount:0,deckCount:0,deckCounters:0,deckHorizontal:false,facedownCount:0,monsters:[{id:"remote-knight-token",name:"騎士・トークン",faceUp:true,revealed:false,tapped:false,counters:0,damage:0,modification:0}],energy:[],field:[],discard:[],pendingDiscard:false,gameOver:null})});
+  assert.equal(remoteKnightToken.players[2].zones.monsters[0]?.name,"騎士・トークン","sanitized opponent public state lost the Knight token name");
+  assert.equal(remoteKnightToken.players[2].zones.monsters[0]?.power,300,"remote client did not reconstruct the Knight token's printed power from its shared definition");
+
   const remoteSync=await page.evaluate(({monsterName,energyName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(monsterName,1,"monsters","sync-return");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterReturnToHand",cardId:"sync-return"});api.addCard(monsterName,1,"monsters","sync-bottom");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterBottomDeck",cardId:"sync-bottom"});api.addCard(monsterName,1,"monsters","sync-discard");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterDiscard",cardId:"sync-discard"});api.addCard(monsterName,1,"monsters","sync-counter");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterCounter",cardId:"sync-counter",delta:1});api.addCard(monsterName,1,"monsters","sync-modifier");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterModifier",cardId:"sync-modifier",delta:-100});api.addCard(energyName,1,"energy","sync-energy");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentCardDestroy",cardId:"sync-energy"});api.addCard(monsterName,2,"monsters","sync-own-destroy");api.applyEffectDeltaForTest({playerId:"remote",target:"ownMonsterDestroy",cardId:"sync-own-destroy"});return api.snapshot()},{monsterName:fixtureCards.monster.name,energyName:fixtureCards.energy.name});
   assert.equal(remoteSync.players[1].zones.hand.some(c=>c.id==="sync-return"),true,"remote return-to-hand effect delta was not applied");
   assert.equal(remoteSync.players[1].zones.deck.some(c=>c.id==="sync-bottom"),true,"remote bottom-deck effect delta was not applied");

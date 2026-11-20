@@ -342,7 +342,8 @@ function createCardFace(name,orientation="portrait"){
   return face;
 }
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a;}
-function newCard(name,id){const data=cardDataByName.get(name)||null;return{id,name,faceUp:true,revealed:false,tapped:false,counters:0,damage:0,modification:0,power:Number.isFinite(data?.power)?data.power:0,cardDataId:data?.id||null};}
+const EFFECT_TOKEN_DEFINITIONS=Object.freeze({"騎士・トークン":Object.freeze({id:"effect-token-knight",name:"騎士・トークン",tags:"#モンスターカード",cost:1,power:300,types:"ヒト,騎士",effect_text:"",abilities:[],lore:""})});
+function newCard(name,id){const data=cardDataByName.get(name)||EFFECT_TOKEN_DEFINITIONS[name]||null;return{id,name,faceUp:true,revealed:false,tapped:false,counters:0,damage:0,modification:0,power:Number.isFinite(data?.power)?data.power:0,cardDataId:data?.id||null};}
 function saveLocalGameState(){
   try{
     localStorage.setItem("originalCardGameLocalStateDev",JSON.stringify({room:currentRoom||new URLSearchParams(location.search).get("room")||"",player:state.players[1],turnPlayer:state.turnPlayer,pendingDiscardPlayer:state.pendingDiscardPlayer,pendingDiscardReason:state.pendingDiscardReason,pendingDrawCount:state.pendingDrawCount,gameOver:state.gameOver,phase:state.phase,mulligan:state.mulligan}));
@@ -663,7 +664,7 @@ function completePendingDiscard(p,id){if(p!==1)return false;if(state.pendingDisc
 function processScheduledEndTurnEffects(p){const x=state.players[p];for(const owner of [1,2])for(const zone of ["monsters","energy","field"])for(const card of state.players[owner][zone])if(card.cannotAttackUntilPlayerTurnEnd===p)delete card.cannotAttackUntilPlayerTurnEnd;for(const card of [...x.monsters,...x.energy,...x.field]){if(!card.destroyAtTurnEnd)continue;card.destroyAtTurnEnd=false;for(const zone of ["monsters","energy","field"]){const i=x[zone].findIndex(c=>c.id===card.id);if(i>=0){x[zone].splice(i,1);moveToDiscard(p,card,"ターン終了時効果");if(zone==="monsters")resolveCardTrigger(card,p,"destroy");break}}}}
 function endTurn(){const localPlayer=1;if(state.turnPlayer!==localPlayer||state.pendingDiscardPlayer!==null||state.phase!=="playing")return;if(onlinePlayerId!==null&&!devLocalMode){if(!gameSocket||gameSocket.readyState!==WebSocket.OPEN)return log("オンラインサーバーに接続されていません");resolveTurnTriggers(1,"end");processScheduledEndTurnEffects(1);state.players[1].monsters.forEach(m=>{m.damage=0});render();gameSocket.send(JSON.stringify({type:"operation",action:"end_turn"}));return}const p=state.turnPlayer,x=state.players[p];resolveTurnTriggers(p,"end");processScheduledEndTurnEffects(p);x.monsters.forEach(m=>{m.damage=0});state.turnPlayer=p===1?2:1;startTurn(state.turnPlayer)}
 
-function cardDefinition(cardOrName){if(typeof cardOrName==="string")return cardDataByName.get(cardOrName)||null;const id=cardOrName?.cardDataId;if(id){const exact=cardDatabase.find(c=>c.id===id);if(exact)return exact}return cardDataByName.get(cardOrName?.name)||null}
+function cardDefinition(cardOrName){const name=typeof cardOrName==="string"?cardOrName:cardOrName?.name;if(EFFECT_TOKEN_DEFINITIONS[name])return EFFECT_TOKEN_DEFINITIONS[name];if(typeof cardOrName==="string")return cardDataByName.get(cardOrName)||null;const id=cardOrName?.cardDataId;if(id){const exact=cardDatabase.find(c=>c.id===id);if(exact)return exact}return cardDataByName.get(name)||null}
 function cardKind(card){const tag=String(cardDefinition(card)?.tags||"");if(tag.includes("#エネルギーカード"))return "energy";if(tag.includes("#フィールドカード"))return "field";if(tag.includes("#モンスターカード"))return "monster";if(tag.includes("#魔法カード"))return "spell";if(tag.includes("#罠カード"))return "trap";return "unknown"}
 function cardCost(card){const value=cardDefinition(card)?.cost;if(typeof value==="number"&&Number.isFinite(value))return Math.max(0,value);if(typeof value==="string"&&/^\+?\d+$/.test(value))return Math.max(0,Number(value.replace("+","")));return 0}
 function effectiveCardCost(card,p=1){
@@ -1141,6 +1142,36 @@ function openDeckSearchPicker(pending){
 function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const own=state.players[p],opp=state.players[p===1?2:1];let s=String(text||"");let handled=false,revealedCardForEffect=null;
  const countNamed=(list,name)=>list.filter(c=>String(c.name||"").includes(name)).length;
+ /* Effect-created Knight tokens are virtual card definitions shared by both clients. */
+ const knightTokenSummon=s.match(/騎士・トークン\s*[（(]\s*(\d+)\s*\/\s*(\d+)\s*\/\s*([^）)]+)\s*[）)]\s*(\d+)\s*体(まで)?を出す/);
+ if(knightTokenSummon){
+  const requestedMaximum=Number(knightTokenSummon[4]),availableSlots=Math.max(0,MAX.monsters-own.monsters.length);
+  let summonCount=Math.min(requestedMaximum,availableSlots);
+  if(knightTokenSummon[5]&&availableSlots>0){
+   const answer=window.prompt("騎士・トークンを何体出しますか？（0～"+summonCount+"体）",String(summonCount));
+   if(answer===null){handled=true;log("騎士・トークンの生成数選択をキャンセルしました");return}
+   const selectedCount=String(answer).trim()===""?NaN:Number(String(answer).trim());
+   if(!Number.isInteger(selectedCount)||selectedCount<0||selectedCount>summonCount){handled=true;log("騎士・トークンの生成数は0～"+summonCount+"の整数で指定してください");return}
+   summonCount=selectedCount;
+  }
+  for(let i=0;i<summonCount;i++){
+   const tokenId="effect-token-"+p+"-"+(window.crypto?.randomUUID?.()||Math.random().toString(36).slice(2));
+   const token=newCard("騎士・トークン",tokenId);
+   token.power=Number(knightTokenSummon[2]);
+   token.damage=0;token.modification=0;token.counters=0;token.tapped=false;
+   token.summonedThisTurn=true;token.canAttackOnSummon=false;
+   own.monsters.push(token);
+   resolveCardTrigger(token,p,"enter");
+   resolveTrapTriggers(p,"ownEnter",token);
+   if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentEnter",token);
+  }
+  if(summonCount>0)log("騎士・トークンを"+summonCount+"体、効果で場に出しました");
+  else log("騎士・トークンは場に出しませんでした");
+  if(availableSlots===0)log("モンスターゾーンが満杯のため、騎士・トークンを出せませんでした");
+  else if(!knightTokenSummon[5]&&summonCount<requestedMaximum)log("モンスターゾーンの上限により、騎士・トークンを"+summonCount+"体だけ出しました");
+  recalculatePlayerPassives();
+  handled=true;
+ }
  const mossTrapSearch=s.match(/自分のデッキから罠(\d+)枚までを秘密裏に伏せる/);
  if(mossTrapSearch){
   const max=Number(mossTrapSearch[1]),candidates=own.deck.filter(card=>cardKind(card)==="trap");
@@ -2037,6 +2068,7 @@ function exposeAnkrEffectTestApi(){
   effectiveCost(cardId,owner=1){const card=(state.players[owner]?.hand||[]).find(c=>c.id===cardId);if(!card)throw new Error("test hand card not found: "+cardId);return effectiveCardCost(card,owner)},
   setOnlineTestMode(){onlinePlayerId="player1";devLocalMode=false;hasReceivedOpponentPublicState=true;return true},
   applyOpponentMonsterForTest(name,id){const x=state.players[2],card=newCard(name,id||"online-test-opponent-monster");const publicState={life:x.life,pendingDiscard:false,handCount:x.hand.length,handIds:x.hand.map(c=>c.id),deckCount:x.deck.length,deckCounters:x.deckCounters,deckHorizontal:x.deckHorizontal,monsters:[...x.monsters,card],energy:x.energy,field:x.field,discard:x.discard,facedownCount:x.facedown.length,facedownPublic:x.facedown.filter(c=>c.faceUp).map(c=>({id:c.id,name:c.name}))};applyPublicState("player2",publicState);return this.snapshot()},
+  applyPublicStateForTest(playerId,publicState){applyPublicState(playerId,publicState);return this.snapshot()},
   activatedAbilities(name){return CardEffectEngine.activatedAbilities(cardDefinition(name)?.effect_text||"").map(a=>({raw:a.raw,body:a.body,costKind:a.costKind,costValue:a.costValue}))},
   chooseTarget(cardId){resolvePendingEffectTarget(cardId);return this.snapshot()},
   applyEffectDeltaForTest(message){applyEffectDelta(message);return this.snapshot()},
@@ -2045,7 +2077,7 @@ function exposeAnkrEffectTestApi(){
    const players={};
    for(const p of [1,2]){
     const x=state.players[p],zones={};
-    for(const z of ["hand","deck","monsters","energy","field","discard","facedown"])zones[z]=(x[z]||[]).map(c=>({id:c.id,name:c.name,tapped:!!c.tapped,damage:Number(c.damage)||0,modification:Number(c.modification)||0,counters:Number(c.counters)||0,power:Number(c.power)||0,effectsDisabled:!!c.effectsDisabled,cannotBeAttacked:!!c.cannotBeAttacked,cannotBeAttackedWhileUntapped:!!c.cannotBeAttackedWhileUntapped,cannotAttack:!!c.cannotAttack,attacksPerTurn:Number(c.attacksPerTurn)||0,damageReduction:Number(c.damageReduction)||0}));
+    for(const z of ["hand","deck","monsters","energy","field","discard","facedown"])zones[z]=(x[z]||[]).map(c=>({id:c.id,name:c.name,tapped:!!c.tapped,damage:Number(c.damage)||0,modification:Number(c.modification)||0,counters:Number(c.counters)||0,power:attackPower(c),effectsDisabled:!!c.effectsDisabled,cannotBeAttacked:!!c.cannotBeAttacked,cannotBeAttackedWhileUntapped:!!c.cannotBeAttackedWhileUntapped,cannotAttack:!!c.cannotAttack,attacksPerTurn:Number(c.attacksPerTurn)||0,damageReduction:Number(c.damageReduction)||0}));
     players[p]={life:x.life,energyPool:x.energyPool,zones};
    }
    return {players,playerPassives:{1:{opponentMonstersCannotAttackPlayer:!!state.players[1].opponentMonstersCannotAttackPlayer,disableOpponentTraps:!!state.players[1].disableOpponentTraps,disableOpponentEnterEffects:!!state.players[1].disableOpponentEnterEffects,damageReduction:Number(state.players[1].passiveDamageReduction)||0},2:{opponentMonstersCannotAttackPlayer:!!state.players[2].opponentMonstersCannotAttackPlayer,disableOpponentTraps:!!state.players[2].disableOpponentTraps,disableOpponentEnterEffects:!!state.players[2].disableOpponentEnterEffects,damageReduction:Number(state.players[2].passiveDamageReduction)||0}},pendingTarget:pendingEffectTarget?{kind:pendingEffectTarget.kind,candidates:pendingEffectTarget.candidates,destination:pendingEffectTarget.destination,maxCount:pendingEffectTarget.maxCount}:null,pickerOpen:!!document.querySelector("#effectDeckPicker"),pendingDiscardPlayer:state.pendingDiscardPlayer,gameOver:state.gameOver};
