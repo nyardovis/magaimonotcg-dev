@@ -693,6 +693,8 @@ function applyEffectDelta(message){
   const delta=Number(message.delta)||0;state.players[targetPlayer].energyPool=Math.max(0,(Number(state.players[targetPlayer].energyPool)||0)+delta);render();return;
  }
  if(message.target==="ownLife"||message.target==="opponentLife"){const delta=Number(message.delta)||0;state.players[targetPlayer].life+=delta;if(targetPlayer===1&&delta<0)resolveTrapTriggers(1,"opponentDamagedMe");if(targetPlayer===2&&delta>0)resolveTrapTriggers(1,"opponentHeal");checkLifeWinner(targetPlayer);render();return}
+ if(message.target==="opponentRevealHand"){if(!actorIsLocal){state.players[targetPlayer].hand.forEach(card=>{card.revealed=true;card.faceUp=true});render()}return}
+ if(message.target==="opponentDiscardToDeck"){if(!actorIsLocal){const player=state.players[targetPlayer],returned=player.discard.splice(0).map(card=>{resetGrantedCardInformation(card);return card});player.deck=shuffle([...player.deck,...returned]);render()}return}
  if(message.target==="ownLifeSet"){const target=actorIsLocal?1:2;if(Number.isFinite(message.value))state.players[target].life=message.value;render();return}
  if(message.target==="ownMonsterDamage"||message.target==="opponentMonsterDamage"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.damage=(c.damage||0)+(Number(message.delta)||0);checkMonsterDestruction(targetPlayer);render();return}}
  if(message.target==="opponentCardCounter"){const x=state.players[targetPlayer];let card=null;for(const z of ["monsters","energy","field","facedown","hand","discard"]){const i=(x[z]||[]).findIndex(c=>c.id===message.cardId);if(i>=0){card=x[z].splice(i,1)[0];break}}if(card)moveToDiscard(targetPlayer,card,"効果を打ち消された");render();return}
@@ -786,7 +788,7 @@ function resolveCardTrigger(card,p,trigger){
   const enterSuppressed=trigger==="enter"&&state.players[p===1?2:1].disableOpponentEnterEffects;
   if(enterSuppressed)debugLog("相手の効果により場に出た時効果を無効化: "+card.name,"effect","skipped",{player:p,card:card.name});
   else if(!card.effectsDisabled){
-    if(trigger==="spell"&&data.name==="転換"){resolveEffectText(text,p,card);return}
+    if(trigger==="spell"&&(data.name==="転換"||data.name==="VOID")){resolveEffectText(text,p,card);return}
     const abilities=trigger==="spell"?CardEffectEngine.immediateAbilities(text):CardEffectEngine.forTrigger(text,trigger);
     if(abilities.length===0&&text)debugLog("カード効果の発動条件に一致なし: "+card.name+" / "+trigger,"effect","skipped",{player:p,card:card.name,trigger});
     abilities.forEach(ability=>{debugLog("カード効果を発動: "+card.name+" / "+trigger,"effect","info",{player:p,card:card.name,trigger,ability:ability.body});resolveEffectText(ability.body,p,card)});
@@ -920,6 +922,20 @@ function resolvePendingEffectTarget(cardId){
  if(!target||!candidate)return;
  if(owner!==1&&target.cannotBeChosenByOpponent)return;
  pendingEffectTarget=null;
+ if(pending.kind==="voidEnergyDestroy"){
+  const list=state.players[owner].energy,index=list.findIndex(card=>card.id===cardId);if(index<0)return;
+  const destroyed=list.splice(index,1)[0];moveToDiscard(owner,destroyed,"VOIDの効果によるエネルギー破壊");
+  if(owner!==pending.player&&onlinePlayerId)broadcastEffectDelta({target:"opponentCardDestroy",cardId:destroyed.id});
+  const selectedOwners=[...(pending.selectedOwners||[]),owner];
+  const nextOwner=[pending.player,pending.player===1?2:1].find(player=>!selectedOwners.includes(player));
+  if(nextOwner!==undefined){
+   const candidates=state.players[nextOwner].energy.filter(card=>nextOwner===pending.player||!card.cannotBeChosenByOpponent).map(card=>({id:card.id,owner:nextOwner}));
+   if(candidates.length){pendingEffectTarget={...pending,selectedOwners,players:[nextOwner],candidates};log(state.players[nextOwner].name+"のエネルギーをもう1枚選択してください");render();return}
+   log(state.players[nextOwner].name+"に選択できるエネルギーがありません");
+  }
+  if(pending.remainingText)resolveEffectText(pending.remainingText,pending.player,pending.sourceCard);
+  render();return;
+ }
  if(pending.kind==="tenkanEnergyCost"){
   const own=state.players[pending.player],index=own.energy.findIndex(card=>card.id===cardId);if(index<0)return;
   const destroyed=own.energy.splice(index,1)[0];moveToDiscard(pending.player,destroyed,"転換の効果");
@@ -1142,6 +1158,18 @@ function openDeckSearchPicker(pending){
 function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const own=state.players[p],opp=state.players[p===1?2:1];let s=String(text||"");let handled=false,revealedCardForEffect=null;
  const countNamed=(list,name)=>list.filter(c=>String(c.name||"").includes(name)).length;
+ const voidEnergyClause=s.match(/自分と相手のエネルギー1枚ずつを破壊する/);
+ if(voidEnergyClause){
+  const opponentOwner=p===1?2:1,opponentCandidates=opp.energy.filter(card=>!card.cannotBeChosenByOpponent);
+  if(effectCannotChooseZone(p,"energy")||!own.energy.length||!opponentCandidates.length){
+   handled=true;log("VOIDのエネルギー破壊は、自分と相手の両方に選択可能なエネルギーがある場合のみ行えます");
+   s=s.replace(voidEnergyClause[0],"");
+  }else{
+   const remainingText=s.replace(voidEnergyClause[0],"").replace(/^[\\s。、]+/,"").trim();
+   pendingEffectTarget={kind:"voidEnergyDestroy",player:p,players:[p,opponentOwner],zone:"energy",sourceCard,selectedOwners:[],remainingText,candidates:[...own.energy.map(card=>({id:card.id,owner:p})),...opponentCandidates.map(card=>({id:card.id,owner:opponentOwner}))]};
+   log("VOIDの効果：自分と相手のエネルギーを1枚ずつ選択してください");render();return;
+  }
+ }
  /* Effect-created Knight tokens are virtual card definitions shared by both clients. */
  const knightTokenSummon=s.match(/騎士・トークン\s*[（(]\s*(\d+)\s*\/\s*(\d+)\s*\/\s*([^）)]+)\s*[）)]\s*(\d+)\s*体(まで)?を出す/);
  if(knightTokenSummon){
@@ -1491,8 +1519,17 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  if(eventPowerDiff&&sourceCard&&eventCard){const amount=Math.max(0,attackPower(sourceCard)-attackPower(eventCard));opp.life-=amount;broadcastEffectDelta({target:"opponentLife",delta:-amount});checkLifeWinner(p===1?2:1);handled=true}
  const allOwnTagCounters=s.match(/自分の\[([^\]]+)\]全てにカウンター(\d+)個を乗せる/);
  if(allOwnTagCounters){own.monsters.filter(m=>String(cardDefinition(m)?.types||"").includes(allOwnTagCounters[1])).forEach(m=>m.counters=(Number(m.counters)||0)+Number(allOwnTagCounters[2]));handled=true}
- const opponentHandReveal=/相手の手札全てを公開する/.test(s);
- if(opponentHandReveal){if(!onlinePlayerId){opp.hand.forEach(c=>{c.revealed=true;c.faceUp=true})}else broadcastEffectDelta({target:"opponentRevealHand"});handled=true;log(opp.name+"の手札を公開します")}
+ const bothHandsReveal=/自分と相手の手札全てを公開する/.test(s);
+ if(bothHandsReveal){
+  own.hand.forEach(card=>{card.revealed=true;card.faceUp=true});
+  if(!onlinePlayerId)opp.hand.forEach(card=>{card.revealed=true;card.faceUp=true});
+  else broadcastEffectDelta({target:"opponentRevealHand"});
+  handled=true;log("自分と相手の手札を公開しました");
+ }else{
+  const opponentHandReveal=/相手の手札全てを公開する/.test(s);
+  if(opponentHandReveal){if(!onlinePlayerId)opp.hand.forEach(c=>{c.revealed=true;c.faceUp=true});else broadcastEffectDelta({target:"opponentRevealHand"});handled=true;log(opp.name+"の手札を公開します")}
+ }
+ if(/自分の相手の手札1枚ずつを捨てる/.test(s))debugLog("VOIDの手札破棄文は対象が不明瞭なため未処理です: 自分の相手の手札1枚ずつを捨てる","effect","unimplemented",{card:"VOID"});
  /* 「誤射」: choose one monster to spare, then destroy every other monster on both sides. */
  if(/モンスターを1体選び、選ばれなかったモンスターをすべて破壊する/.test(s)){
   const all=[...own.monsters.map(card=>({card,owner:p})),...opp.monsters.map(card=>({card,owner:p===1?2:1}))];
@@ -1637,10 +1674,21 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   }
  }
  if(/自分と相手の捨て札全てをデッキに戻す/.test(s)){
-  own.deck.push(...own.discard.splice(0).map(card=>{resetGrantedCardInformation(card);return card;}));
-  if(!onlinePlayerId){opp.deck.push(...opp.discard.splice(0).map(card=>{resetGrantedCardInformation(card);return card;}));}
-  else log("オンライン対戦中の相手の捨て札を山札に戻す同期は未対応です");
-  handled=true;log("自分の捨て札を全て山札の下に戻しました"+(onlinePlayerId?"":"（相手の捨て札も戻しました）"));
+  const ownReturned=own.discard.splice(0).map(card=>{resetGrantedCardInformation(card);return card});
+  own.deck=shuffle([...own.deck,...ownReturned]);
+  if(!onlinePlayerId){
+   const opponentReturned=opp.discard.splice(0).map(card=>{resetGrantedCardInformation(card);return card});
+   opp.deck=shuffle([...opp.deck,...opponentReturned]);
+  }else{
+   const returnedCount=opp.discard.length;
+   opp.discard=[];
+   if(returnedCount){
+    const placeholders=Array.from({length:returnedCount},(_,i)=>newCard("","void-opponent-deck-"+(window.crypto?.randomUUID?.()||Math.random().toString(36).slice(2))+"-"+i));
+    opp.deck=shuffle([...opp.deck,...placeholders]);
+    broadcastEffectDelta({target:"opponentDiscardToDeck"});
+   }
+  }
+  handled=true;log("自分と相手の捨て札をデッキに戻してシャッフルしました");
  }
  const summonHandled=resolveSummonEffects(s,p,sourceCard);if(summonHandled)handled=true;
  /* Additional broadly reusable effect patterns. */
@@ -2077,7 +2125,7 @@ function exposeAnkrEffectTestApi(){
    const players={};
    for(const p of [1,2]){
     const x=state.players[p],zones={};
-    for(const z of ["hand","deck","monsters","energy","field","discard","facedown"])zones[z]=(x[z]||[]).map(c=>({id:c.id,name:c.name,tapped:!!c.tapped,damage:Number(c.damage)||0,modification:Number(c.modification)||0,counters:Number(c.counters)||0,power:attackPower(c),effectsDisabled:!!c.effectsDisabled,cannotBeAttacked:!!c.cannotBeAttacked,cannotBeAttackedWhileUntapped:!!c.cannotBeAttackedWhileUntapped,cannotAttack:!!c.cannotAttack,attacksPerTurn:Number(c.attacksPerTurn)||0,damageReduction:Number(c.damageReduction)||0}));
+    for(const z of ["hand","deck","monsters","energy","field","discard","facedown"])zones[z]=(x[z]||[]).map(c=>({id:c.id,name:c.name,revealed:!!c.revealed,tapped:!!c.tapped,damage:Number(c.damage)||0,modification:Number(c.modification)||0,counters:Number(c.counters)||0,power:attackPower(c),effectsDisabled:!!c.effectsDisabled,cannotBeAttacked:!!c.cannotBeAttacked,cannotBeAttackedWhileUntapped:!!c.cannotBeAttackedWhileUntapped,cannotAttack:!!c.cannotAttack,attacksPerTurn:Number(c.attacksPerTurn)||0,damageReduction:Number(c.damageReduction)||0}));
     players[p]={life:x.life,energyPool:x.energyPool,zones};
    }
    return {players,playerPassives:{1:{opponentMonstersCannotAttackPlayer:!!state.players[1].opponentMonstersCannotAttackPlayer,disableOpponentTraps:!!state.players[1].disableOpponentTraps,disableOpponentEnterEffects:!!state.players[1].disableOpponentEnterEffects,damageReduction:Number(state.players[1].passiveDamageReduction)||0},2:{opponentMonstersCannotAttackPlayer:!!state.players[2].opponentMonstersCannotAttackPlayer,disableOpponentTraps:!!state.players[2].disableOpponentTraps,disableOpponentEnterEffects:!!state.players[2].disableOpponentEnterEffects,damageReduction:Number(state.players[2].passiveDamageReduction)||0}},pendingTarget:pendingEffectTarget?{kind:pendingEffectTarget.kind,candidates:pendingEffectTarget.candidates,destination:pendingEffectTarget.destination,maxCount:pendingEffectTarget.maxCount}:null,pickerOpen:!!document.querySelector("#effectDeckPicker"),pendingDiscardPlayer:state.pendingDiscardPlayer,gameOver:state.gameOver};
