@@ -961,6 +961,21 @@ function resolvePendingEffectTarget(cardId){
  }else if(pending.kind==="bottomDeck"){
   const list=state.players[owner].monsters,index=list.findIndex(card=>card.id===target.id);
   if(index>=0){const returned=list.splice(index,1)[0];resetGrantedCardInformation(returned);returned.damage=0;returned.modification=0;returned.counters=0;returned.tapped=false;state.players[owner].deck.push(returned);if(owner!==pending.player&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterBottomDeck",cardId:returned.id});log("「"+returned.name+"」を山札の下に戻しました")}
+ }else if(pending.kind==="bothPlayersEnergyDestroy"){
+  const list=state.players[owner].energy,index=list.findIndex(card=>card.id===target.id);
+  if(index>=0){
+   const destroyed=list.splice(index,1)[0];
+   moveToDiscard(owner,destroyed,"VOIDの効果による破壊");
+   if(owner!==pending.player&&onlinePlayerId)broadcastEffectDelta({target:"opponentCardDestroy",cardId:destroyed.id});
+   log((owner===pending.player?"自分":"相手")+"のエネルギー「"+destroyed.name+"」を破壊しました");
+  }
+  const remainingOwners=pending.remainingOwners||[];
+  const nextOwner=remainingOwners.find(nextOwner=>state.players[nextOwner].energy.some(card=>nextOwner===pending.player||!card.cannotBeChosenByOpponent));
+  if(nextOwner!==undefined){
+   const candidates=state.players[nextOwner].energy.filter(card=>nextOwner===pending.player||!card.cannotBeChosenByOpponent).map(card=>({id:card.id,owner:nextOwner}));
+   pendingEffectTarget={...pending,remainingOwners:remainingOwners.filter(owner=>owner!==nextOwner),candidates};
+   log("破壊する"+(nextOwner===pending.player?"自分":"相手")+"のエネルギーを盤面からクリックしてください");
+  }else if(remainingOwners.length)log("残りのプレイヤーには破壊できるエネルギーがありません");
  }else if(pending.kind==="destroyCard"){
   const list=state.players[owner][pending.zone||"energy"],index=list.findIndex(card=>card.id===target.id);
   if(index>=0){const destroyed=list.splice(index,1)[0];moveToDiscard(owner,destroyed,"効果による破壊");if(owner!==pending.player&&onlinePlayerId)broadcastEffectDelta({target:"opponentCardDestroy",cardId:destroyed.id});log("「"+destroyed.name+"」を破壊しました")}
@@ -1454,6 +1469,23 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   const candidates=effectCannotChooseZone(p,"monsters")?[]:owners.flatMap(owner=>state.players[owner].monsters.filter(mon=>owner===p||!mon.cannotBeChosenByOpponent).map(mon=>({id:mon.id,owner})));
   if(candidates.length){pendingEffectTarget={kind:"bottomDeck",player:p,players:owners,zone:"monsters",sourceCard,candidates};log("山札の下に戻すモンスターを盤面からクリックしてください");render()}
   else log("山札の下に戻せるモンスターがいません");
+  handled=true;
+ }
+ const bothPlayersEnergyDestroy=/^自分と相手のエネルギー1枚ずつを破壊する/.test(s);
+ if(bothPlayersEnergyDestroy){
+  if(effectCannotChooseZone(p,"energy"))log("エネルギーゾーンは効果の対象に選べないため、破壊できません");
+  else{
+   const other=p===1?2:1,owners=[p,other];
+   const availableOwners=owners.filter(owner=>state.players[owner].energy.some(card=>owner===p||!card.cannotBeChosenByOpponent));
+   for(const owner of owners.filter(owner=>!availableOwners.includes(owner)))log((owner===p?"自分":"相手")+"のエネルギーに破壊できる対象がありません");
+   if(availableOwners.length){
+    const firstOwner=availableOwners.shift();
+    const candidates=state.players[firstOwner].energy.filter(card=>firstOwner===p||!card.cannotBeChosenByOpponent).map(card=>({id:card.id,owner:firstOwner}));
+    pendingEffectTarget={kind:"bothPlayersEnergyDestroy",player:p,zone:"energy",remainingOwners:availableOwners,candidates};
+    log("破壊する"+(firstOwner===p?"自分":"相手")+"のエネルギーを盤面からクリックしてください");
+    render();
+   }else log("破壊できるエネルギーがありません");
+  }
   handled=true;
  }
  const opponentEnergyDestroy=/^相手のエネルギー1枚を破壊する/.test(s);
