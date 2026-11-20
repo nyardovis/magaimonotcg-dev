@@ -420,6 +420,19 @@ const server=http.createServer((req,res)=>{
   assert.equal(boardWipe.players[1].zones.field.length,0,"Super Explosion left own field in play");
   assert.equal(boardWipe.players[2].zones.field.length,0,"Super Explosion left opponent field in play");
 
+  await page.evaluate(()=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("ハナバチ",1,"discard","grave-power-100-a");api.addCard("テントウムシ",1,"discard","grave-power-100-b");api.addCard("兵隊アリ",1,"discard","grave-power-200");api.runEffect("自分の捨て札からパワー100の[虫]3体までを出す。",1)});
+  assert.equal(await page.locator("#effectDeckPicker").isVisible().catch(()=>false),true,"Exact-power graveyard summon did not open a player selection picker");
+  assert.equal(await page.locator('#effectDeckPicker button[data-card-id="grave-power-100-a"]').count(),1,"Exact-power graveyard summon omitted a matching 100-power Insect");
+  assert.equal(await page.locator('#effectDeckPicker button[data-card-id="grave-power-100-b"]').count(),1,"Exact-power graveyard summon omitted a second matching 100-power Insect");
+  assert.equal(await page.locator('#effectDeckPicker button[data-card-id="grave-power-200"]').count(),0,"Exact-power graveyard summon incorrectly offered a 200-power Insect");
+  await page.locator('#effectDeckPicker button[data-card-id="grave-power-100-a"]').click();
+  await page.locator('#effectDeckPicker button[data-card-id="grave-power-100-b"]').click();
+  await page.locator("#effectDeckPicker button").filter({hasText:"選択したカードを場に出す"}).click();
+  const exactPowerGraveSummon=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(exactPowerGraveSummon.players[1].zones.monsters.some(c=>c.id==="grave-power-100-a"),true,"Exact-power graveyard summon did not move the first selected Insect to the field");
+  assert.equal(exactPowerGraveSummon.players[1].zones.monsters.some(c=>c.id==="grave-power-100-b"),true,"Exact-power graveyard summon did not move the second selected Insect to the field");
+  assert.equal(exactPowerGraveSummon.players[1].zones.discard.some(c=>c.id==="grave-power-200"),true,"Exact-power graveyard summon moved a non-matching Insect out of discard");
+
   const oneKnightToken=await page.evaluate(()=>{const api=window.__ANKR_TEST__;api.reset();api.runEffect("騎士・トークン (1/300/ヒト,騎士) 1体を出す。",1);return api.snapshot()});
   const oneToken=oneKnightToken.players[1].zones.monsters;
   assert.equal(oneToken.length,1,"Knight token summon did not create one monster");
