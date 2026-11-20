@@ -47,6 +47,18 @@ async function main(){
     assert.deepEqual(new Set([firstJoined.playerId,secondJoined.playerId]),new Set(["player1","player2"]));
     assert.equal(firstJoined.turnPlayer,secondJoined.turnPlayer,"both clients received different active-turn owners");
 
+    const knightTokenStateAtOpponent=second.waitFor(message=>message.type==="public_state"&&message.playerId===firstJoined.playerId&&Array.isArray(message.state?.monsters)&&message.state.monsters.some(card=>card.id==="ci-knight-token"),"Knight token public-state relay");
+    first.ws.send(operation({action:"sync_public_state",state:{
+      life:4000,handCount:0,deckCount:0,deckCounters:0,deckHorizontal:false,facedownCount:0,
+      revealedHand:[],facedownPublic:[],
+      monsters:[{id:"ci-knight-token",name:"騎士・トークン",power:999,faceUp:true}],
+      energy:[],field:[],discard:[],pendingDiscard:false,gameOver:null
+    }}));
+    const relayedKnightState=await knightTokenStateAtOpponent;
+    const relayedKnight=relayedKnightState.state.monsters.find(card=>card.id==="ci-knight-token");
+    assert.equal(relayedKnight?.name,"騎士・トークン","Worker did not relay the Knight token's public name");
+    assert.equal("power" in relayedKnight,false,"Worker relayed untrusted printed power instead of leaving card-definition reconstruction to the client");
+
     const player1Client=firstJoined.playerId==="player1"?first:second;
     const player2Client=firstJoined.playerId==="player2"?first:second;
     const firstAttacker=firstJoined.turnPlayer==="player1"?player1Client:player2Client;
