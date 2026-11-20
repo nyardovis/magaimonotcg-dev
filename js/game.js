@@ -973,7 +973,7 @@ function resolvePendingEffectTarget(cardId){
   const nextOwner=remainingOwners.find(nextOwner=>state.players[nextOwner].energy.some(card=>nextOwner===pending.player||!card.cannotBeChosenByOpponent));
   if(nextOwner!==undefined){
    const candidates=state.players[nextOwner].energy.filter(card=>nextOwner===pending.player||!card.cannotBeChosenByOpponent).map(card=>({id:card.id,owner:nextOwner}));
-   pendingEffectTarget={...pending,remainingOwners:remainingOwners.filter(owner=>owner!==nextOwner),candidates};
+   pendingEffectTarget={...pending,players:[nextOwner],remainingOwners:remainingOwners.filter(owner=>owner!==nextOwner),candidates};
    log("破壊する"+(nextOwner===pending.player?"自分":"相手")+"のエネルギーを盤面からクリックしてください");
   }else if(remainingOwners.length)log("残りのプレイヤーには破壊できるエネルギーがありません");
  }else if(pending.kind==="destroyCard"){
@@ -1481,7 +1481,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
    if(availableOwners.length){
     const firstOwner=availableOwners.shift();
     const candidates=state.players[firstOwner].energy.filter(card=>firstOwner===p||!card.cannotBeChosenByOpponent).map(card=>({id:card.id,owner:firstOwner}));
-    pendingEffectTarget={kind:"bothPlayersEnergyDestroy",player:p,zone:"energy",remainingOwners:availableOwners,candidates};
+    pendingEffectTarget={kind:"bothPlayersEnergyDestroy",player:p,players:[firstOwner],zone:"energy",remainingOwners:availableOwners,candidates};
     log("破壊する"+(firstOwner===p?"自分":"相手")+"のエネルギーを盤面からクリックしてください");
     render();
    }else log("破壊できるエネルギーがありません");
