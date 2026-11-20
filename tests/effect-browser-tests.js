@@ -148,6 +148,13 @@ const server=http.createServer((req,res)=>{
   assert.equal(iceWall.opponentHand,1,"Ice Wall did not resolve its draw clause");
   assert.equal(iceWall.trapDiscarded,true,"Ice Wall did not move to discard after activation");
 
+  const blueFlowerAbility=await page.evaluate(({trapName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("碧い花",1,"monsters","blue-flower-activated");api.addCard(trapName,1,"facedown","blue-flower-activation-trap");api.setEnergyPool(1,2);return api.activate("blue-flower-activated","monsters",0)},{trapName:fixtureCards.trap.name});
+  assert.equal(blueFlowerAbility.players[1].life,4700,"Blue Flower's activated 700-heal ability did not resolve");
+  assert.equal(blueFlowerAbility.players[1].energyPool,0,"Blue Flower's activated ability did not pay its two-energy cost");
+  const blueFlowerWithoutTrap=await page.evaluate(()=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("碧い花",1,"monsters","blue-flower-no-trap");api.setEnergyPool(1,2);return api.activate("blue-flower-no-trap","monsters",0)});
+  assert.equal(blueFlowerWithoutTrap.players[1].life,4000,"Blue Flower activated without its required set trap");
+  assert.equal(blueFlowerWithoutTrap.players[1].energyPool,2,"Blue Flower paid its cost when its trap condition was not met");
+
   const advanced=await page.evaluate(({energyName,monsterName,trapName,knightName,highPowerMonsterName,highPower})=>{
    const api=window.__ANKR_TEST__;
    api.reset();
@@ -297,6 +304,28 @@ const server=http.createServer((req,res)=>{
   assert.equal(advanced.captainPending,"formulaMonsterDamage","Kingdom Commander did not request a board target for its damage formula");
 
 
+  await page.evaluate(({knightName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("部隊指揮官",1,"monsters","commander-buff-source");api.addCard(knightName,1,"monsters","commander-buff-target");api.trigger("commander-buff-source",1,"enter");return api.snapshot()},{knightName:(cardsData.cards.find(c=>String(c.tags||"").includes("#モンスターカード")&&String(c.types||"").split(/[,、]/).includes("騎士")&&Number(c.cost)<=2&&!String(c.effect_text||"").trim())||fixtureCards.monster).name});
+  assert.equal((await page.evaluate(()=>window.__ANKR_TEST__.snapshot())).pendingTarget?.kind,"taggedMonsterBuff","Field Commander did not enter board-click target selection");
+  await page.locator('.card[data-card-id="commander-buff-target"]').click();
+  const commanderBuffed=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(commanderBuffed.players[1].zones.monsters.find(c=>c.id==="commander-buff-target")?.modification,300,"Field Commander did not apply +300 to the selected Knight");
+
+  await page.evaluate(({knightName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("王国の騎士団長",1,"monsters","kingdom-summon-source");api.addCard(knightName,1,"deck","kingdom-summon-a");api.addCard(knightName,1,"deck","kingdom-summon-b");api.trigger("kingdom-summon-source",1,"enter");return api.snapshot()},{knightName:(cardsData.cards.find(c=>String(c.tags||"").includes("#モンスターカード")&&String(c.types||"").split(/[,、]/).includes("騎士")&&Number(c.cost)<=2&&!String(c.effect_text||"").trim())||fixtureCards.monster).name});
+  assert.equal(await page.locator("#effectDeckPicker").isVisible().catch(()=>false),true,"Kingdom Commander did not open a player-selected deck summon picker");
+  assert.equal(await page.locator('#effectDeckPicker button[data-card-id="kingdom-summon-a"]').count(),1,"Kingdom Commander picker omitted the first eligible Knight");
+  await page.locator('#effectDeckPicker button[data-card-id="kingdom-summon-a"]').click();
+  await page.locator('#effectDeckPicker button[data-card-id="kingdom-summon-b"]').click();
+  await page.locator("#effectDeckPicker button").filter({hasText:"選択したカードを場に出す"}).click();
+  const kingdomSummoned=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(kingdomSummoned.players[1].zones.monsters.some(c=>c.id==="kingdom-summon-a"),true,"Kingdom Commander did not summon the first selected Knight");
+  assert.equal(kingdomSummoned.players[1].zones.monsters.some(c=>c.id==="kingdom-summon-b"),true,"Kingdom Commander did not summon the second selected Knight");
+
+  await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("王国の騎士団長",1,"monsters","kingdom-damage-source");api.addCard(monsterName,1,"monsters","kingdom-damage-own-count");api.addCard(monsterName,2,"monsters","kingdom-damage-target");api.setCardPower("kingdom-damage-target",2,2000);api.setEnergyPool(1,4);return api.activate("kingdom-damage-source","monsters",0)},{monsterName:fixtureCards.monster.name});
+  assert.equal((await page.evaluate(()=>window.__ANKR_TEST__.snapshot())).pendingTarget?.kind,"formulaMonsterDamage","Kingdom Commander did not request its formula damage target");
+  await page.locator('.card[data-card-id="kingdom-damage-target"]').click();
+  const kingdomDamage=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(kingdomDamage.players[2].zones.monsters.find(c=>c.id==="kingdom-damage-target")?.damage,600,"Kingdom Commander did not apply damage based on the own monster count");
+
   await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("信じる心",1,"monsters","belief-source");api.addCard(monsterName,1,"deck","belief-choice");api.runEffect("自分のデッキからカード1枚までを手札に加える。",1,"belief-source")},{monsterName:fixtureCards.monster.name});
   await page.locator('#effectDeckPicker button[data-card-id="belief-choice"]').click();
   await page.locator("#effectDeckPicker button").filter({hasText:"選択したカードを手札に加える"}).click();
@@ -405,6 +434,22 @@ const server=http.createServer((req,res)=>{
   await page.locator('.card[data-card-id="destroy-opponent-energy"]').click();
   let afterEnergyDestroy=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
   assert.equal(afterEnergyDestroy.players[2].zones.discard.some(c=>c.id==="destroy-opponent-energy"),true,"opponent energy destruction did not move the selected energy to discard");
+
+  const voidEnergyStart=await page.evaluate(({energyName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(energyName,1,"energy","void-own-energy-a");api.addCard(energyName,1,"energy","void-own-energy-b");api.addCard(energyName,2,"energy","void-opponent-energy-a");api.addCard(energyName,2,"energy","void-opponent-energy-b");return api.runEffect("自分と相手のエネルギー1枚ずつを破壊する。",1)},{energyName:fixtureCards.energy.name});
+  assert.equal(voidEnergyStart.pendingTarget?.kind,"bothPlayersEnergyDestroy","VOID did not request explicit energy targets");
+  assert.equal(voidEnergyStart.pendingTarget?.candidates.length,2,"VOID did not offer the controller's own energy cards first");
+  await page.locator('.card[data-card-id="void-own-energy-b"]').click();
+  const voidAfterOwn=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(voidAfterOwn.players[1].zones.discard.some(c=>c.id==="void-own-energy-b"),true,"VOID did not destroy the selected own energy");
+  assert.equal(voidAfterOwn.players[1].zones.energy.some(c=>c.id==="void-own-energy-a"),true,"VOID destroyed an unselected own energy");
+  assert.equal(voidAfterOwn.pendingTarget?.kind,"bothPlayersEnergyDestroy","VOID did not continue to the opponent energy selection");
+  assert.equal(voidAfterOwn.pendingTarget?.candidates.length,2,"VOID did not offer the opponent's eligible energy cards");
+  await page.locator('.card[data-card-id="void-opponent-energy-a"]').click();
+  const voidAfterBoth=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(voidAfterBoth.players[2].zones.discard.some(c=>c.id==="void-opponent-energy-a"),true,"VOID did not destroy the selected opponent energy");
+  assert.equal(voidAfterBoth.players[2].zones.energy.some(c=>c.id==="void-opponent-energy-b"),true,"VOID destroyed an unselected opponent energy");
+  assert.equal(voidAfterBoth.players[1].zones.energy.length,1,"VOID did not destroy exactly one own energy");
+  assert.equal(voidAfterBoth.players[2].zones.energy.length,1,"VOID did not destroy exactly one opponent energy");
 
   const afterFieldDestroy=await page.evaluate(({fieldName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(fieldName,2,"field","destroy-opponent-field");api.runEffect("相手のフィールドを破壊する。",1);return api.snapshot()},{fieldName:fixtureCards.field.name});
   assert.equal(afterFieldDestroy.players[2].zones.field.length,0,"opponent field destruction left the field card in play");
