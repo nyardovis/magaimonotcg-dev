@@ -1008,8 +1008,8 @@ function resolveSummonEffects(text,p,sourceCard){
  for(const match of String(text||"").matchAll(sourcePattern)){
   matched=true;
   const sourceNames=match[1].split("か"),qualifier=match[2]||"",limit=Number(match[3]),unit=match[4];
-  const maxCostMatch=qualifier.match(/(\d+)コスト以下/),minCostMatch=qualifier.match(/(\d+)コスト以上/),maxPowerMatch=qualifier.match(/(\d+)パワー以下/);
-  const maxCost=maxCostMatch?Number(maxCostMatch[1]):Infinity,minCost=minCostMatch?Number(minCostMatch[1]):0,maxPower=maxPowerMatch?Number(maxPowerMatch[1]):Infinity;
+  const maxCostMatch=qualifier.match(/(\d+)コスト以下/),minCostMatch=qualifier.match(/(\d+)コスト以上/),maxPowerMatch=qualifier.match(/(\d+)パワー以下/),exactPowerMatch=qualifier.match(/パワー(\d+)の/);
+  const maxCost=maxCostMatch?Number(maxCostMatch[1]):Infinity,minCost=minCostMatch?Number(minCostMatch[1]):0,maxPower=maxPowerMatch?Number(maxPowerMatch[1]):Infinity,exactPower=exactPowerMatch?Number(exactPowerMatch[1]):null;
   const includeNameMatch=qualifier.match(/名前に「([^」]+)」を含む/),excludedNameMatch=qualifier.match(/「([^」]+)」以外/),requiredAbilityMatch=qualifier.match(/「([^」]+)」を持つ/);
   const quotedNames=[...qualifier.matchAll(/「([^」]+)」/g)].map(m=>m[1]);
   const exactName=quotedNames.find(name=>name!==excludedNameMatch?.[1]&&name!==includeNameMatch?.[1]&&name!==requiredAbilityMatch?.[1]);
@@ -1022,7 +1022,7 @@ function resolveSummonEffects(text,p,sourceCard){
   const candidates=sourceZones.flatMap(zone=>own[zone]||[]).filter(card=>{
    const data=cardDefinition(card),kind=cardKind(card);if(!data||kind==="unknown"||kind==="spell"&&unit==="体")return false;
    if(kind==="monster"&&/これは使わずに場に出せない/.test(String(data.effect_text||"")))return false;
-   if(requiredKind&&kind!==requiredKind||cardCost(card)>maxCost||cardCost(card)<minCost||Number(data.power||0)>maxPower)return false;
+   if(requiredKind&&kind!==requiredKind||cardCost(card)>maxCost||cardCost(card)<minCost||Number(data.power||0)>maxPower||exactPower!==null&&Number(data.power||0)!==exactPower)return false;
    const types=String(data.types||"").split(/[,、]/).map(v=>v.trim()).filter(Boolean);
    if(requiredTypes.length&&(orTypes?!requiredTypes.some(type=>types.includes(type)):!requiredTypes.every(type=>types.includes(type))))return false;
    if(requiredAbility&&!String(data.effect_text||"").includes(requiredAbility))return false;
