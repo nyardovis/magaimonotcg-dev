@@ -442,7 +442,7 @@ const server=http.createServer((req,res)=>{
   const cappedUpToKnightTokens=await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__,originalPrompt=window.prompt;api.reset();for(let i=0;i<6;i++)api.addCard(monsterName,1,"monsters","token-up-to-cap-"+i);window.prompt=()=> "1";try{api.runEffect("騎士・トークン (1/300/ヒト,騎士) 10体までを出す。",1)}finally{window.prompt=originalPrompt}return api.snapshot()},{monsterName:fixtureCards.monster.name});
   assert.equal(cappedUpToKnightTokens.players[1].zones.monsters.length,7,"up-to token generation exceeded the monster zone limit");
 
-  const strongAssault=await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("強襲",1,"hand","strong-assault-source");api.addCard(monsterName,2,"monsters","strong-assault-target");api.runEffect("騎士・トークン (1/300/ヒト,騎士) 1体を出す。相手のモンスター1体に700ダメージ。",1,"strong-assault-source");return api.snapshot()},{monsterName:fixtureCards.monster.name});
+  const strongAssault=await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("強襲",1,"hand","strong-assault-source");api.addCard(monsterName,2,"monsters","strong-assault-target");api.setCardPower("strong-assault-target",2,1000);api.runEffect("騎士・トークン (1/300/ヒト,騎士) 1体を出す。相手のモンスター1体に700ダメージ。",1,"strong-assault-source");return api.snapshot()},{monsterName:fixtureCards.monster.name});
   assert.equal(strongAssault.players[1].zones.monsters.some(c=>c.name==="騎士・トークン"),true,"Strong Assault did not create its Knight token before resolving its damage effect");
   assert.equal(strongAssault.pendingTarget?.kind,"monsterDamage","Strong Assault did not request an explicit opponent monster target");
   await page.locator('.card[data-card-id="strong-assault-target"]').click();
