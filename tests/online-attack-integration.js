@@ -59,6 +59,11 @@ async function main(){
     assert.equal(relayedKnight?.name,"騎士・トークン","Worker did not relay the Knight token's public name");
     assert.equal("power" in relayedKnight,false,"Worker relayed untrusted printed power instead of leaving card-definition reconstruction to the client");
 
+    const discardToDeckDeltaAtOpponent=second.waitFor(message=>message.type==="operation"&&message.action==="effect_delta"&&message.target==="opponentDiscardToDeck"&&message.playerId===firstJoined.playerId,"opponent discard-to-deck effect delta relay");
+    first.ws.send(operation({action:"effect_delta",target:"opponentDiscardToDeck"}));
+    const relayedDiscardToDeckDelta=await discardToDeckDeltaAtOpponent;
+    assert.equal(relayedDiscardToDeckDelta.target,"opponentDiscardToDeck","Worker changed the opponent discard-to-deck effect delta target");
+
     const player1Client=firstJoined.playerId==="player1"?first:second;
     const player2Client=firstJoined.playerId==="player2"?first:second;
     const firstAttacker=firstJoined.turnPlayer==="player1"?player1Client:player2Client;
