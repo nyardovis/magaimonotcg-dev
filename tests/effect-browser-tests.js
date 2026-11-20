@@ -475,6 +475,10 @@ const server=http.createServer((req,res)=>{
   assert.equal(remoteSync.players[1].zones.discard.some(c=>c.id==="sync-energy"),true,"remote card destruction effect delta was not applied");
   assert.equal(remoteSync.players[2].zones.discard.some(c=>c.id==="sync-own-destroy"),true,"remote own-monster destruction effect delta was not applied");
 
+  const remoteDiscardToDeck=await page.evaluate(({monsterName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(monsterName,1,"discard","sync-discard-to-deck-a");api.addCard(monsterName,1,"discard","sync-discard-to-deck-b");api.applyEffectDeltaForTest({playerId:"remote",target:"opponentDiscardToDeck"});return api.snapshot()},{monsterName:fixtureCards.monster.name});
+  assert.equal(remoteDiscardToDeck.players[1].zones.deck.some(c=>c.id==="sync-discard-to-deck-a")&&remoteDiscardToDeck.players[1].zones.deck.some(c=>c.id==="sync-discard-to-deck-b"),true,"remote opponent-discard-to-deck effect delta did not move every discard card into the deck");
+  assert.equal(remoteDiscardToDeck.players[1].zones.discard.length,0,"remote opponent-discard-to-deck effect delta left cards in discard");
+
   await page.evaluate(({monsterName,originalText})=>{window.__ANKR_TEST__.setCardEffectText(monsterName,originalText);},{monsterName:fixtureCards.monster.name,originalText:fixtureCards.monster.effect_text||""});
 
   await page.evaluate(({knightName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard("王国の騎士団長",1,"monsters","kingdom-commander");api.addCard(knightName,1,"deck","knight-summon-1");api.addCard(knightName,1,"deck","knight-summon-2");api.trigger("kingdom-commander",1,"enter")},{knightName:(cardsData.cards.find(c=>String(c.tags||"").includes("#モンスターカード")&&String(c.types||"").split(/[,、]/).includes("騎士")&&Number(c.cost)<=2&&!String(c.effect_text||"").trim())||fixtureCards.monster).name});
