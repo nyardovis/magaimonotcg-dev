@@ -996,16 +996,15 @@ function resolvePendingEffectTarget(cardId){
   }else log("「"+target.name+"」の効果は消せません");
   recalculatePlayerPassives();
  }else if(pending.kind==="monsterDamage"){
-  const amount=Number(pending.amount)||0;
-  target.damage=(Number(target.damage)||0)+amount;
-  if(owner!==pending.player&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:amount});
+  const amount=Number(pending.amount)||0,applied=applyMonsterDamage(target,amount);
+  if(owner!==pending.player&&onlinePlayerId&&applied>0)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:applied});
   checkMonsterDestruction(owner,true);
-  log("「"+pending.sourceCard.name+"」の効果で「"+target.name+"」に"+amount+"ダメージ");
+  log("「"+pending.sourceCard.name+"」の効果で「"+target.name+"」に"+applied+"ダメージ");
   state.selected={p:1,z:pending.sourceZone||"energy",id:pending.sourceCard.id};
  }else if(pending.kind==="sourcePowerMonsterDamage"){
-  const amount=effectPower(pending.sourceCard);target.damage=(Number(target.damage)||0)+amount;if(owner!==pending.player&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:amount});checkMonsterDestruction(owner,true);log("「"+pending.sourceCard.name+"」の効果で「"+target.name+"」に"+amount+"ダメージ");state.selected={p:1,z:pending.sourceZone||"monsters",id:pending.sourceCard.id};
+  const amount=effectPower(pending.sourceCard),applied=applyMonsterDamage(target,amount);if(owner!==pending.player&&onlinePlayerId&&applied>0)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:applied});checkMonsterDestruction(owner,true);log("「"+pending.sourceCard.name+"」の効果で「"+target.name+"」に"+applied+"ダメージ");state.selected={p:1,z:pending.sourceZone||"monsters",id:pending.sourceCard.id};
  }else if(pending.kind==="formulaMonsterDamage"){
-  const amount=Math.max(0,Number(pending.amount)||0);target.damage=(Number(target.damage)||0)+amount;if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:amount});checkMonsterDestruction(owner,true);log("「"+pending.sourceCard.name+"」の効果で「"+target.name+"」に"+amount+"ダメージ");state.selected={p:1,z:pending.sourceZone||"monsters",id:pending.sourceCard.id};
+  const amount=Math.max(0,Number(pending.amount)||0),applied=applyMonsterDamage(target,amount);if(onlinePlayerId&&applied>0)broadcastEffectDelta({target:owner===pending.player?"ownMonsterDamage":"opponentMonsterDamage",cardId:target.id,delta:applied});checkMonsterDestruction(owner,true);log("「"+pending.sourceCard.name+"」の効果で「"+target.name+"」に"+applied+"ダメージ");state.selected={p:1,z:pending.sourceZone||"monsters",id:pending.sourceCard.id};
  }else if(pending.kind==="abilityDestroy"){
   const zone=state.players[owner].monsters;
   state.players[owner].monsters=zone.filter(card=>card.id!==target.id);
@@ -1016,11 +1015,10 @@ function resolvePendingEffectTarget(cardId){
   log("苔木蜘蛛の効果で「"+target.name+"」を破壊しました");
   state.selected={p:1,z:"monsters",id:pending.sourceCard.id};
  }else{
-  const sourceCard=pending.sourceCard,amount=attackPower(sourceCard);
-  target.damage=(Number(target.damage)||0)+amount;
-  if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:amount});
+  const sourceCard=pending.sourceCard,amount=attackPower(sourceCard),applied=applyMonsterDamage(target,amount);
+  if(onlinePlayerId&&applied>0)broadcastEffectDelta({target:owner===pending.player?"ownMonsterDamage":"opponentMonsterDamage",cardId:target.id,delta:applied});
   checkMonsterDestruction(owner,true);
-  log("「"+sourceCard.name+"」の効果で相手の「"+target.name+"」に"+amount+"ダメージ");
+  log("「"+sourceCard.name+"」の効果で相手の「"+target.name+"」に"+applied+"ダメージ");
   state.selected={p:1,z:"monsters",id:sourceCard.id};
  }
  render();sendPendingAttackResponseIfReady();
@@ -1336,7 +1334,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const healSource=s.match(/これを\s*(\d+)回復/);
  if(healSource&&sourceCard&&own.monsters.some(c=>c.id===sourceCard.id)){sourceCard.damage=Math.max(0,(Number(sourceCard.damage)||0)-Number(healSource[1]));handled=true}
  const eventDamage=s.match(/それに\s*(\d+)ダメージ/);
- if(eventDamage&&eventCard&&eventOwner){const amount=Number(eventDamage[1]);eventCard.damage=(Number(eventCard.damage)||0)+amount;if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:eventCard.id,delta:amount});checkMonsterDestruction(eventOwner,true);handled=true}
+ if(eventDamage&&eventCard&&eventOwner){const amount=Number(eventDamage[1]),applied=applyMonsterDamage(eventCard,amount);if(onlinePlayerId&&applied>0)broadcastEffectDelta({target:eventOwner===p?"ownMonsterDamage":"opponentMonsterDamage",cardId:eventCard.id,delta:applied});checkMonsterDestruction(eventOwner,true);handled=true}
  const eventModifier=s.match(/それを\s*([+-]\d+)/);
  if(eventModifier&&eventCard&&eventOwner){const delta=Number(eventModifier[1]);eventCard.modification=(Number(eventCard.modification)||0)+delta;if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentMonsterModifier",cardId:eventCard.id,delta});handled=true}
  if(/それが与えるダメージを0にする/.test(s)&&eventCard&&eventOwner){eventCard.nextAttackDamage=0;if(onlinePlayerId&&p===1&&eventOwner===2)broadcastEffectDelta({target:"opponentAttackDamageZero",cardId:eventCard.id});handled=true;log("「"+eventCard.name+"」が与えるダメージを0にしました")}
@@ -1397,8 +1395,8 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  for(const m of s.matchAll(/相手に\s*(\d+)ダメージ/g)){opp.life-=Number(m[1]);broadcastEffectDelta({target:"opponentLife",delta:-Number(m[1])});checkLifeWinner(p===1?2:1);if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentDamagedMe");handled=true;log(opp.name+"に"+m[1]+"ダメージ")}
  for(const m of s.matchAll(/自分を\s*(\d+)回復/g)){own.life+=Number(m[1]);broadcastEffectDelta({target:"ownLife",delta:Number(m[1])});if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentHeal");handled=true;log(own.name+"は"+m[1]+"回復")}
  const allMonstersDamage=s.match(/^モンスター全てに\s*(\d+)ダメージ/);
- if(allMonstersDamage){const amount=Number(allMonstersDamage[1]);for(const targetPlayer of [1,2]){state.players[targetPlayer].monsters.forEach(mon=>{mon.damage=(mon.damage||0)+amount;if(targetPlayer!==p)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:mon.id,delta:amount})});checkMonsterDestruction(targetPlayer,true)}handled=true}
- for(const m of s.matchAll(/相手のモンスター全てに\s*(\d+)ダメージ/g)){opp.monsters.forEach(mon=>{mon.damage=(mon.damage||0)+Number(m[1]);broadcastEffectDelta({target:"opponentMonsterDamage",cardId:mon.id,delta:Number(m[1])})});checkMonsterDestruction(p===1?2:1,true);handled=true}
+ if(allMonstersDamage){const amount=Number(allMonstersDamage[1]);for(const targetPlayer of [1,2]){state.players[targetPlayer].monsters.forEach(mon=>{const applied=applyMonsterDamage(mon,amount);if(onlinePlayerId&&applied>0)broadcastEffectDelta({target:targetPlayer===p?"ownMonsterDamage":"opponentMonsterDamage",cardId:mon.id,delta:applied})});checkMonsterDestruction(targetPlayer,true)}handled=true}
+ for(const m of s.matchAll(/相手のモンスター全てに\s*(\d+)ダメージ/g)){const amount=Number(m[1]);opp.monsters.forEach(mon=>{const applied=applyMonsterDamage(mon,amount);if(applied>0)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:mon.id,delta:applied})});checkMonsterDestruction(p===1?2:1,true);handled=true}
  /* Self power changes support both positive and negative values. */
  for(const m of s.matchAll(/これを\s*([＋+\-−])\s*(\d+)/g)){
   if(sourceCard){const delta=(m[1]==="-"||m[1]==="−"?-1:1)*Number(m[2]);const base=Number(sourceCard.power)||Number(cardDefinition(sourceCard)?.power)||0;sourceCard.modification=Math.max(-base,(Number(sourceCard.modification)||0)+delta);handled=true}
@@ -1583,7 +1581,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const randomOpponentModifier=s.match(/ランダムな相手のモンスター1体を\s*([＋+\-−])\s*(\d+)/);
  if(randomOpponentModifier&&opp.monsters.length){const target=opp.monsters[Math.floor(Math.random()*opp.monsters.length)],delta=(randomOpponentModifier[1]==="-"||randomOpponentModifier[1]==="−"?-1:1)*Number(randomOpponentModifier[2]);target.modification=(Number(target.modification)||0)+delta;if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterModifier",cardId:target.id,delta});handled=true;log("ランダムに相手の「"+target.name+"」のパワーを"+(delta>0?"+":"")+delta+"変更しました")}
  const randomOpponentDamage=s.match(/ランダムな相手のモンスター1体に\s*(\d+)ダメージ/);
- if(randomOpponentDamage&&opp.monsters.length){const target=opp.monsters[Math.floor(Math.random()*opp.monsters.length)],amount=Number(randomOpponentDamage[1]);target.damage=(Number(target.damage)||0)+amount;if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:amount});checkMonsterDestruction(p===1?2:1,true);handled=true;log("ランダムに相手の「"+target.name+"」へ"+amount+"ダメージ")}
+ if(randomOpponentDamage&&opp.monsters.length){const target=opp.monsters[Math.floor(Math.random()*opp.monsters.length)],amount=Number(randomOpponentDamage[1]),applied=applyMonsterDamage(target,amount);if(onlinePlayerId&&applied>0)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:applied});checkMonsterDestruction(p===1?2:1,true);handled=true;log("ランダムに相手の「"+target.name+"」へ"+applied+"ダメージ")}
  const counterAdd=s.match(/これにカウンター(\d+)個を乗せる/);
  if(counterAdd&&sourceCard){sourceCard.counters=(sourceCard.counters||0)+Number(counterAdd[1]);handled=true}
  if(/これのカウンターを0個にする/.test(s)&&sourceCard){sourceCard.counters=0;handled=true}
@@ -1695,7 +1693,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const formulaPowerDamage=s.match(/相手に\s*[（(]これのパワー[）)]\s*ダメージ/);
  if(formulaPowerDamage&&sourceCard){const amount=effectPower(sourceCard);opp.life-=amount;broadcastEffectDelta({target:"opponentLife",delta:-amount});checkLifeWinner(p===1?2:1);handled=true;log(opp.name+"にパワー分の"+amount+"ダメージ")}
  const formulaTagDamage=s.match(/モンスター1体に\s*[（(]自分の名前に「([^」]+)」を含むモンスターの数\s*[×x*]\s*(\d+)\s*[）)]\s*ダメージ/);
- if(formulaTagDamage){const amount=countNamed(own.monsters,formulaTagDamage[1])*Number(formulaTagDamage[2]);const targetMonster=chooseEffectTarget([...opp.monsters,...own.monsters],"ダメージを与えるモンスターを選択してください",p,sourceCard);if(targetMonster){const targetOwner=opp.monsters.includes(targetMonster)?(p===1?2:1):p;targetMonster.damage=(Number(targetMonster.damage)||0)+amount;if(targetOwner!==p)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:targetMonster.id,delta:amount});checkMonsterDestruction(targetOwner,true);handled=true}}
+ if(formulaTagDamage){const amount=countNamed(own.monsters,formulaTagDamage[1])*Number(formulaTagDamage[2]);const targetMonster=chooseEffectTarget([...opp.monsters,...own.monsters],"ダメージを与えるモンスターを選択してください",p,sourceCard);if(targetMonster){const targetOwner=opp.monsters.includes(targetMonster)?(p===1?2:1):p;const applied=applyMonsterDamage(targetMonster,amount);if(onlinePlayerId&&applied>0)broadcastEffectDelta({target:targetOwner===p?"ownMonsterDamage":"opponentMonsterDamage",cardId:targetMonster.id,delta:applied});checkMonsterDestruction(targetOwner,true);handled=true}}
  if(/自分のモンスター1体を破壊する/.test(s)){const targetMonster=chooseEffectTarget(own.monsters,"破壊する自分のモンスターを選択してください",p,sourceCard);if(targetMonster){own.monsters=own.monsters.filter(c=>c.id!==targetMonster.id);moveToDiscard(p,targetMonster,"効果による破壊");resolveCardTrigger(targetMonster,p,"destroy");resolveTrapTriggers(p,"ownDestroy");handled=true}}
  if(/自分の(?:種別を持つ)?エネルギー1枚を破壊する/.test(s)){const targetEnergy=chooseEffectTarget(own.energy.filter(c=>!/種別を持つ/.test(s)||String(cardDefinition(c)?.types||"").trim().length>0),"破壊する自分のエネルギーを選択してください",p,sourceCard);if(targetEnergy){own.energy=own.energy.filter(c=>c.id!==targetEnergy.id);moveToDiscard(p,targetEnergy,"効果による破壊");handled=true}}
  if(/自分のエネルギー全てを破壊する/.test(s)){for(const targetEnergy of [...own.energy])moveToDiscard(p,targetEnergy,"効果による破壊");own.energy=[];handled=true}
@@ -1798,12 +1796,11 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  if(sourcePowerMonsterDamage&&sourceCard){
   const target=chooseEffectTarget(opp.monsters,"ダメージを与える相手モンスターを選択してください",p,sourceCard);
   if(target){
-   const amount=effectPower(sourceCard);
-   target.damage=(Number(target.damage)||0)+amount;
-   if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:amount});
+   const amount=effectPower(sourceCard),applied=applyMonsterDamage(target,amount);
+   if(onlinePlayerId&&applied>0)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:applied});
    checkMonsterDestruction(p===1?2:1,true);
    handled=true;
-   log("「"+sourceCard.name+"」の効果で相手の「"+target.name+"」に"+amount+"ダメージ");
+   log("「"+sourceCard.name+"」の効果で相手の「"+target.name+"」に"+applied+"ダメージ");
   }else{
    handled=true;
    log("「"+sourceCard.name+"」の効果は対象が選択されなかったため中断しました");
@@ -1875,12 +1872,10 @@ function resolveAttack(targetMonsterId,defenseResponse=null){
   if(defender&&state.players[2].monsters.some(c=>c.id===defender.id)){
     const defenderPower=defender.combatPowerUsesOpponent?attackPower(attacker):attackPower(defender);
     const attackerPower=attacker.combatPowerUsesOpponent?attackPower(defender):attack;
-    const counter=reduceIncomingDamage(attacker,defenderPower);
-    const defenderDamage=reduceIncomingDamage(defender,attackerPower);
-    attacker.damage=(Number(attacker.damage)||0)+counter;
-    defender.damage=(Number(defender.damage)||0)+defenderDamage;
+    const counter=applyMonsterDamage(attacker,defenderPower);
+    const defenderDamage=applyMonsterDamage(defender,attackerPower);
     log("「"+attacker.name+"」と「"+defender.name+"」が戦闘。"+attacker.name+"は"+counter+"ダメージ、"+defender.name+"は"+defenderDamage+"ダメージを受けました");
-    if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN){gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",target:"ownMonsterDamage",cardId:attacker.id,delta:counter}));gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",target:"opponentMonsterDamage",cardId:defender.id,delta:attack}))}
+    if(onlinePlayerId&&gameSocket?.readyState===WebSocket.OPEN){if(counter>0)gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",target:"ownMonsterDamage",cardId:attacker.id,delta:counter}));if(defenderDamage>0)gameSocket.send(JSON.stringify({type:"operation",action:"effect_delta",target:"opponentMonsterDamage",cardId:defender.id,delta:defenderDamage}))}
     checkMonsterDestruction(1);checkMonsterDestruction(2);
   }else if(!targetMonsterId){
     const playerDamage=reduceIncomingDamage(state.players[2],attack);
