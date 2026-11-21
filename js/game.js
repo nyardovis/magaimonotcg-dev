@@ -1806,7 +1806,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   }
   handled=true;log(maxCost+"コスト以下の自分のモンスター"+targets.length+"体のパワーを+"+amount+"しました");
  }
- const groupPowerChange=s.match(/(自分の|相手の|お互いの)?モンスター全てを\s*([＋+\\-−])\s*(\d+)/);
+ const groupPowerChange=s.match(/(自分の|相手の|お互いの)?モンスター全てを\s*([＋+−-])\s*(\d+)/);
  if(groupPowerChange){
   const scope=groupPowerChange[1]||"自分の",delta=(groupPowerChange[2]==="-"||groupPowerChange[2]==="−"?-1:1)*Number(groupPowerChange[3]);
   const owners=scope==="お互いの"?[p,p===1?2:1]:[scope==="相手の"?(p===1?2:1):p];
