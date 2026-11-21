@@ -137,12 +137,31 @@ const server=http.createServer((req,res)=>{
   assert.equal(smoke.pendingTarget,"monsterDamage","live executor did not request a board target for monster damage");
   assert.equal(smoke.targetDamage,300,"live executor did not apply damage to the chosen target");
   assert.equal(smoke.enterOpponentLife,3900,"live enter trigger did not apply the card effect");
-  assert.equal(smoke.activatedPending,"kingdomArcherDamage","activated ability did not request a board target");
+  assert.equal(smoke.activatedPending,"sourcePowerMonsterDamage","activated ability did not request a board target");
   assert.equal(smoke.archerTapped,true,"tap activation cost was not paid");
   await page.locator('.card[data-card-id="archer-target"]').click();
   const clickedTarget=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
   const archerCard=clickedTarget.players[1].zones.monsters.find(c=>c.id==="archer");
   assert.equal(clickedTarget.players[2].zones.monsters.find(c=>c.id==="archer-target")?.damage,archerCard?.power||0,"clicking the actual board target did not resolve the activated ability");
+
+  const crossbowPending=await page.evaluate(({targetName})=>{
+   const api=window.__ANKR_TEST__;api.reset();
+   const source=api.addCard("弩弓の騎士",1,"monsters","crossbow-source");
+   api.addCard(targetName,2,"monsters","crossbow-target");
+   api.setCardPower("crossbow-source",1,600);
+   api.setCardPower("crossbow-target",2,2000);
+   api.snapshot();
+   api.activate(source,"monsters",0);
+   return api.snapshot();
+  },{targetName:fixtureCards.monster.name});
+  const crossbowSource=crossbowPending.players[1].zones.monsters.find(c=>c.id==="crossbow-source");
+  assert.equal(crossbowPending.pendingTarget?.kind,"sourcePowerMonsterDamage","Crossbow Knight did not request a board target for its power-based activated damage");
+  assert.equal(crossbowSource?.tapped,true,"Crossbow Knight did not pay its tap activation cost");
+  assert.equal(crossbowSource?.power,0,"Crossbow Knight fixture did not retain its zero combat-power value");
+  await page.locator('.card[data-card-id="crossbow-target"]').click();
+  const crossbowResolved=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(crossbowResolved.players[2].zones.monsters.find(c=>c.id==="crossbow-target")?.damage,600,"Crossbow Knight's ability incorrectly used its zero combat power instead of its printed/effect power");
+
   const iceWall=await page.evaluate(({sourceName,targetName})=>{const api=window.__ANKR_TEST__;api.reset();api.addCard(sourceName,1,"monsters","ice-attacker");api.addCard("氷壁",2,"facedown","ice-wall");api.addCard(targetName,2,"deck","ice-draw");const result=api.attack("ice-attacker");return {opponentLife:result.players[2].life,opponentHand:result.players[2].zones.hand.length,trapDiscarded:result.players[2].zones.discard.some(c=>c.id==="ice-wall")};},{sourceName:fixtureCards.monster.name,targetName:fixtureCards.monster.name});
   assert.equal(iceWall.opponentLife,4000,"Ice Wall did not reduce the attack damage to zero");
   assert.equal(iceWall.opponentHand,1,"Ice Wall did not resolve its draw clause");
@@ -217,6 +236,23 @@ const server=http.createServer((req,res)=>{
   assert.equal(advanced.beliefPicker,true,"Believing Heart picker was not displayed");
   assert.equal(advanced.mossPending,"deckSearchMove","Moss Tree Spider did not open a deck trap picker");
   assert.equal(advanced.mossDestination,"facedown","Moss Tree Spider picker did not set traps face down");
+
+  await page.evaluate(({trapName})=>{
+   const api=window.__ANKR_TEST__;api.reset();
+   api.addCard("苔木蜘蛛",1,"monsters","moss-selection-source");
+   api.addCard(trapName,1,"deck","moss-selection-trap");
+   api.trigger("moss-selection-source",1,"enter");
+   return api.snapshot();
+  },{trapName:fixtureCards.trap.name});
+  assert.equal(await page.locator("#effectDeckPicker").isVisible().catch(()=>false),true,"Moss Tree Spider did not open its deck trap selection UI");
+  await page.locator('#effectDeckPicker button[data-card-id="moss-selection-trap"]').click();
+  await page.locator("#effectDeckPicker button").filter({hasText:"選択したカードを罠として場に伏せる"}).click();
+  const mossTrapPlaced=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  const selectedMossTrap=mossTrapPlaced.players[1].zones.facedown.find(c=>c.id==="moss-selection-trap");
+  assert.ok(selectedMossTrap,"Moss Tree Spider did not move the selected trap from the deck to the facedown zone");
+  assert.equal(mossTrapPlaced.players[1].zones.facedown.length,1,"Moss Tree Spider did not keep the selected trap in the facedown zone");
+  assert.equal(mossTrapPlaced.players[1].zones.deck.length,0,"Moss Tree Spider did not remove the selected trap from the deck");
+  assert.equal(mossTrapPlaced.pendingTarget,null,"Moss Tree Spider left a stale selection pending after confirmation");
   assert.equal(advanced.blueFlowerLife,4000+advanced.expectedHighPower,"Blue Flower maximum-power healing did not resolve");
   assert.equal(advanced.tenkanPending,"deckSearchMove","Tenkan did not continue to its deck-energy selection");
   assert.equal(advanced.tenkanDestination,"energy","Tenkan did not offer energy deployment");

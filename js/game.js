@@ -851,8 +851,8 @@ function activateCardAbility(cardId,abilityIndex){
   const ability=abilities[abilityIndex];if(!ability)return;
   const isBlueFlowerTrapHeal=card.name==="碧い花"&&ability.body.includes("自分の罠が場にあるなら")&&/自分を\s*700回復/.test(ability.body);
   if((isBlueFlowerTrapHeal||ability.body.includes("自分の罠が場にあるなら"))&&!state.players[1].facedown.length){log("自分の罠が場にないため、この能力は使用できません");return}
-  const isKingdomArcherDamage=cardDefinition(card)?.id==="card_0079"&&/相手のモンスター\s*1体に\s*[（(]これのパワー[）)]\s*ダメージ/.test(ability.body);
-  const kingdomArcherCandidates=isKingdomArcherDamage?state.players[2].monsters.filter(target=>!target.cannotBeChosenByOpponent):[];
+  const isSourcePowerMonsterDamage=/相手のモンスター\s*1体に\s*[（(]これのパワー[）)]\s*ダメージ/.test(ability.body);
+  const sourcePowerMonsterDamageCandidates=isSourcePowerMonsterDamage?state.players[2].monsters.filter(target=>!target.cannotBeChosenByOpponent):[];
   const isKingdomCaptainDamage=card.name==="王国の騎士団長"&&/相手のモンスター\s*1体に\s*[（(]自分のモンスターの数\s*[×x*]\s*300[）)]\s*ダメージ/.test(ability.body);
   const kingdomCaptainCandidates=isKingdomCaptainDamage?state.players[2].monsters.filter(target=>!target.cannotBeChosenByOpponent):[];
   const abilityDestroyMatch=ability.body.match(/「([^」]+)」を持つモンスター1体を破壊する/);
@@ -884,7 +884,7 @@ function activateCardAbility(cardId,abilityIndex){
   }
   log("「"+card.name+"」の能力を使用"+(ability.costKind==="energy"?"（コスト"+(ability.costValue||0)+"）":"（コスト："+(ability.costToken||"不明")+"）"));
   if(isBlueFlowerTrapHeal){state.players[1].life+=700;broadcastEffectDelta({target:"ownLife",delta:700});if(!onlinePlayerId)resolveTrapTriggers(2,"opponentHeal");log("碧い花の効果で700回復しました");state.selected={p:1,z:selected.z,id:card.id};render();return}
-  if(isKingdomArcherDamage&&!kingdomArcherCandidates.length){
+  if(isSourcePowerMonsterDamage&&!sourcePowerMonsterDamageCandidates.length){
     log("選択できる相手モンスターがいないため、対象を選ばずに処理を終了しました");
     state.selected={p:1,z:selected.z,id:card.id};
     render();
@@ -895,8 +895,8 @@ function activateCardAbility(cardId,abilityIndex){
     pendingEffectTarget={kind:"formulaMonsterDamage",player:2,zone:"monsters",sourceZone:selected.z,sourceCard:card,amount:state.players[1].monsters.length*300,candidates:kingdomCaptainCandidates.map(target=>({id:target.id,owner:2}))};
     log("ダメージを与える相手モンスターを盤面からクリックしてください");render();return;
   }
-  if(isKingdomArcherDamage){
-    pendingEffectTarget={kind:"kingdomArcherDamage",player:2,sourceCard:card,candidates:kingdomArcherCandidates.map(target=>({id:target.id,owner:2}))};
+  if(isSourcePowerMonsterDamage){
+    pendingEffectTarget={kind:"sourcePowerMonsterDamage",player:1,players:[2],zone:"monsters",sourceZone:selected.z,sourceCard:card,candidates:sourcePowerMonsterDamageCandidates.map(target=>({id:target.id,owner:2}))};
     log("ダメージを与える相手モンスターを盤面からクリックしてください");
     render();
     return;
@@ -997,6 +997,8 @@ function resolvePendingEffectTarget(cardId){
   checkMonsterDestruction(owner,true);
   log("「"+pending.sourceCard.name+"」の効果で「"+target.name+"」に"+amount+"ダメージ");
   state.selected={p:1,z:pending.sourceZone||"energy",id:pending.sourceCard.id};
+ }else if(pending.kind==="sourcePowerMonsterDamage"){
+  const amount=effectPower(pending.sourceCard);target.damage=(Number(target.damage)||0)+amount;if(owner!==pending.player&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:amount});checkMonsterDestruction(owner,true);log("「"+pending.sourceCard.name+"」の効果で「"+target.name+"」に"+amount+"ダメージ");state.selected={p:1,z:pending.sourceZone||"monsters",id:pending.sourceCard.id};
  }else if(pending.kind==="formulaMonsterDamage"){
   const amount=Math.max(0,Number(pending.amount)||0);target.damage=(Number(target.damage)||0)+amount;if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:amount});checkMonsterDestruction(owner,true);log("「"+pending.sourceCard.name+"」の効果で「"+target.name+"」に"+amount+"ダメージ");state.selected={p:1,z:pending.sourceZone||"monsters",id:pending.sourceCard.id};
  }else if(pending.kind==="abilityDestroy"){
@@ -1686,7 +1688,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  const formulaOwnTagBuff=s.match(/これを\s*[＋+]\s*[（(]自分の場の\[([^\]]+)\]の数\s*[×x*]\s*(\d+)\s*[）)]/);
  if(formulaOwnTagBuff&&sourceCard){const amount=countTag([...own.monsters,...own.energy,...own.field],formulaOwnTagBuff[1])*Number(formulaOwnTagBuff[2]);sourceCard.modification=(Number(sourceCard.modification)||0)+amount;handled=true;log("場の["+formulaOwnTagBuff[1]+"]の数に応じて「"+sourceCard.name+"」を+"+amount)}
  const formulaPowerDamage=s.match(/相手に\s*[（(]これのパワー[）)]\s*ダメージ/);
- if(formulaPowerDamage&&sourceCard){const amount=attackPower(sourceCard);opp.life-=amount;broadcastEffectDelta({target:"opponentLife",delta:-amount});checkLifeWinner(p===1?2:1);handled=true;log(opp.name+"にパワー分の"+amount+"ダメージ")}
+ if(formulaPowerDamage&&sourceCard){const amount=effectPower(sourceCard);opp.life-=amount;broadcastEffectDelta({target:"opponentLife",delta:-amount});checkLifeWinner(p===1?2:1);handled=true;log(opp.name+"にパワー分の"+amount+"ダメージ")}
  const formulaTagDamage=s.match(/モンスター1体に\s*[（(]自分の名前に「([^」]+)」を含むモンスターの数\s*[×x*]\s*(\d+)\s*[）)]\s*ダメージ/);
  if(formulaTagDamage){const amount=countNamed(own.monsters,formulaTagDamage[1])*Number(formulaTagDamage[2]);const targetMonster=chooseEffectTarget([...opp.monsters,...own.monsters],"ダメージを与えるモンスターを選択してください",p,sourceCard);if(targetMonster){const targetOwner=opp.monsters.includes(targetMonster)?(p===1?2:1):p;targetMonster.damage=(Number(targetMonster.damage)||0)+amount;if(targetOwner!==p)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:targetMonster.id,delta:amount});checkMonsterDestruction(targetOwner,true);handled=true}}
  if(/自分のモンスター1体を破壊する/.test(s)){const targetMonster=chooseEffectTarget(own.monsters,"破壊する自分のモンスターを選択してください",p,sourceCard);if(targetMonster){own.monsters=own.monsters.filter(c=>c.id!==targetMonster.id);moveToDiscard(p,targetMonster,"効果による破壊");resolveCardTrigger(targetMonster,p,"destroy");resolveTrapTriggers(p,"ownDestroy");handled=true}}
@@ -1787,13 +1789,11 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   if(targets.length)handled=true;
  }
 
- // 王国の弓騎士: タップ能力で相手モンスター1体に自身のパワー分のダメージ。
- const kingdomArcherDamage=cardDefinition(sourceCard)?.id==="card_0079"
-  &&/相手のモンスター\s*1体に\s*[（(]これのパワー[）)]\s*ダメージ/.test(s);
- if(kingdomArcherDamage){
+ const sourcePowerMonsterDamage=s.match(/相手のモンスター\s*1体に\s*[（(]これのパワー[）)]\s*ダメージ/);
+ if(sourcePowerMonsterDamage&&sourceCard){
   const target=chooseEffectTarget(opp.monsters,"ダメージを与える相手モンスターを選択してください",p,sourceCard);
   if(target){
-   const amount=attackPower(sourceCard);
+   const amount=effectPower(sourceCard);
    target.damage=(Number(target.damage)||0)+amount;
    if(onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:amount});
    checkMonsterDestruction(p===1?2:1,true);
@@ -1801,7 +1801,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
    log("「"+sourceCard.name+"」の効果で相手の「"+target.name+"」に"+amount+"ダメージ");
   }else{
    handled=true;
-   log("王国の弓騎士の効果は対象が選択されなかったため中断しました");
+   log("「"+sourceCard.name+"」の効果は対象が選択されなかったため中断しました");
   }
  }
  if(!handled)log("未対応の効果（手動で処理してください）: "+s.slice(0,90));
@@ -1822,6 +1822,7 @@ function resolveEffectText(text,p,sourceCard,eventCard=null){
   debugLog("効果処理中に例外: "+cardName+" / "+String(error?.message||error),"effect","error",{traceId:trace.id,stack:error?.stack||""});throw error;
  }
 }
+function effectPower(card){const base=Number(card?.power)||Number(cardDefinition(card)?.power)||0;return Math.max(0,base+(Number(card?.modification)||0))}
 function attackPower(card){if(card?.combatPowerOverride!==undefined&&card?.combatPowerOverride!==null)return Math.max(0,Number(card.combatPowerOverride)||0);const base=Number(card.power)||Number(cardDefinition(card)?.power)||0;return Math.max(0,base+(Number(card.modification)||0))}
 function reduceIncomingDamage(target,amount){const reduction=Math.max(0,Number(target?.damageReduction)||0,Number(target?.passiveDamageReduction)||0,Number(target?.effectDamageReduction)||0);return Math.max(0,Number(amount||0)-reduction)}
 function declareAttack(cardId){
