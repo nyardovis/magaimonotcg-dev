@@ -142,3 +142,13 @@ PR #33で次を修正した。
 4. 古い未完了PR #1/#2/#3/#4/#10は現行mainと分岐しているため、そのままマージせず、必要な差分だけを現行mainへ再適用する。
 
 この監査は開発版のみを対象とする。本番リポジトリ `nyardovis/magaimonotcg` は変更していない。
+
+
+## 2026-11-21 13:00 UTC 追補：オンライン・モンスター damage delta
+
+- 追補対象のmainコミット: [3877251](https://github.com/nyardovis/magaimonotcg-dev/commit/3877251a6849461f06c9d2a91f8470d629e259f6)。このコミットはテスト2ファイルのみの変更で、ゲーム実行コード・カードデータは変更していない。
+- `tests/effect-browser-tests.js` に、相手クライアントで `ownMonsterDamage` が送信者側の盤面へ、`opponentMonsterDamage` が相手側の盤面へ適用される回帰assertionを追加。
+- `tests/online-attack-integration.js` に、Workerが両targetの `effect_delta` をカードID・delta値を保ったまま相手クライアントへ中継する回帰テストを追加。
+- mainのHEADはこのコミットと一致することを確認。既存の11/21監査数値は12:37 UTC時点の `ae60f7c` で生成された値であり、今回の追補コミットでは実行コード・データを変更していないため、数値は据え置き。
+- 重要な制限：`3877251` 自体に紐づくGitHub Actions runは確認できていない。従って、このコミット単体に対する `npm run test:all` はまだ成功確認済みとしない。追補PRのCIで同じmainコード＋追加テストを実行し、結果を追記する。
+- ここで確認したのはブラウザテスト内の受信状態適用とWorker relay。実際の2ブラウザ対戦での効果発動・表示同期は引き続き未検証。
