@@ -2095,6 +2095,8 @@ function exposeAnkrEffectTestApi(){
    resolveEffectText(text,owner,source||null);
    return this.snapshot();
   },
+  revealedHandIds(owner=1){return(state.players[owner]?.hand||[]).filter(card=>card.revealed).map(card=>card.id)},
+  renderForTest(){render();return this.snapshot()},
   trigger(sourceId,owner=1,trigger="enter"){
    const source=state.players[owner]?.monsters.concat(state.players[owner]?.energy,state.players[owner]?.field,state.players[owner]?.facedown,state.players[owner]?.discard).find(c=>c.id===sourceId);
    if(!source)throw new Error("source card not found: "+sourceId);
