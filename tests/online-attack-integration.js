@@ -75,6 +75,18 @@ async function main(){
     const relayedDiscardToDeckDelta=await discardToDeckDeltaAtOpponent;
     assert.equal(relayedDiscardToDeckDelta.target,"opponentDiscardToDeck","Worker changed the opponent discard-to-deck effect delta target");
 
+    const ownDamageDeltaAtOpponent=second.waitFor(message=>message.type==="operation"&&message.action==="effect_delta"&&message.target==="ownMonsterDamage"&&message.playerId===firstJoined.playerId,"own-monster damage delta relay");
+    first.ws.send(operation({action:"effect_delta",target:"ownMonsterDamage",cardId:"ci-own-damage",delta:17}));
+    const relayedOwnDamageDelta=await ownDamageDeltaAtOpponent;
+    assert.equal(relayedOwnDamageDelta.cardId,"ci-own-damage","Worker changed the own-monster damage target card ID");
+    assert.equal(relayedOwnDamageDelta.delta,17,"Worker changed the own-monster damage amount");
+
+    const opponentDamageDeltaAtOpponent=second.waitFor(message=>message.type==="operation"&&message.action==="effect_delta"&&message.target==="opponentMonsterDamage"&&message.playerId===firstJoined.playerId,"opponent-monster damage delta relay");
+    first.ws.send(operation({action:"effect_delta",target:"opponentMonsterDamage",cardId:"ci-opponent-damage",delta:29}));
+    const relayedOpponentDamageDelta=await opponentDamageDeltaAtOpponent;
+    assert.equal(relayedOpponentDamageDelta.cardId,"ci-opponent-damage","Worker changed the opponent-monster damage target card ID");
+    assert.equal(relayedOpponentDamageDelta.delta,29,"Worker changed the opponent-monster damage amount");
+
     const player1Client=firstJoined.playerId==="player1"?first:second;
     const player2Client=firstJoined.playerId==="player2"?first:second;
     const firstAttacker=firstJoined.turnPlayer==="player1"?player1Client:player2Client;
