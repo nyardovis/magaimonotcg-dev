@@ -997,7 +997,7 @@ function resolvePendingEffectTarget(cardId){
   recalculatePlayerPassives();
  }else if(pending.kind==="monsterDamage"){
   const amount=Number(pending.amount)||0,applied=applyMonsterDamage(target,amount);
-  if(owner!==pending.player&&onlinePlayerId&&applied>0)broadcastEffectDelta({target:"opponentMonsterDamage",cardId:target.id,delta:applied});
+  if(onlinePlayerId&&applied>0)broadcastEffectDelta({target:owner===pending.controller?"ownMonsterDamage":"opponentMonsterDamage",cardId:target.id,delta:applied});
   checkMonsterDestruction(owner,true);
   log("「"+pending.sourceCard.name+"」の効果で「"+target.name+"」に"+applied+"ダメージ");
   state.selected={p:1,z:pending.sourceZone||"energy",id:pending.sourceCard.id};
@@ -1593,7 +1593,7 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   const targetPlayer=singleDamage[1].startsWith("相手")?(p===1?2:1):singleDamage[1].startsWith("自分")?p:(opp.monsters.length?(p===1?2:1):p);
   const candidates=state.players[targetPlayer].monsters.filter(target=>targetPlayer===p||!target.cannotBeChosenByOpponent);
   if(candidates.length){
-   pendingEffectTarget={kind:"monsterDamage",player:targetPlayer,zone:"monsters",sourceCard,sourceZone:state.players[p].energy.some(card=>card.id===sourceCard?.id)?"energy":"monsters",amount:Number(singleDamage[2]),candidates:candidates.map(target=>({id:target.id}))};
+   pendingEffectTarget={kind:"monsterDamage",player:targetPlayer,controller:p,zone:"monsters",sourceCard,sourceZone:state.players[p].energy.some(card=>card.id===sourceCard?.id)?"energy":"monsters",amount:Number(singleDamage[2]),candidates:candidates.map(target=>({id:target.id}))};
    log("ダメージを与えるモンスターを盤面からクリックしてください");
    handled=true;render();
   }else{log("ダメージを与えられる対象モンスターがいません");handled=true}
