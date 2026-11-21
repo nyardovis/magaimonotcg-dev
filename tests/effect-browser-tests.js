@@ -582,6 +582,12 @@ const server=http.createServer((req,res)=>{
    assert.equal(onlineEffectDamageSync.opponentDamage,300,"all-monster damage did not affect the opponent monster");
    assert.deepEqual(new Set(onlineEffectDamageSync.deltas.map(d=>d.target)),new Set(["ownMonsterDamage","opponentMonsterDamage"]),"all-monster damage did not synchronize both owners damage deltas");
 
+   const onlineSingleDamageSync=await page.evaluate(({monsterName})=>{
+    const api=window.__ANKR_TEST__,sent=[];api.reset();api.addCard(monsterName,1,"hand","online-single-source");api.addCard(monsterName,1,"monsters","online-single-own-target");api.setOnlineTestMode({readyState:WebSocket.OPEN,send:raw=>sent.push(JSON.parse(raw))});api.runEffect("自分のモンスター1体に300ダメージ。",1,"online-single-source");api.chooseTarget("online-single-own-target");const state=api.snapshot();return {damage:state.players[1].zones.monsters.find(c=>c.id==="online-single-own-target")?.damage,deltas:sent.filter(m=>m.type==="operation"&&m.action==="effect_delta").map(m=>({target:m.target,delta:m.delta}))};
+   },{monsterName:fixtureCards.monster.name});
+   assert.equal(onlineSingleDamageSync.damage,300,"selected own-monster damage was not applied");
+   assert.deepEqual(onlineSingleDamageSync.deltas.filter(d=>d.target==="ownMonsterDamage").map(d=>d.delta),[300],"selected own-monster damage was not synchronized as ownMonsterDamage");
+
    const onlineCombatDamageSync=await page.evaluate(({sourceName})=>{
     const api=window.__ANKR_TEST__,sent=[];api.reset();api.addCard(sourceName,1,"monsters","online-armor-attacker");api.setCardPower("online-armor-attacker",1,1200);api.addCard("鎧ゴブリン",2,"monsters","online-armor-defender");api.setOnlineTestMode({readyState:WebSocket.OPEN,send:raw=>sent.push(JSON.parse(raw))});api.attack("online-armor-attacker","online-armor-defender");api.resolveAttackForTest("online-armor-defender");const state=api.snapshot();return {damage:state.players[2].zones.monsters.find(c=>c.id==="online-armor-defender")?.damage,deltas:sent.filter(m=>m.type==="operation"&&m.action==="effect_delta"&&m.target==="opponentMonsterDamage").map(m=>m.delta)};
    },{sourceName:fixtureCards.monster.name});
