@@ -1,5 +1,7 @@
 # Ankr TCG 開発版・効果監査スナップショット
 
+> これは2026-11-20時点の履歴です。最新の監査結果は [2026-11-21版](./effect-live-audit-2026-11-21.md) を参照してください。
+
 - 監査対象: `nyardovis/magaimonotcg-dev` の `main`
 - 基準コミット: [`8f4d941`](https://github.com/nyardovis/magaimonotcg-dev/commit/8f4d941ddbe130aeadbf61547a162d30a7e97f2a)（2026-11-20）
 - 自動監査: [GitHub Actions #83](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/44743023506)
