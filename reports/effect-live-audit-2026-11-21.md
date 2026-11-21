@@ -1,13 +1,12 @@
 # Ankr TCG 開発版・効果監査スナップショット
 
 - 監査対象: `nyardovis/magaimonotcg-dev` の `main`
-- 基準コミット: [`ae60f7c`](https://github.com/nyardovis/magaimonotcg-dev/commit/ae60f7c551b9cf53c8751bf9a76f174850346bf1)（2026-11-21）
-- 直近PR: [#33 常在効果・オンラインダメージ同期修正](https://github.com/nyardovis/magaimonotcg-dev/pull/33)（マージ済み）
-- PR CI: [GitHub Actions #44904632287](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/44904632287) — success
-- main CI: [GitHub Actions #44904768118](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/44904768118) — success
-- Pagesデプロイ: [GitHub Actions #44904767672](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/44904767672) — success
-- 監査JSON: [main CI artifact](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/44904768118/artifacts/14707392599)
-- 生成時刻: 2026-11-21 12:37 UTC
+- main基準コミット: [`3877251`](https://github.com/nyardovis/magaimonotcg-dev/commit/3877251a6849461f06c9d2a91f8470d629e259f6)（2026-11-21）
+- 最新検証対象: [PR #36](https://github.com/nyardovis/magaimonotcg-dev/pull/36) のhead [`92b5e56`](https://github.com/nyardovis/magaimonotcg-dev/commit/92b5e56848dce561a4728763b0922f0a2f50554f)
+- PR #36 CI: [GitHub Actions #44909332523](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/44909332523) — success（`npm run test:all` 完了）
+- 直前のmain CI: [GitHub Actions #44904768118](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/44904768118) — success（PR #36 の追加修正前）
+- 監査JSON: [PR #36 CI artifact](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/44909332523/artifacts/14708359096)
+- 生成時刻: 2026-11-21 13:32 UTC
 
 ## テスト結果
 
@@ -142,3 +141,46 @@ PR #33で次を修正した。
 4. 古い未完了PR #1/#2/#3/#4/#10は現行mainと分岐しているため、そのままマージせず、必要な差分だけを現行mainへ再適用する。
 
 この監査は開発版のみを対象とする。本番リポジトリ `nyardovis/magaimonotcg` は変更していない。
+
+
+## 2026-11-21 13:00 UTC 追補：オンライン・モンスター damage delta
+
+- 追補対象のmainコミット: [3877251](https://github.com/nyardovis/magaimonotcg-dev/commit/3877251a6849461f06c9d2a91f8470d629e259f6)。このコミットはテスト2ファイルのみの変更で、ゲーム実行コード・カードデータは変更していない。
+- `tests/effect-browser-tests.js` に、相手クライアントで `ownMonsterDamage` が送信者側の盤面へ、`opponentMonsterDamage` が相手側の盤面へ適用される回帰assertionを追加。
+- `tests/online-attack-integration.js` に、Workerが両targetの `effect_delta` をカードID・delta値を保ったまま相手クライアントへ中継する回帰テストを追加。
+- mainのHEADはこのコミットと一致することを確認。既存の11/21監査数値は12:37 UTC時点の `ae60f7c` で生成された値であり、今回の追補コミットでは実行コード・データを変更していないため、数値は据え置き。
+- 重要な制限：`3877251` 自体に紐づくGitHub Actions runは確認できていない。従って、このコミット単体に対する `npm run test:all` はまだ成功確認済みとしない。追補PRのCIで同じmainコード＋追加テストを実行し、結果を追記する。
+- ここで確認したのはブラウザテスト内の受信状態適用とWorker relay。実際の2ブラウザ対戦での効果発動・表示同期は引き続き未検証。
+
+
+## 2026-11-21 追補：VOIDの手札公開・オンライン応答
+
+### 新たに確認した不具合
+
+- `VOID (card_0564)` の第2句は「自分と相手の手札全てを公開する。」。
+- 既存処理は「相手の手札全てを公開する」を検出して `opponentRevealHand` を送信していたが、受信側の `applyEffectDelta` に同targetの処理がなく、オンラインでは要求が無視されていた。
+- また、双方公開の文面でも発動側自身の手札を `revealed` にせず、ローカル対戦でも相手側しか公開されていなかった。
+
+### 開発版向け修正（PR #36）
+
+- 受信側が `opponentRevealHand` を受け取ると、自分の手札を公開状態にして `sync_public_state.revealedHand` で相手へ返す。
+- 「自分と相手の手札全てを公開する」場合は、発動側の手札も公開状態にして送信し、相手側にも公開要求を送る。
+- 「相手の手札全てを公開する」だけの効果では、発動側自身の手札を誤って公開しない。
+- 回帰テストを追加：ローカル双方公開、相手のみ公開、オンライン発動側の公開送信、受信側の応答送信、Worker relay。
+
+### 未解決
+
+- VOID第3句の保存文 `自分の相手の手札1枚ずつを捨てる。` は依然として意味が不明瞭。対象・枚数・選択権を推測して実装しない。
+- [PR #36 の GitHub Actions #44909332523](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/44909332523) で `npm run test:all` は成功。効果テスト・監査・Chromium・Worker統合テスト・監査artifact uploadまで完了。
+- 2ブラウザ実対戦での双方公開表示は引き続き未検証。
+
+
+## 2026-11-21 13:32 UTC 追補：PR #36 CI・最新監査JSON
+
+- [GitHub Actions #44909332523](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/44909332523) の `effect-tests` job は `success`。
+- `Run all effect tests and audits`、`Upload audit reports` を含む全stepが成功。これによりPR #36 head `92b5e56` に対する `npm run test:all` を確認した。
+- [監査artifact](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/44909332523/artifacts/14708359096) の生成JSON：737カード、abilities不一致0、コンパイラissue 0、効果句1,441、ブラウザ監査1,390句、状態変化290、状態変化なし307、未対応ログ597、明確な未実装候補1、ランタイム例外0。
+- 未対応ログ597件は常在・継続237、誘発入口未実行399、起動入口未実行199、fixture不足・条件不成立・選択待ち等を含む。実未実装597件という意味ではない。
+- VOID第2句は一括監査では手札fixtureがなく `no_state_change`。ただしPR #36の追加ブラウザ回帰テストでは、ローカル双方公開、相手のみ公開、オンライン発動側の公開送信、受信側の公開応答を個別に確認し、Worker relayも検査した。
+- VOID第3句のみ `unimplemented_candidate` として残る。保存文の不明瞭さが解消されるまで仕様推測による実装は行わない。
+- 2ブラウザ実対戦は未実施。CI成功を実対戦同期の成功とは扱わない。

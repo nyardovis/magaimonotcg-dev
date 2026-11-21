@@ -87,6 +87,11 @@ async function main(){
     assert.equal(relayedOpponentDamageDelta.cardId,"ci-opponent-damage","Worker changed the opponent-monster damage target card ID");
     assert.equal(relayedOpponentDamageDelta.delta,29,"Worker changed the opponent-monster damage amount");
 
+    const opponentRevealHandAtOpponent=second.waitFor(message=>message.type==="operation"&&message.action==="effect_delta"&&message.target==="opponentRevealHand"&&message.playerId===firstJoined.playerId,"opponent hand reveal request relay");
+    first.ws.send(operation({action:"effect_delta",target:"opponentRevealHand"}));
+    const relayedOpponentRevealHand=await opponentRevealHandAtOpponent;
+    assert.equal(relayedOpponentRevealHand.target,"opponentRevealHand","Worker changed the opponent hand reveal request target");
+
     const player1Client=firstJoined.playerId==="player1"?first:second;
     const player2Client=firstJoined.playerId==="player2"?first:second;
     const firstAttacker=firstJoined.turnPlayer==="player1"?player1Client:player2Client;

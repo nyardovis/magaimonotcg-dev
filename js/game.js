@@ -693,6 +693,7 @@ function sendPendingAttackResponseIfReady(){if(!pendingDefenseAttackResponse||pe
 function applyEffectDelta(message){
  const actorIsLocal=message.playerId===onlinePlayerId;
  const targetPlayer=["ownLife","ownEnergyPool","ownMonsterDamage"].includes(message.target)?(actorIsLocal?1:2):(actorIsLocal?2:1);
+ if(message.target==="opponentRevealHand"){state.players[targetPlayer].hand.forEach(card=>{card.revealed=true;card.faceUp=true});render();return}
  if(message.target==="ownEnergyPool"||message.target==="opponentEnergyPool"){
   const delta=Number(message.delta)||0;state.players[targetPlayer].energyPool=Math.max(0,(Number(state.players[targetPlayer].energyPool)||0)+delta);render();return;
  }
@@ -1529,8 +1530,15 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
  if(eventPowerDiff&&sourceCard&&eventCard){const amount=Math.max(0,attackPower(sourceCard)-attackPower(eventCard));opp.life-=amount;broadcastEffectDelta({target:"opponentLife",delta:-amount});checkLifeWinner(p===1?2:1);handled=true}
  const allOwnTagCounters=s.match(/自分の\[([^\]]+)\]全てにカウンター(\d+)個を乗せる/);
  if(allOwnTagCounters){own.monsters.filter(m=>String(cardDefinition(m)?.types||"").includes(allOwnTagCounters[1])).forEach(m=>m.counters=(Number(m.counters)||0)+Number(allOwnTagCounters[2]));handled=true}
+ const bothPlayersHandReveal=/自分と相手の手札全てを公開する/.test(s);
  const opponentHandReveal=/相手の手札全てを公開する/.test(s);
- if(opponentHandReveal){if(!onlinePlayerId){opp.hand.forEach(c=>{c.revealed=true;c.faceUp=true})}else broadcastEffectDelta({target:"opponentRevealHand"});handled=true;log(opp.name+"の手札を公開します")}
+ if(opponentHandReveal){
+  if(bothPlayersHandReveal)own.hand.forEach(card=>{card.revealed=true;card.faceUp=true});
+  if(!onlinePlayerId)opp.hand.forEach(card=>{card.revealed=true;card.faceUp=true});
+  else broadcastEffectDelta({target:"opponentRevealHand"});
+  handled=true;
+  log(bothPlayersHandReveal?"双方の手札を公開します":opp.name+"の手札を公開します");
+ }
  /* 「誤射」: choose one monster to spare, then destroy every other monster on both sides. */
  if(/モンスターを1体選び、選ばれなかったモンスターをすべて破壊する/.test(s)){
   const all=[...own.monsters.map(card=>({card,owner:p})),...opp.monsters.map(card=>({card,owner:p===1?2:1}))];
@@ -2087,6 +2095,8 @@ function exposeAnkrEffectTestApi(){
    resolveEffectText(text,owner,source||null);
    return this.snapshot();
   },
+  revealedHandIds(owner=1){return(state.players[owner]?.hand||[]).filter(card=>card.revealed).map(card=>card.id)},
+  renderForTest(){render();return this.snapshot()},
   trigger(sourceId,owner=1,trigger="enter"){
    const source=state.players[owner]?.monsters.concat(state.players[owner]?.energy,state.players[owner]?.field,state.players[owner]?.facedown,state.players[owner]?.discard).find(c=>c.id===sourceId);
    if(!source)throw new Error("source card not found: "+sourceId);
