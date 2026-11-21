@@ -33,6 +33,14 @@ const fixtureCards={
  earthEnergy:byType("#エネルギーカード","地","フォレストエネルギー")
 };
 for(const [kind,card] of Object.entries(fixtureCards))if(!card)throw new Error("fixture card missing: "+kind);
+const powerFixtures={
+ waterMonster:byType("#モンスターカード","水"),
+ lightMonster:byType("#モンスターカード","光"),
+ fireMonster:byType("#モンスターカード","火"),
+ lowCostMonster:cardsData.cards.find(card=>String(card.tags||"").includes("#モンスターカード")&&Number(card.cost)===1),
+ highCostMonster:cardsData.cards.find(card=>String(card.tags||"").includes("#モンスターカード")&&Number(card.cost)>=2)
+};
+for(const [kind,card] of Object.entries(powerFixtures))if(!card)throw new Error("power fixture card missing: "+kind);
 const fixture=[
  {name:fixtureCards.monster.name,owner:1,zone:"monsters",id:"fx-p1-m1",state:{damage:300,tapped:true,counters:1}},
  {name:fixtureCards.monster.name,owner:1,zone:"monsters",id:"fx-p1-m2"},
@@ -299,6 +307,148 @@ const server=http.createServer((req,res)=>{
   assert.equal(entryTriggers.plusAfter,100,"Plus Slasher did not trigger when another Machine monster entered");
   assert.equal(entryTriggers.lavaDamage,300,"Crater Fish did not damage an opponent monster entering the field");
   assert.equal(entryTriggers.fieldBuff,100,"Returning Forest did not buff an entering Beast");
+
+  const powerEffectRegression=await page.evaluate(({monsterName,beastName,waterName,lightName,fireName,lowCostName,highCostName})=>{
+   const api=window.__ANKR_TEST__;
+   api.reset();
+   api.addCard("棒人間",1,"monsters","set-all-one-source");
+   api.addCard(monsterName,1,"monsters","set-all-one-own");
+   api.addCard(monsterName,2,"monsters","set-all-one-opponent");
+   api.trigger("set-all-one-source",1,"enter");
+   const setAllOne=api.snapshot();
+
+   api.reset();
+   api.addCard("平穏の使者",1,"monsters","set-all-600-source");
+   api.addCard(monsterName,1,"monsters","set-all-600-own");
+   api.addCard(monsterName,2,"monsters","set-all-600-opponent");
+   api.trigger("set-all-600-source",1,"enter");
+   const setAll600=api.snapshot();
+
+   api.reset();
+   api.addCard("円海島",1,"field","set-all-300-field");
+   api.addCard(monsterName,1,"monsters","set-all-300-own");
+   api.addCard(monsterName,2,"monsters","set-all-300-opponent");
+   api.trigger("set-all-300-field",1,"end");
+   const setAll300=api.snapshot();
+
+   api.reset();
+   api.addCard("精神の鏡",1,"monsters","max-power-source");
+   api.addCard(monsterName,2,"monsters","max-power-target");
+   api.setCardPower("max-power-target",2,1500);
+   api.trigger("max-power-source",1,"enter");
+   const maxPower=api.snapshot();
+
+   api.reset();
+   api.addCard("夢幻竜",1,"monsters","event-power-source");
+   api.addCard(monsterName,2,"monsters","event-power-target");
+   api.setCardPower("event-power-target",2,900);
+   api.trigger("event-power-target",2,"enter");
+   const eventPower=api.snapshot();
+
+   api.reset();
+   api.addCard("月宿る海",1,"field","moon-sea-source");
+   api.addCard(waterName,1,"monsters","moon-water");
+   api.addCard(lightName,1,"monsters","moon-light");
+   api.addCard(monsterName,1,"monsters","moon-other");
+   api.trigger("moon-sea-source",1,"enter");
+   const moonSeaEntry=api.snapshot();
+   api.addCard(waterName,1,"monsters","moon-event-water");
+   api.trigger("moon-event-water",1,"enter");
+   api.addCard(lightName,1,"monsters","moon-event-light");
+   api.trigger("moon-event-light",1,"enter");
+   const moonSeaEvents=api.snapshot();
+
+   api.reset();
+   api.addCard("獣使い",1,"monsters","beast-buff-source");
+   api.addCard(beastName,1,"monsters","beast-buff-target");
+   api.addCard(monsterName,1,"monsters","beast-buff-other");
+   api.trigger("beast-buff-source",1,"enter");
+   const beastBuff=api.snapshot();
+
+   api.reset();
+   api.addCard("弱者の結束",1,"hand","cost-buff-source");
+   api.addCard(lowCostName,1,"monsters","cost-buff-low");
+   api.addCard(highCostName,1,"monsters","cost-buff-high");
+   api.runEffect("自分の1コスト以下のモンスター全てを+100。",1,"cost-buff-source");
+   const costBuff=api.snapshot();
+
+   api.reset();
+   api.addCard("完全燃焼",1,"hand","multiply-source");
+   api.addCard(fireName,1,"monsters","multiply-fire-target");
+   api.setCardPower("multiply-fire-target",1,300);
+   api.runEffect("自分の[火]1体を×2。",1,"multiply-source");
+   const multiplyPending=api.snapshot();
+   api.chooseTarget("multiply-fire-target");
+   const multiplyResolved=api.snapshot();
+
+   api.reset();
+   api.addCard("集団戦法",1,"hand","count-damage-source");
+   api.addCard(monsterName,1,"monsters","count-own-one");
+   api.addCard(monsterName,1,"monsters","count-own-two");
+   api.addCard(monsterName,2,"monsters","count-damage-target");
+   api.setCardPower("count-damage-target",2,2000);
+   api.runEffect("相手のモンスター1体に (自分のモンスターの数×300) ダメージ。",1,"count-damage-source");
+   const countDamagePending=api.snapshot();
+   api.chooseTarget("count-damage-target");
+   const countDamageResolved=api.snapshot();
+
+   api.reset();
+   api.addCard("碧い花",1,"monsters","blue-flower-max-power");
+   api.addCard("弩弓の騎士",2,"monsters","combat-zero-max-power");
+   api.trigger("combat-zero-max-power",2,"enter");
+   api.setCardPower("combat-zero-max-power",2,1500);
+   api.setCardState("combat-zero-max-power",2,"monsters",{combatPowerOverride:0});
+   const blueLifeBefore=api.snapshot().players[1].life;
+   api.trigger("blue-flower-max-power",1,"enter");
+   const blueLifeAfter=api.snapshot().players[1].life;
+
+   return {
+    setAllOneOwn:setAllOne.players[1].zones.monsters.find(card=>card.id==="set-all-one-own")?.power,
+    setAllOneOpponent:setAllOne.players[2].zones.monsters.find(card=>card.id==="set-all-one-opponent")?.power,
+    setAll600Own:setAll600.players[1].zones.monsters.find(card=>card.id==="set-all-600-own")?.power,
+    setAll600Opponent:setAll600.players[2].zones.monsters.find(card=>card.id==="set-all-600-opponent")?.power,
+    setAll300Own:setAll300.players[1].zones.monsters.find(card=>card.id==="set-all-300-own")?.power,
+    setAll300Opponent:setAll300.players[2].zones.monsters.find(card=>card.id==="set-all-300-opponent")?.power,
+    sourceMaxPower:maxPower.players[1].zones.monsters.find(card=>card.id==="max-power-source")?.power,
+    eventSetPower:eventPower.players[2].zones.monsters.find(card=>card.id==="event-power-target")?.power,
+    moonWaterPower:moonSeaEntry.players[1].zones.monsters.find(card=>card.id==="moon-water")?.modification,
+    moonLightPower:moonSeaEntry.players[1].zones.monsters.find(card=>card.id==="moon-light")?.modification,
+    moonOtherPower:moonSeaEntry.players[1].zones.monsters.find(card=>card.id==="moon-other")?.modification,
+    moonEventWaterPower:moonSeaEvents.players[1].zones.monsters.find(card=>card.id==="moon-event-water")?.modification,
+    moonEventLightPower:moonSeaEvents.players[1].zones.monsters.find(card=>card.id==="moon-event-light")?.modification,
+    beastPower:beastBuff.players[1].zones.monsters.find(card=>card.id==="beast-buff-target")?.modification,
+    beastOtherPower:beastBuff.players[1].zones.monsters.find(card=>card.id==="beast-buff-other")?.modification,
+    lowCostPower:costBuff.players[1].zones.monsters.find(card=>card.id==="cost-buff-low")?.modification,
+    highCostPower:costBuff.players[1].zones.monsters.find(card=>card.id==="cost-buff-high")?.modification,
+    multiplyPendingKind:multiplyPending.pendingTarget?.kind,
+    multiplyPower:multiplyResolved.players[1].zones.monsters.find(card=>card.id==="multiply-fire-target")?.power,
+    countDamagePendingKind:countDamagePending.pendingTarget?.kind,
+    countDamage:countDamageResolved.players[2].zones.monsters.find(card=>card.id==="count-damage-target")?.damage,
+    blueFlowerHeal:blueLifeAfter-blueLifeBefore
+   };
+  },{monsterName:fixtureCards.monster.name,beastName:fixtureCards.beast.name,waterName:powerFixtures.waterMonster.name,lightName:powerFixtures.lightMonster.name,fireName:powerFixtures.fireMonster.name,lowCostName:powerFixtures.lowCostMonster.name,highCostName:powerFixtures.highCostMonster.name});
+  assert.equal(powerEffectRegression.setAllOneOwn,1,"Stick Figure did not set all own monsters to power 1");
+  assert.equal(powerEffectRegression.setAllOneOpponent,1,"Stick Figure did not set all opponent monsters to power 1");
+  assert.equal(powerEffectRegression.setAll600Own,600,"Peace Messenger did not set all own monsters to power 600");
+  assert.equal(powerEffectRegression.setAll600Opponent,600,"Peace Messenger did not set all opponent monsters to power 600");
+  assert.equal(powerEffectRegression.setAll300Own,300,"Round Sea Island did not set all own monsters to power 300 at turn end");
+  assert.equal(powerEffectRegression.setAll300Opponent,300,"Round Sea Island did not set all opponent monsters to power 300 at turn end");
+  assert.equal(powerEffectRegression.sourceMaxPower,1500,"Mirror of the Mind did not copy the current maximum monster power");
+  assert.equal(powerEffectRegression.eventSetPower,100,"Dream Dragon did not set the entering opponent monster's power to 100");
+  assert.equal(powerEffectRegression.moonWaterPower,100,"Moonlit Sea did not buff all Water monsters");
+  assert.equal(powerEffectRegression.moonLightPower,100,"Moonlit Sea did not buff all Light monsters");
+  assert.equal(powerEffectRegression.moonOtherPower,0,"Moonlit Sea buffed a monster outside its listed tags");
+  assert.equal(powerEffectRegression.moonEventWaterPower,100,"Moonlit Sea did not buff an entering Water monster");
+  assert.equal(powerEffectRegression.moonEventLightPower,100,"Moonlit Sea did not buff an entering Light monster");
+  assert.equal(powerEffectRegression.beastPower,300,"Beast Tamer did not buff all Beast monsters");
+  assert.equal(powerEffectRegression.beastOtherPower,0,"Beast Tamer buffed a monster outside its tag");
+  assert.equal(powerEffectRegression.lowCostPower,100,"Weak Unity did not buff a 1-cost monster");
+  assert.equal(powerEffectRegression.highCostPower,0,"Weak Unity buffed a monster above its cost limit");
+  assert.equal(powerEffectRegression.multiplyPendingKind,"multiplyMonsterPower","Complete Burn did not request a board target");
+  assert.equal(powerEffectRegression.multiplyPower,600,"Complete Burn did not double the selected Fire monster's power");
+  assert.equal(powerEffectRegression.countDamagePendingKind,"formulaMonsterDamage","Group Tactics did not request a board target");
+  assert.equal(powerEffectRegression.countDamage,600,"Group Tactics did not calculate damage from the number of own monsters");
+  assert.equal(powerEffectRegression.blueFlowerHeal,1500,"Blue Flower used combat override zero instead of the opponent monster's actual power");
 
   const costReduction=await page.evaluate(({emptyName,effectfulName})=>{
    const api=window.__ANKR_TEST__;
