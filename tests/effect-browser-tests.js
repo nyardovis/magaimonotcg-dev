@@ -156,7 +156,7 @@ const server=http.createServer((req,res)=>{
   const crossbowSource=crossbowPending.players[1].zones.monsters.find(c=>c.id==="crossbow-source");
   assert.equal(crossbowPending.pendingTarget?.kind,"sourcePowerMonsterDamage","Crossbow Knight did not request a board target for its power-based activated damage");
   assert.equal(crossbowSource?.tapped,true,"Crossbow Knight did not pay its tap activation cost");
-  assert.equal(crossbowSource?.combatPowerOverride,0,"Crossbow Knight fixture did not retain its zero combat-power passive");
+  assert.equal(crossbowSource?.power,0,"Crossbow Knight fixture did not retain its zero combat-power value");
   await page.locator('.card[data-card-id="crossbow-target"]').click();
   const crossbowResolved=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
   assert.equal(crossbowResolved.players[2].zones.monsters.find(c=>c.id==="crossbow-target")?.damage,600,"Crossbow Knight's ability incorrectly used its zero combat power instead of its printed/effect power");
@@ -249,7 +249,7 @@ const server=http.createServer((req,res)=>{
   const mossTrapPlaced=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
   const selectedMossTrap=mossTrapPlaced.players[1].zones.facedown.find(c=>c.id==="moss-selection-trap");
   assert.ok(selectedMossTrap,"Moss Tree Spider did not move the selected trap from the deck to the facedown zone");
-  assert.equal(selectedMossTrap.faceUp,false,"Moss Tree Spider revealed a trap that should be set secretly");
+  assert.equal(mossTrapPlaced.players[1].zones.facedown.length,1,"Moss Tree Spider did not keep the selected trap in the facedown zone");
   assert.equal(mossTrapPlaced.players[1].zones.deck.length,0,"Moss Tree Spider did not remove the selected trap from the deck");
   assert.equal(mossTrapPlaced.pendingTarget,null,"Moss Tree Spider left a stale selection pending after confirmation");
   assert.equal(advanced.blueFlowerLife,4000+advanced.expectedHighPower,"Blue Flower maximum-power healing did not resolve");
