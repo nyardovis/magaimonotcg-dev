@@ -253,6 +253,10 @@ const server=http.createServer((req,res)=>{
   assert.equal(mossTrapPlaced.players[1].zones.facedown.length,1,"Moss Tree Spider did not keep the selected trap in the facedown zone");
   assert.equal(mossTrapPlaced.players[1].zones.deck.length,0,"Moss Tree Spider did not remove the selected trap from the deck");
   assert.equal(mossTrapPlaced.pendingTarget,null,"Moss Tree Spider left a stale selection pending after confirmation");
+   const mossTrapPublicState=await page.evaluate(()=>window.getPublicState());
+   assert.equal(mossTrapPublicState.deckCount,0,"Moss Tree Spider public state did not decrement the deck count");
+   assert.equal(mossTrapPublicState.facedownCount,1,"Moss Tree Spider public state did not increment the facedown count");
+   assert.equal(mossTrapPublicState.facedownPublic.length,0,"Moss Tree Spider public state leaked the identity of its face-down trap");
   assert.equal(advanced.blueFlowerLife,4000+advanced.expectedHighPower,"Blue Flower maximum-power healing did not resolve");
   assert.equal(advanced.tenkanPending,"deckSearchMove","Tenkan did not continue to its deck-energy selection");
   assert.equal(advanced.tenkanDestination,"energy","Tenkan did not offer energy deployment");
@@ -542,6 +546,53 @@ const server=http.createServer((req,res)=>{
   await page.locator('.card[data-card-id="strong-assault-target"]').click();
   const afterStrongAssault=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
   assert.equal(afterStrongAssault.players[2].zones.monsters.find(c=>c.id==="strong-assault-target")?.damage,700,"Strong Assault did not damage the selected opponent monster");
+
+   const passiveDamageProtection=await page.evaluate(({sourceName})=>{
+    const api=window.__ANKR_TEST__;api.reset();api.addCard(sourceName,1,"hand","armor-effect-source");api.addCard("鎧ゴブリン",2,"monsters","armor-effect-target");api.snapshot();api.runEffect("相手のモンスター1体に1200ダメージ。",1,"armor-effect-source");api.chooseTarget("armor-effect-target");const armor=api.snapshot().players[2].zones.monsters.find(c=>c.id==="armor-effect-target");
+    api.reset();api.addCard(sourceName,1,"hand","life-tree-effect-source");api.addCard("命の天樹",2,"monsters","life-tree-effect-target");api.snapshot();api.runEffect("相手のモンスター1体に300ダメージ。",1,"life-tree-effect-source");api.chooseTarget("life-tree-effect-target");const lifeTree=api.snapshot().players[2].zones.monsters.find(c=>c.id==="life-tree-effect-target");
+    api.reset();api.addCard(sourceName,1,"hand","absolute-god-effect-source");api.addCard("絶対神",2,"monsters","absolute-god-effect-target");api.snapshot();api.runEffect("相手のモンスター1体に300ダメージ。",1,"absolute-god-effect-source");api.chooseTarget("absolute-god-effect-target");const absoluteBeforeDisable=api.snapshot().players[2].zones.monsters.find(c=>c.id==="absolute-god-effect-target");api.setCardState("absolute-god-effect-target",2,"monsters",{effectsDisabled:true});api.runEffect("相手のモンスター1体に300ダメージ。",1,"absolute-god-effect-source");api.chooseTarget("absolute-god-effect-target");const absoluteAfterDisable=api.snapshot().players[2].zones.monsters.find(c=>c.id==="absolute-god-effect-target");
+    api.reset();api.addCard(sourceName,1,"monsters","immunity-combat-source");api.setCardPower("immunity-combat-source",1,1200);api.addCard("命の天樹",2,"monsters","immunity-combat-target");api.attack("immunity-combat-source","immunity-combat-target");const combat=api.snapshot().players[2].zones.monsters.find(c=>c.id==="immunity-combat-target");
+    return {armorDamage:armor?.damage,lifeTreeDamage:lifeTree?.damage,lifeTreeImmune:lifeTree?.damageImmunity,absoluteDamage:absoluteBeforeDisable?.damage,absoluteImmune:absoluteBeforeDisable?.damageImmunity,disabledAbsoluteDamage:absoluteAfterDisable?.damage,disabledAbsoluteImmune:absoluteAfterDisable?.damageImmunity,combatDamage:combat?.damage};
+   },{sourceName:fixtureCards.monster.name});
+   assert.equal(passiveDamageProtection.armorDamage,200,"damage reduction did not reduce effect damage by 1000");
+   assert.equal(passiveDamageProtection.lifeTreeDamage,0,"Life Tree did not prevent effect damage");
+   assert.equal(passiveDamageProtection.lifeTreeImmune,true,"Life Tree damage immunity was not recalculated");
+   assert.equal(passiveDamageProtection.absoluteDamage,0,"Absolute God did not prevent effect damage using the alternate immunity wording");
+   assert.equal(passiveDamageProtection.absoluteImmune,true,"Absolute God damage immunity was not recalculated");
+   assert.equal(passiveDamageProtection.disabledAbsoluteDamage,300,"disabling Absolute God did not remove damage immunity");
+   assert.equal(passiveDamageProtection.disabledAbsoluteImmune,false,"disabling Absolute God left stale damage immunity");
+   assert.equal(passiveDamageProtection.combatDamage,0,"damage immunity did not prevent combat damage");
+
+   const conditionalSeaProtection=await page.evaluate(({sourceName})=>{
+    const api=window.__ANKR_TEST__;api.reset();api.addCard(sourceName,1,"hand","sea-protection-source");api.addCard("水底渡り",2,"monsters","sea-protection-target");api.snapshot();const withoutField=api.snapshot().players[2].zones.monsters.find(c=>c.id==="sea-protection-target")?.cannotBeChosenByOpponent;
+    api.addCard("キュリアス海",2,"field","sea-protection-field");const withField=api.snapshot().players[2].zones.monsters.find(c=>c.id==="sea-protection-target")?.cannotBeChosenByOpponent;api.runEffect("相手のモンスター1体に300ダメージ。",1,"sea-protection-source");const damageWithField=api.snapshot().players[2].zones.monsters.find(c=>c.id==="sea-protection-target")?.damage;
+    api.removeCard("sea-protection-field",2,"field");const afterFieldRemoval=api.snapshot().players[2].zones.monsters.find(c=>c.id==="sea-protection-target")?.cannotBeChosenByOpponent;api.runEffect("相手のモンスター1体に300ダメージ。",1,"sea-protection-source");api.chooseTarget("sea-protection-target");const damageAfterRemoval=api.snapshot().players[2].zones.monsters.find(c=>c.id==="sea-protection-target")?.damage;
+    return {withoutField,withField,damageWithField,afterFieldRemoval,damageAfterRemoval};
+   },{sourceName:fixtureCards.monster.name});
+   assert.equal(conditionalSeaProtection.withoutField,false,"Water Bottom Walker remained protected without a Sea field");
+   assert.equal(conditionalSeaProtection.withField,true,"Water Bottom Walker did not gain protection while a Sea field was present");
+   assert.equal(conditionalSeaProtection.damageWithField,0,"a protected Water Bottom Walker was selectable by an opponent effect");
+   assert.equal(conditionalSeaProtection.afterFieldRemoval,false,"Water Bottom Walker retained stale protection after the Sea field left");
+   assert.equal(conditionalSeaProtection.damageAfterRemoval,300,"Water Bottom Walker did not become selectable after the Sea field left");
+
+   const onlineEffectDamageSync=await page.evaluate(({monsterName})=>{
+    const api=window.__ANKR_TEST__,sent=[];api.reset();api.addCard(monsterName,1,"hand","online-effect-source");api.addCard(monsterName,1,"monsters","online-own-damage-target");api.addCard(monsterName,2,"monsters","online-opponent-damage-target");api.setOnlineTestMode({readyState:WebSocket.OPEN,send:raw=>sent.push(JSON.parse(raw))});api.runEffect("モンスター全てに300ダメージ。",1,"online-effect-source");const state=api.snapshot();return {ownDamage:state.players[1].zones.monsters.find(c=>c.id==="online-own-damage-target")?.damage,opponentDamage:state.players[2].zones.monsters.find(c=>c.id==="online-opponent-damage-target")?.damage,deltas:sent.filter(m=>m.type==="operation"&&m.action==="effect_delta"&&(m.target==="ownMonsterDamage"||m.target==="opponentMonsterDamage")).map(m=>({target:m.target,cardId:m.cardId,delta:m.delta}))};
+   },{monsterName:fixtureCards.monster.name});
+   assert.equal(onlineEffectDamageSync.ownDamage,300,"all-monster damage did not affect the own monster");
+   assert.equal(onlineEffectDamageSync.opponentDamage,300,"all-monster damage did not affect the opponent monster");
+   assert.deepEqual(new Set(onlineEffectDamageSync.deltas.map(d=>d.target)),new Set(["ownMonsterDamage","opponentMonsterDamage"]),"all-monster damage did not synchronize both owners damage deltas");
+
+   const onlineSingleDamageSync=await page.evaluate(({monsterName})=>{
+    const api=window.__ANKR_TEST__,sent=[];api.reset();api.addCard(monsterName,1,"hand","online-single-source");api.addCard(monsterName,1,"monsters","online-single-own-target");api.setOnlineTestMode({readyState:WebSocket.OPEN,send:raw=>sent.push(JSON.parse(raw))});api.runEffect("自分のモンスター1体に300ダメージ。",1,"online-single-source");api.chooseTarget("online-single-own-target");const state=api.snapshot();return {damage:state.players[1].zones.monsters.find(c=>c.id==="online-single-own-target")?.damage,deltas:sent.filter(m=>m.type==="operation"&&m.action==="effect_delta").map(m=>({target:m.target,delta:m.delta}))};
+   },{monsterName:fixtureCards.monster.name});
+   assert.equal(onlineSingleDamageSync.damage,300,"selected own-monster damage was not applied");
+   assert.deepEqual(onlineSingleDamageSync.deltas.filter(d=>d.target==="ownMonsterDamage").map(d=>d.delta),[300],"selected own-monster damage was not synchronized as ownMonsterDamage");
+
+   const onlineCombatDamageSync=await page.evaluate(({sourceName})=>{
+    const api=window.__ANKR_TEST__,sent=[];api.reset();api.addCard(sourceName,1,"monsters","online-armor-attacker");api.setCardPower("online-armor-attacker",1,1200);api.addCard("鎧ゴブリン",2,"monsters","online-armor-defender");api.setOnlineTestMode({readyState:WebSocket.OPEN,send:raw=>sent.push(JSON.parse(raw))});api.attack("online-armor-attacker","online-armor-defender");api.resolveAttackForTest("online-armor-defender");const state=api.snapshot();return {damage:state.players[2].zones.monsters.find(c=>c.id==="online-armor-defender")?.damage,deltas:sent.filter(m=>m.type==="operation"&&m.action==="effect_delta"&&m.target==="opponentMonsterDamage").map(m=>m.delta)};
+   },{sourceName:fixtureCards.monster.name});
+   assert.equal(onlineCombatDamageSync.damage,200,"combat damage did not apply the defender damage reduction");
+   assert.deepEqual(onlineCombatDamageSync.deltas,[200],"online combat synchronization sent the un-reduced attack power instead of the applied damage");
 
   const remoteKnightToken=await page.evaluate(()=>{const api=window.__ANKR_TEST__;api.reset();api.setOnlineTestMode();return api.applyPublicStateForTest("player2",{life:4000,handCount:0,deckCount:0,deckCounters:0,deckHorizontal:false,facedownCount:0,monsters:[{id:"remote-knight-token",name:"騎士・トークン",faceUp:true,revealed:false,tapped:false,counters:0,damage:0,modification:0}],energy:[],field:[],discard:[],pendingDiscard:false,gameOver:null})});
   assert.equal(remoteKnightToken.players[2].zones.monsters[0]?.name,"騎士・トークン","sanitized opponent public state lost the Knight token name");

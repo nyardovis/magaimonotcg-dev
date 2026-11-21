@@ -59,6 +59,17 @@ async function main(){
     assert.equal(relayedKnight?.name,"騎士・トークン","Worker did not relay the Knight token's public name");
     assert.equal("power" in relayedKnight,false,"Worker relayed untrusted printed power instead of leaving card-definition reconstruction to the client");
 
+    const hiddenTrapStateAtOpponent=second.waitFor(message=>message.type==="public_state"&&message.playerId===firstJoined.playerId&&message.state?.facedownCount===1&&Array.isArray(message.state?.facedownPublic),"hidden trap count public-state relay");
+    first.ws.send(operation({action:"sync_public_state",state:{
+      life:4000,handCount:0,deckCount:0,deckCounters:0,deckHorizontal:false,facedownCount:1,
+      revealedHand:[],facedownPublic:[{id:"ci-hidden-trap",name:"SECRET TRAP NAME",faceUp:false}],
+      monsters:[{id:"ci-knight-token",name:"騎士・トークン",faceUp:true}],energy:[],field:[],discard:[],pendingDiscard:false,gameOver:null
+    }}));
+    const relayedHiddenTrapState=await hiddenTrapStateAtOpponent;
+    assert.equal(relayedHiddenTrapState.state.facedownCount,1,"Worker did not synchronize the number of face-down traps");
+    assert.deepEqual(relayedHiddenTrapState.state.facedownPublic,[],"Worker exposed a face-down trap in the public card list");
+    assert.equal(JSON.stringify(relayedHiddenTrapState.state).includes("SECRET TRAP NAME"),false,"Worker leaked the identity of a face-down trap");
+
     const discardToDeckDeltaAtOpponent=second.waitFor(message=>message.type==="operation"&&message.action==="effect_delta"&&message.target==="opponentDiscardToDeck"&&message.playerId===firstJoined.playerId,"opponent discard-to-deck effect delta relay");
     first.ws.send(operation({action:"effect_delta",target:"opponentDiscardToDeck"}));
     const relayedDiscardToDeckDelta=await discardToDeckDeltaAtOpponent;
