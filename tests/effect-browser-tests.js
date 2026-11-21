@@ -149,6 +149,7 @@ const server=http.createServer((req,res)=>{
    const source=api.addCard("弩弓の騎士",1,"monsters","crossbow-source");
    api.addCard(targetName,2,"monsters","crossbow-target");
    api.setCardPower("crossbow-source",1,600);
+   api.setCardPower("crossbow-target",2,2000);
    api.snapshot();
    api.activate(source,"monsters",0);
    return api.snapshot();
