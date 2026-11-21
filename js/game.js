@@ -454,6 +454,7 @@ function recalculatePlayerPassives(){
    if(text.includes("アンタップ中は攻撃されない"))delete card.cannotBeAttackedWhileUntapped;
    if(text.includes("相手のモンスターはこれにしか攻撃できない"))delete card.mustBeAttacked;
    if(text.includes("相手の効果で選ばれない"))delete card.cannotBeChosenByOpponent;
+   if(text.includes("これが受けるダメージ"))delete card.damageImmunity;
    if(text.includes("モンスターとの戦闘時、戦闘相手のパワーで戦闘する"))delete card.combatPowerUsesOpponent;
    if(text.includes("モンスターとの戦闘時、これのパワーの代わりに0パワーで戦闘する"))delete card.combatPowerOverride;
    if(text.includes("1ターンに")&&text.includes("回攻撃できる"))delete card.attacksPerTurn;
@@ -464,11 +465,12 @@ function recalculatePlayerPassives(){
   if(/(?:^|。)\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(text))card.cannotBeAttacked=true;
   if(text.includes("アンタップ中は攻撃されない"))card.cannotBeAttackedWhileUntapped=true;
   if(text.includes("相手のモンスターはこれにしか攻撃できない"))card.mustBeAttacked=true;
-  if(text.includes("相手の効果で選ばれない"))card.cannotBeChosenByOpponent=true;
+  if(hasActiveConditionalProtection(card,owner))card.cannotBeChosenByOpponent=true;else delete card.cannotBeChosenByOpponent;
   if(text.includes("モンスターとの戦闘時、戦闘相手のパワーで戦闘する"))card.combatPowerUsesOpponent=true;
   if(text.includes("モンスターとの戦闘時、これのパワーの代わりに0パワーで戦闘する"))card.combatPowerOverride=0;
   const repeat=text.match(/1ターンに(\d+)回攻撃できる/);if(repeat)card.attacksPerTurn=Number(repeat[1]);
   const reduction=text.match(/これが受けるダメージ-(\d+)/);if(reduction)card.passiveDamageReduction=Number(reduction[1]);
+  if(/これが受けるダメージ(?:を)?\s*=\s*0/.test(text))card.damageImmunity=true;else delete card.damageImmunity;
  }
 }
 function render(){
@@ -665,6 +667,8 @@ function processScheduledEndTurnEffects(p){const x=state.players[p];for(const ow
 function endTurn(){const localPlayer=1;if(state.turnPlayer!==localPlayer||state.pendingDiscardPlayer!==null||state.phase!=="playing")return;if(onlinePlayerId!==null&&!devLocalMode){if(!gameSocket||gameSocket.readyState!==WebSocket.OPEN)return log("オンラインサーバーに接続されていません");resolveTurnTriggers(1,"end");processScheduledEndTurnEffects(1);state.players[1].monsters.forEach(m=>{m.damage=0});render();gameSocket.send(JSON.stringify({type:"operation",action:"end_turn"}));return}const p=state.turnPlayer,x=state.players[p];resolveTurnTriggers(p,"end");processScheduledEndTurnEffects(p);x.monsters.forEach(m=>{m.damage=0});state.turnPlayer=p===1?2:1;startTurn(state.turnPlayer)}
 
 function cardDefinition(cardOrName){const name=typeof cardOrName==="string"?cardOrName:cardOrName?.name;if(EFFECT_TOKEN_DEFINITIONS[name])return EFFECT_TOKEN_DEFINITIONS[name];if(typeof cardOrName==="string")return cardDataByName.get(cardOrName)||null;const id=cardOrName?.cardDataId;if(id){const exact=cardDatabase.find(c=>c.id===id);if(exact)return exact}return cardDataByName.get(name)||null}
+function playerHasFieldType(owner,type){return(state.players[owner]?.field||[]).some(field=>String(cardDefinition(field)?.types||"").split(/[，,、\s]+/).includes(type))}
+function hasActiveConditionalProtection(card,owner){const text=String(cardDefinition(card)?.effect_text||"");if(!text.includes("相手の効果で選ばれない"))return false;const condition=text.match(/自分の\[([^\]]+)\]のフィールドが場にある時/);return !condition||playerHasFieldType(owner,condition[1])}
 function cardKind(card){const tag=String(cardDefinition(card)?.tags||"");if(tag.includes("#エネルギーカード"))return "energy";if(tag.includes("#フィールドカード"))return "field";if(tag.includes("#モンスターカード"))return "monster";if(tag.includes("#魔法カード"))return "spell";if(tag.includes("#罠カード"))return "trap";return "unknown"}
 function cardCost(card){const value=cardDefinition(card)?.cost;if(typeof value==="number"&&Number.isFinite(value))return Math.max(0,value);if(typeof value==="string"&&/^\+?\d+$/.test(value))return Math.max(0,Number(value.replace("+","")));return 0}
 function effectiveCardCost(card,p=1){
@@ -755,7 +759,7 @@ function effectCannotChooseZone(player,zone){
  }
  return false;
 }
-function resetGrantedCardInformation(c){if(!c)return;for(const key of ["effectsDisabled","cannotAttack","cannotAttackUntilTurnEnd","cannotAttackUntilPlayerTurnEnd","cannotBeAttacked","cannotBeAttackedWhileUntapped","mustBeAttacked","cannotBeChosenByOpponent","combatPowerUsesOpponent","combatPowerOverride","attacksPerTurn","damageReduction","passiveDamageReduction","grantedEffects","temporaryEffects","cannotAttackUntilOwnerTurnEnd"])delete c[key];c.summonedThisTurn=false;c.canAttackOnSummon=false;c.attacksThisTurn=0}
+function resetGrantedCardInformation(c){if(!c)return;for(const key of ["effectsDisabled","cannotAttack","cannotAttackUntilTurnEnd","cannotAttackUntilPlayerTurnEnd","cannotBeAttacked","cannotBeAttackedWhileUntapped","mustBeAttacked","cannotBeChosenByOpponent","combatPowerUsesOpponent","combatPowerOverride","attacksPerTurn","damageReduction","passiveDamageReduction","damageImmunity","grantedEffects","temporaryEffects","cannotAttackUntilOwnerTurnEnd"])delete c[key];c.summonedThisTurn=false;c.canAttackOnSummon=false;c.attacksThisTurn=0}
 function cardEffectCannotBeRemoved(c){return /この効果は消えない/.test(String(cardDefinition(c)?.effect_text||""))}
 function disableCardEffects(c){if(!c||cardEffectCannotBeRemoved(c))return false;c.effectsDisabled=true;return true}
 function moveToDiscard(p,c,reason=""){const x=state.players[p];resetGrantedCardInformation(c);c.tapped=false;c.faceUp=true;c.revealed=false;c.damage=0;c.modification=0;c.counters=0;x.discard.push(c);if(reason)log("「"+c.name+"」を捨て札に置きました（"+reason+"）")}
@@ -772,7 +776,7 @@ function resolveCardTrigger(card,p,trigger){
     if(text.includes("アンタップ中は攻撃されない"))card.cannotBeAttackedWhileUntapped=true;
     if(text.includes("相手のモンスターはこれにしか攻撃できない"))card.mustBeAttacked=true;
     if(text.includes("相手のモンスターはプレイヤーに攻撃できない"))state.players[p].opponentMonstersCannotAttackPlayer=true;
-    if(text.includes("相手の効果で選ばれない"))card.cannotBeChosenByOpponent=true;
+    if(hasActiveConditionalProtection(card,p))card.cannotBeChosenByOpponent=true;else delete card.cannotBeChosenByOpponent;
     if(text.includes("相手の罠は発動しない"))state.players[p].disableOpponentTraps=true;
     if(text.includes("相手の「場に出た時」の効果は発動しない"))state.players[p].disableOpponentEnterEffects=true;
     if(text.includes("モンスターとの戦闘時、戦闘相手のパワーで戦闘する"))card.combatPowerUsesOpponent=true;
@@ -783,6 +787,7 @@ function resolveCardTrigger(card,p,trigger){
     if(reduction)state.players[p].passiveDamageReduction=Math.max(Number(state.players[p].passiveDamageReduction)||0,Number(reduction[1]));
     const ownCardReduction=text.match(/これが受けるダメージ-(\d+)/);
     if(ownCardReduction)card.passiveDamageReduction=Math.max(Number(card.passiveDamageReduction)||0,Number(ownCardReduction[1]));
+     if(/これが受けるダメージ(?:を)?\s*=\s*0/.test(text))card.damageImmunity=true;
   }
   const enterSuppressed=trigger==="enter"&&state.players[p===1?2:1].disableOpponentEnterEffects;
   if(enterSuppressed)debugLog("相手の効果により場に出た時効果を無効化: "+card.name,"effect","skipped",{player:p,card:card.name});
@@ -1824,7 +1829,8 @@ function resolveEffectText(text,p,sourceCard,eventCard=null){
 }
 function effectPower(card){const base=Number(card?.power)||Number(cardDefinition(card)?.power)||0;return Math.max(0,base+(Number(card?.modification)||0))}
 function attackPower(card){if(card?.combatPowerOverride!==undefined&&card?.combatPowerOverride!==null)return Math.max(0,Number(card.combatPowerOverride)||0);const base=Number(card.power)||Number(cardDefinition(card)?.power)||0;return Math.max(0,base+(Number(card.modification)||0))}
-function reduceIncomingDamage(target,amount){const reduction=Math.max(0,Number(target?.damageReduction)||0,Number(target?.passiveDamageReduction)||0,Number(target?.effectDamageReduction)||0);return Math.max(0,Number(amount||0)-reduction)}
+function reduceIncomingDamage(target,amount){const raw=Math.max(0,Number(amount)||0);if(target?.damageImmunity===true)return 0;const reduction=Math.max(0,Number(target?.damageReduction)||0,Number(target?.passiveDamageReduction)||0,Number(target?.effectDamageReduction)||0);return Math.max(0,raw-reduction)}
+function applyMonsterDamage(target,amount){if(!target)return 0;const applied=reduceIncomingDamage(target,amount);target.damage=(Number(target.damage)||0)+applied;return applied}
 function declareAttack(cardId){
   if(state.phase!=="playing"||state.pendingDiscardPlayer!==null||state.turnPlayer!==1||state.gameOver)return;
   const card=state.players[1].monsters.find(c=>c.id===cardId);if(!card)return;
