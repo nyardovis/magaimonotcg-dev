@@ -896,7 +896,7 @@ function activateCardAbility(cardId,abilityIndex){
     log("ダメージを与える相手モンスターを盤面からクリックしてください");render();return;
   }
   if(isSourcePowerMonsterDamage){
-    pendingEffectTarget={kind:"sourcePowerMonsterDamage",player:1,zone:"monsters",sourceZone:selected.z,sourceCard:card,candidates:sourcePowerMonsterDamageCandidates.map(target=>({id:target.id,owner:2}))};
+    pendingEffectTarget={kind:"sourcePowerMonsterDamage",player:1,players:[2],zone:"monsters",sourceZone:selected.z,sourceCard:card,candidates:sourcePowerMonsterDamageCandidates.map(target=>({id:target.id,owner:2}))};
     log("ダメージを与える相手モンスターを盤面からクリックしてください");
     render();
     return;
