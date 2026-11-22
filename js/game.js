@@ -436,11 +436,13 @@ function renderDiscardViewer(){
 function recalculatePlayerPassives(){
  for(const p of [1,2]){
   const player=state.players[p];if(!player)continue;
-  player.opponentMonstersCannotAttackPlayer=false;player.disableOpponentTraps=false;player.disableOpponentEnterEffects=false;player.passiveDamageReduction=0;
+  player.opponentMonstersCannotAttackPlayer=false;player.monstersCannotAttack=false;player.disableOpponentTraps=false;player.disableOpponentEnterEffects=false;player.passiveDamageReduction=0;
   for(const owner of [1,2])for(const card of [...(state.players[owner]?.monsters||[]),...(state.players[owner]?.energy||[]),...(state.players[owner]?.field||[])]){
    const data=cardDefinition(card),text=String(data?.effect_text||"");if(!data)continue;
    if(card.effectsDisabled)continue;
    if(text.includes("相手のモンスターはプレイヤーに攻撃できない")&&p!==owner)player.opponentMonstersCannotAttackPlayer=true;
+   const opponentManaAttackLimit=text.match(/相手のモンスターは相手のマナが(\d+)以下の時(?:は)?攻撃できない/);
+   if(opponentManaAttackLimit&&p!==owner&&(Number(player.energyPool)||0)<=Number(opponentManaAttackLimit[1]))player.monstersCannotAttack=true;
    if(text.includes("相手の罠は発動しない")&&p!==owner)player.disableOpponentTraps=true;
    if(text.includes("相手の「場に出た時」の効果は発動しない")&&p!==owner)player.disableOpponentEnterEffects=true;
    if(text.includes("自分が受けるダメージ-")&&p===owner){const m=text.match(/自分が受けるダメージ-(\d+)/);if(m)player.passiveDamageReduction=Math.max(player.passiveDamageReduction,Number(m[1]))}
@@ -448,6 +450,7 @@ function recalculatePlayerPassives(){
  }
  for(const owner of [1,2])for(const card of [...(state.players[owner]?.monsters||[]),...(state.players[owner]?.energy||[]),...(state.players[owner]?.field||[])]){
   const text=String(cardDefinition(card)?.effect_text||"");
+  card.cannotAttackByCounterCondition=false;
   if(card.effectsDisabled){
    if(/(?:^|。)\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(text))delete card.cannotAttack;
    if(/(?:^|。)\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(text))delete card.cannotBeAttacked;
@@ -461,6 +464,10 @@ function recalculatePlayerPassives(){
    if(text.includes("これが受けるダメージ-"))delete card.passiveDamageReduction;
    continue;
   }
+  const counterLimitAttack=text.match(/カウンターが(\d+)個以下の時(?:は)?攻撃できない/);
+  const counterPresentAttack=/カウンターがある時(?:は)?攻撃できない/.test(text);
+  const counterCount=Number(card.counters)||0;
+  card.cannotAttackByCounterCondition=Boolean((counterLimitAttack&&counterCount<=Number(counterLimitAttack[1]))||(counterPresentAttack&&counterCount>0));
   if(/(?:^|。)\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(text))card.cannotAttack=true;
   if(/(?:^|。)\s*(?:攻撃されない|これ(?:は)?攻撃されない)/.test(text))card.cannotBeAttacked=true;
   if(text.includes("アンタップ中は攻撃されない"))card.cannotBeAttackedWhileUntapped=true;
@@ -1838,10 +1845,12 @@ function reduceIncomingDamage(target,amount){const raw=Math.max(0,Number(amount)
 function applyMonsterDamage(target,amount){if(!target)return 0;const applied=reduceIncomingDamage(target,amount);target.damage=(Number(target.damage)||0)+applied;return applied}
 function declareAttack(cardId){
   if(state.phase!=="playing"||state.pendingDiscardPlayer!==null||state.turnPlayer!==1||state.gameOver)return;
+  recalculatePlayerPassives();
   const card=state.players[1].monsters.find(c=>c.id===cardId);if(!card)return;
+  if(state.players[1].monstersCannotAttack)return log("相手の効果により、自分のモンスターは攻撃できません");
   if(card.tapped)return log("タップしているモンスターは攻撃できません");
   if((Number(card.attacksThisTurn)||0)>=(Number(card.attacksPerTurn)||1))return log("このモンスターはこのターンに攻撃できる回数を使い切っています");
-  if(card.cannotAttack||card.cannotAttackUntilTurnEnd||card.cannotAttackUntilPlayerTurnEnd!==undefined||/(?:^|。)\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(String(cardDefinition(card)?.effect_text||"")))return log("このモンスターは効果により攻撃できません");
+  if(card.cannotAttack||card.cannotAttackByCounterCondition||card.cannotAttackUntilTurnEnd||card.cannotAttackUntilPlayerTurnEnd!==undefined||/(?:^|。)\s*(?:攻撃できない|これ(?:は)?攻撃できない)/.test(String(cardDefinition(card)?.effect_text||"")))return log("このモンスターは効果により攻撃できません");
   if(card.summonedThisTurn&&!card.canAttackOnSummon&&!String(cardDefinition(card)?.effect_text||"").includes("場に出たターンでも攻撃できる"))return log("このターンに場に出たモンスターは攻撃できません");
   pendingAttack={cardId:card.id,name:card.name};state.selected={p:1,z:"monsters",id:card.id};
   log("「"+card.name+"」の攻撃を宣言しました。相手のモンスターかプレイヤー名をクリックして対象を選んでください");
@@ -2106,6 +2115,7 @@ function exposeAnkrEffectTestApi(){
    state.selected={p:1,z:zone,id:sourceId};activateCardAbility(sourceId,abilityIndex);return this.snapshot();
   },
   attack(attackerId,targetId=null){const attacker=state.players[1].monsters.find(c=>c.id===attackerId);if(!attacker)throw new Error("attacker not found");pendingAttack={cardId:attacker.id,name:attacker.name};resolveAttack(targetId);return this.snapshot()},
+  declareAttackForTest(cardId){pendingAttack=null;declareAttack(cardId);return !!pendingAttack},
   startTurn(player=1,skipDraw=false){state.phase="playing";startTurn(player,true,skipDraw);return this.snapshot()},
   removeCard(id,owner=1,zone="monsters"){const list=state.players[owner]?.[zone]||[];const index=list.findIndex(card=>card.id===id);if(index>=0)list.splice(index,1);recalculatePlayerPassives();return this.snapshot()},
   setEnergyPool(player,value){state.players[player].energyPool=value;return this.snapshot()},
@@ -2124,10 +2134,10 @@ function exposeAnkrEffectTestApi(){
    const players={};
    for(const p of [1,2]){
     const x=state.players[p],zones={};
-    for(const z of ["hand","deck","monsters","energy","field","discard","facedown"])zones[z]=(x[z]||[]).map(c=>({id:c.id,name:c.name,tapped:!!c.tapped,damage:Number(c.damage)||0,modification:Number(c.modification)||0,counters:Number(c.counters)||0,power:attackPower(c),effectsDisabled:!!c.effectsDisabled,cannotBeAttacked:!!c.cannotBeAttacked,cannotBeAttackedWhileUntapped:!!c.cannotBeAttackedWhileUntapped,cannotBeChosenByOpponent:!!c.cannotBeChosenByOpponent,cannotAttack:!!c.cannotAttack,damageImmunity:!!c.damageImmunity,attacksPerTurn:Number(c.attacksPerTurn)||0,damageReduction:Number(c.damageReduction)||0}));
+    for(const z of ["hand","deck","monsters","energy","field","discard","facedown"])zones[z]=(x[z]||[]).map(c=>({id:c.id,name:c.name,tapped:!!c.tapped,damage:Number(c.damage)||0,modification:Number(c.modification)||0,counters:Number(c.counters)||0,power:attackPower(c),effectsDisabled:!!c.effectsDisabled,cannotBeAttacked:!!c.cannotBeAttacked,cannotBeAttackedWhileUntapped:!!c.cannotBeAttackedWhileUntapped,cannotBeChosenByOpponent:!!c.cannotBeChosenByOpponent,cannotAttack:!!c.cannotAttack,cannotAttackByCounterCondition:!!c.cannotAttackByCounterCondition,damageImmunity:!!c.damageImmunity,attacksPerTurn:Number(c.attacksPerTurn)||0,damageReduction:Number(c.damageReduction)||0}));
     players[p]={life:x.life,energyPool:x.energyPool,zones};
    }
-   return {players,playerPassives:{1:{opponentMonstersCannotAttackPlayer:!!state.players[1].opponentMonstersCannotAttackPlayer,disableOpponentTraps:!!state.players[1].disableOpponentTraps,disableOpponentEnterEffects:!!state.players[1].disableOpponentEnterEffects,damageReduction:Number(state.players[1].passiveDamageReduction)||0},2:{opponentMonstersCannotAttackPlayer:!!state.players[2].opponentMonstersCannotAttackPlayer,disableOpponentTraps:!!state.players[2].disableOpponentTraps,disableOpponentEnterEffects:!!state.players[2].disableOpponentEnterEffects,damageReduction:Number(state.players[2].passiveDamageReduction)||0}},pendingTarget:pendingEffectTarget?{kind:pendingEffectTarget.kind,candidates:pendingEffectTarget.candidates,destination:pendingEffectTarget.destination,maxCount:pendingEffectTarget.maxCount}:null,pickerOpen:!!document.querySelector("#effectDeckPicker"),pendingDiscardPlayer:state.pendingDiscardPlayer,gameOver:state.gameOver};
+   return {players,playerPassives:{1:{opponentMonstersCannotAttackPlayer:!!state.players[1].opponentMonstersCannotAttackPlayer,monstersCannotAttack:!!state.players[1].monstersCannotAttack,disableOpponentTraps:!!state.players[1].disableOpponentTraps,disableOpponentEnterEffects:!!state.players[1].disableOpponentEnterEffects,damageReduction:Number(state.players[1].passiveDamageReduction)||0},2:{opponentMonstersCannotAttackPlayer:!!state.players[2].opponentMonstersCannotAttackPlayer,monstersCannotAttack:!!state.players[2].monstersCannotAttack,disableOpponentTraps:!!state.players[2].disableOpponentTraps,disableOpponentEnterEffects:!!state.players[2].disableOpponentEnterEffects,damageReduction:Number(state.players[2].passiveDamageReduction)||0}},pendingTarget:pendingEffectTarget?{kind:pendingEffectTarget.kind,candidates:pendingEffectTarget.candidates,destination:pendingEffectTarget.destination,maxCount:pendingEffectTarget.maxCount}:null,pickerOpen:!!document.querySelector("#effectDeckPicker"),pendingDiscardPlayer:state.pendingDiscardPlayer,gameOver:state.gameOver};
   },
   logs(){return debugLogEntries.map(e=>({category:e.category,status:e.status,message:e.message,details:e.details}))},
   auditBatch(cases,fixture){
