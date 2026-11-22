@@ -214,6 +214,7 @@ VOID（card_0564）の第3句について、data/cards.json の出典として�
 
 ### 検証上の制限
 
-- PR #37 の GitHub Actions による npm run test:all は、この追補記録時点では未確認。成功扱いしない。
+- [GitHub Actions #45019927632](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/45019927632) で npm run test:all 成功（2026-11-22 12:00 UTC）。JavaScript構文検査、効果パーサー13件、効果実行7件、全737カードの保存情報照合、ブラウザ効果監査、開発Worker攻撃応答統合テストが成功した。今回追加したカウンター・マナ条件の攻撃宣言回帰テストも同じ実行に含まれる。
 - 2ブラウザ実対戦でのカウンター・マナ変動後の攻撃可否同期は未検証。
+- [同実行の効果監査JSON 2ファイル](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/45019927632/artifacts/14753083515)：カード737件、保存情報不一致0件、コンパイラissue 0件、ランタイム例外0件。ライブ監査の明確な未実装候補はVOID第3句の1節。
 - 本番リポジトリ nyardovis/magaimonotcg は変更していない。
