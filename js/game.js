@@ -1845,6 +1845,7 @@ function reduceIncomingDamage(target,amount){const raw=Math.max(0,Number(amount)
 function applyMonsterDamage(target,amount){if(!target)return 0;const applied=reduceIncomingDamage(target,amount);target.damage=(Number(target.damage)||0)+applied;return applied}
 function declareAttack(cardId){
   if(state.phase!=="playing"||state.pendingDiscardPlayer!==null||state.turnPlayer!==1||state.gameOver)return;
+  recalculatePlayerPassives();
   const card=state.players[1].monsters.find(c=>c.id===cardId);if(!card)return;
   if(state.players[1].monstersCannotAttack)return log("相手の効果により、自分のモンスターは攻撃できません");
   if(card.tapped)return log("タップしているモンスターは攻撃できません");
