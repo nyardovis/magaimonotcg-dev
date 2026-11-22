@@ -412,6 +412,95 @@ const server=http.createServer((req,res)=>{
   assert.equal(entryTriggers.lavaDamage,300,"Crater Fish did not damage an opponent monster entering the field");
   assert.equal(entryTriggers.fieldBuff,100,"Returning Forest did not buff an entering Beast");
 
+  const absolutePowerEffects=await page.evaluate(({monsterName})=>{
+   const api=window.__ANKR_TEST__;
+   api.reset();
+   api.addCard("棒人間",1,"monsters","stick-source");
+   api.addCard(monsterName,1,"monsters","stick-own-target");
+   api.addCard(monsterName,2,"monsters","stick-opponent-target");
+   api.setCardState("stick-own-target",1,"monsters",{damage:2});
+   api.setCardState("stick-opponent-target",2,"monsters",{damage:2});
+   api.trigger("stick-source",1,"enter");
+   const stick=api.snapshot();
+
+   api.reset();
+   api.addCard("平穏の使者",1,"monsters","calm-source");
+   api.addCard(monsterName,1,"monsters","calm-own-target");
+   api.addCard(monsterName,2,"monsters","calm-opponent-target");
+   api.trigger("calm-source",1,"enter");
+   const calm=api.snapshot();
+
+   api.reset();
+   api.addCard("円海島",1,"field","sea-field");
+   api.addCard(monsterName,1,"monsters","sea-own-target");
+   api.addCard(monsterName,2,"monsters","sea-opponent-target");
+   api.trigger("sea-field",1,"end");
+   const sea=api.snapshot();
+
+   api.reset();
+   api.addCard("夢幻竜",1,"monsters","dream-source");
+   api.addCard(monsterName,2,"monsters","dream-target");
+   api.triggerOtherEnterForTest("dream-target",2);
+   const dream=api.snapshot();
+
+   api.reset();
+   api.addCard("夢幻竜",1,"monsters","dream-online-source");
+   api.addCard(monsterName,2,"monsters","dream-online-target");
+   const sent=[];
+   api.setOnlineTestMode({readyState:1,send:value=>sent.push(JSON.parse(value))});
+   api.triggerOtherEnterForTest("dream-online-target",2);
+
+   api.reset();
+   api.addCard("ディエティの月明",1,"field","diety-field");
+   api.addCard("誓いの天使",1,"monsters","light-entered");
+   api.addCard(monsterName,2,"monsters","diety-target");
+   const base=api.snapshot().players[2].zones.monsters.find(card=>card.id==="diety-target").power;
+   api.setCardState("diety-target",2,"monsters",{damage:base-300});
+   api.triggerOtherEnterForTest("light-entered",1);
+   const dietyPending=api.snapshot().pendingTarget?.kind;
+   api.chooseTarget("diety-target");
+   const diety=api.snapshot();
+
+   api.reset();
+   api.addCard(monsterName,1,"monsters","remote-modifier-target");
+   const remoteBase=api.snapshot().players[1].zones.monsters.find(card=>card.id==="remote-modifier-target").power;
+   api.setCardState("remote-modifier-target",1,"monsters",{damage:remoteBase-50});
+   api.applyEffectDeltaForTest({playerId:"remote",target:"opponentMonsterModifier",cardId:"remote-modifier-target",delta:-(remoteBase-100)});
+   const remoteModifier=api.snapshot();
+
+   return {
+    stickOwnSurvived:stick.players[1].zones.monsters.some(card=>card.id==="stick-own-target"),
+    stickOwnDiscarded:stick.players[1].zones.discard.some(card=>card.id==="stick-own-target"),
+    stickOpponentSurvived:stick.players[2].zones.monsters.some(card=>card.id==="stick-opponent-target"),
+    stickOpponentDiscarded:stick.players[2].zones.discard.some(card=>card.id==="stick-opponent-target"),
+    calmOwnPower:calm.players[1].zones.monsters.find(card=>card.id==="calm-own-target")?.power,
+    calmOpponentPower:calm.players[2].zones.monsters.find(card=>card.id==="calm-opponent-target")?.power,
+    seaOwnPower:sea.players[1].zones.monsters.find(card=>card.id==="sea-own-target")?.power,
+    seaOpponentPower:sea.players[2].zones.monsters.find(card=>card.id==="sea-opponent-target")?.power,
+    dreamPower:dream.players[2].zones.monsters.find(card=>card.id==="dream-target")?.power,
+    dreamOnlinePower:api.snapshot().players[2].zones.monsters.find(card=>card.id==="dream-online-target")?.power,
+    dreamOnlineModifier:sent.find(message=>message.target==="opponentMonsterModifier"&&message.cardId==="dream-online-target")?.delta,
+    dietyPending,dietyTargetSurvived:diety.players[2].zones.monsters.some(card=>card.id==="diety-target"),dietyTargetDiscarded:diety.players[2].zones.discard.some(card=>card.id==="diety-target"),
+    remoteModifierSurvived:remoteModifier.players[1].zones.monsters.some(card=>card.id==="remote-modifier-target"),remoteModifierDiscarded:remoteModifier.players[1].zones.discard.some(card=>card.id==="remote-modifier-target")
+   };
+  },{monsterName:fixtureCards.monster.name});
+  assert.equal(absolutePowerEffects.stickOwnSurvived,false,"Stick Man did not destroy an own monster whose HP fell below zero after setting all power to 1");
+  assert.equal(absolutePowerEffects.stickOwnDiscarded,true,"Stick Man did not move the own destroyed monster to discard");
+  assert.equal(absolutePowerEffects.stickOpponentSurvived,false,"Stick Man did not destroy an opponent monster whose HP fell below zero after setting all power to 1");
+  assert.equal(absolutePowerEffects.stickOpponentDiscarded,true,"Stick Man did not move the opponent destroyed monster to discard");
+  assert.equal(absolutePowerEffects.calmOwnPower,600,"Tranquility Messenger did not set own monsters to 600 power");
+  assert.equal(absolutePowerEffects.calmOpponentPower,600,"Tranquility Messenger did not set opponent monsters to 600 power");
+  assert.equal(absolutePowerEffects.seaOwnPower,300,"Sea Ring Island did not set own monsters to 300 power at turn end");
+  assert.equal(absolutePowerEffects.seaOpponentPower,300,"Sea Ring Island did not set opponent monsters to 300 power at turn end");
+  assert.equal(absolutePowerEffects.dreamPower,100,"Dream Dragon did not set an entering opponent monster to 100 power");
+  assert.equal(absolutePowerEffects.dreamOnlinePower,100,"Dream Dragon did not apply its online modifier locally");
+  assert.equal(absolutePowerEffects.dreamOnlineModifier,100-Number(fixtureCards.monster.power),"Dream Dragon did not synchronize the absolute power change");
+  assert.equal(absolutePowerEffects.dietyPending,"monsterModifier","Deity Moonlight did not request a target for its entering light/dark monster trigger");
+  assert.equal(absolutePowerEffects.dietyTargetSurvived,false,"Deity Moonlight did not destroy a monster whose remaining HP became nonpositive after -400");
+  assert.equal(absolutePowerEffects.dietyTargetDiscarded,true,"Deity Moonlight did not move the reduced-HP monster to discard");
+  assert.equal(absolutePowerEffects.remoteModifierSurvived,false,"Incoming online power modifiers did not check for lethal HP after modification");
+  assert.equal(absolutePowerEffects.remoteModifierDiscarded,true,"Incoming online lethal power modifier did not move the monster to discard");
+
   const costReduction=await page.evaluate(({emptyName,effectfulName})=>{
    const api=window.__ANKR_TEST__;
    api.reset();
