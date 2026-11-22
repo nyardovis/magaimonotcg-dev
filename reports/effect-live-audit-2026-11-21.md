@@ -1,12 +1,13 @@
 # Ankr TCG 開発版・効果監査スナップショット
 
 - 監査対象: `nyardovis/magaimonotcg-dev` の `main`
-- main基準コミット: [`3877251`](https://github.com/nyardovis/magaimonotcg-dev/commit/3877251a6849461f06c9d2a91f8470d629e259f6)（2026-11-21）
-- 最新検証対象: [PR #36](https://github.com/nyardovis/magaimonotcg-dev/pull/36) のhead [`92b5e56`](https://github.com/nyardovis/magaimonotcg-dev/commit/92b5e56848dce561a4728763b0922f0a2f50554f)
-- PR #36 CI: [GitHub Actions #44909332523](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/44909332523) — success（`npm run test:all` 完了）
-- 直前のmain CI: [GitHub Actions #44904768118](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/44904768118) — success（PR #36 の追加修正前）
-- 監査JSON: [PR #36 CI artifact](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/44909332523/artifacts/14708359096)
-- 生成時刻: 2026-11-21 13:32 UTC
+- main基準コミット: [`2ec7481`](https://github.com/nyardovis/magaimonotcg-dev/commit/2ec748152d42b1c3642467eb186ab268c588ea66)（2026-11-22）
+- 最新検証対象: [PR #38](https://github.com/nyardovis/magaimonotcg-dev/pull/38) のhead [`4645ce2`](https://github.com/nyardovis/magaimonotcg-dev/commit/4645ce2830de5252682f2fa39fb922b3146f5b96)
+- PR #38 CI: [GitHub Actions #45021911188](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/45021911188) — success（修正後の `npm run test:all` 完了）
+- main CI: [GitHub Actions #45020195042](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/45020195042) — success（PR #37 マージ後）
+- Pages deploy: [GitHub Actions #45020194747](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/45020194747) — success
+- 監査JSON: [PR #38 CI artifact](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/45021911188/artifacts/14753963081)
+- 生成時刻: 2026-11-22 12:22 UTC
 
 ## テスト結果
 
@@ -218,3 +219,33 @@ VOID（card_0564）の第3句について、data/cards.json の出典として�
 - 2ブラウザ実対戦でのカウンター・マナ変動後の攻撃可否同期は未検証。
 - [同実行の効果監査JSON 2ファイル](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/45019927632/artifacts/14753083515)：カード737件、保存情報不一致0件、コンパイラissue 0件、ランタイム例外0件。ライブ監査の明確な未実装候補はVOID第3句の1節。
 - 本番リポジトリ nyardovis/magaimonotcg は変更していない。
+
+
+## 2026-11-22 追補：消えない効果の無効化保護
+
+### 新たに確認した不具合
+
+- ゾンビレックス（card_0015）の原文は「カウンターが7個以下の時攻撃できない、これの効果は消えない。」。既存の保護判定は「この効果は消えない」だけを認識していたため、「これの効果は消えない」がローカルの効果無効化を拒否できていなかった。
+- 蒸気機関の古代機（card_0331）は「この効果は消えない」と正しく判定されるが、オンライン受信側の opponentDisable が保護関数を通さず effectsDisabled=true を直接設定していた。
+- そのため、オンラインでは消えない効果の保護を迂回できる経路が残っていた。これはfixture不足ではなく、カード原文と無効化処理の照合で確認した実装上の問題。
+
+### 開発版修正候補
+
+- 保護文の判定を「これの効果は消えない」「この効果は消えない」の両方に対応。
+- オンラインの opponentDisable 受信処理でも同じ保護関数を適用。
+- 回帰テストでゾンビレックス・蒸気機関の古代機のローカル無効化とオンライン受信を検査し、人工生命 448号のような通常カードは引き続き無効化できることも確認。
+
+### 検証状況
+
+- 初回CI [#45021079147](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/45021079147) は誤った `cannotAttack` 期待値を含むブラウザテストで失敗。専用の `cannotAttackPlayer` 状態と直接攻撃判定を追加して修正し、[再実行CI #45021911188](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/45021911188) で `npm run test:all` が成功。監査artifactも生成済み。
+- 2ブラウザ実対戦での効果無効化同期は別途未検証。
+- 本番リポジトリ nyardovis/magaimonotcg は変更しない。
+
+
+### 追加監査で判明した攻撃制限の実装漏れ
+
+- PR #38 の初回CI [#45021079147](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/45021079147) はブラウザ効果テストで失敗。原因調査で、テストが「プレイヤーに攻撃できない」を汎用の `cannotAttack` と誤認していたことを確認した。
+- ただし、カード原文にある「プレイヤーに攻撃できない」は、そのモンスター自身のプレイヤーへの直接攻撃だけを禁止する独立した常在効果であり、現行処理には専用状態・攻撃対象判定がなかった。単なるテスト誤検出ではなく、実際の効果実装漏れも併存していた。
+- 対象カードデータは、かわいいあざらし（card_0134）、自立機タイヤマン（card_0278）、蒸気機関の古代機（card_0331）の3枚。なお「相手のモンスターはプレイヤーに攻撃できない」という別の全体制限文とは区別する。
+- PR #38 の追加修正では `cannotAttackPlayer` を常在効果として再計算し、効果無効化・カード移動時に解除、直接攻撃だけを拒否しモンスターへの攻撃は許可する。ローカル／オンラインの無効化保護と合わせて回帰テストする。
+- 初回CIの失敗は隠さず記録し、修正後の新しいCIが成功するまでは完了扱いにしない。
