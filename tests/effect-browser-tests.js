@@ -449,6 +449,7 @@ const server=http.createServer((req,res)=>{
    const sent=[];
    api.setOnlineTestMode({readyState:1,send:value=>sent.push(JSON.parse(value))});
    api.triggerOtherEnterForTest("dream-online-target",2);
+   const dreamOnline=api.snapshot();
 
    api.reset();
    api.addCard("ディエティの月明",1,"field","diety-field");
@@ -478,7 +479,7 @@ const server=http.createServer((req,res)=>{
     seaOwnPower:sea.players[1].zones.monsters.find(card=>card.id==="sea-own-target")?.power,
     seaOpponentPower:sea.players[2].zones.monsters.find(card=>card.id==="sea-opponent-target")?.power,
     dreamPower:dream.players[2].zones.monsters.find(card=>card.id==="dream-target")?.power,
-    dreamOnlinePower:api.snapshot().players[2].zones.monsters.find(card=>card.id==="dream-online-target")?.power,
+    dreamOnlinePower:dreamOnline.players[2].zones.monsters.find(card=>card.id==="dream-online-target")?.power,
     dreamOnlineModifier:sent.find(message=>message.target==="opponentMonsterModifier"&&message.cardId==="dream-online-target")?.delta,
     dietyPending,dietyTargetSurvived:diety.players[2].zones.monsters.some(card=>card.id==="diety-target"),dietyTargetDiscarded:diety.players[2].zones.discard.some(card=>card.id==="diety-target"),
     remoteModifierSurvived:remoteModifier.players[1].zones.monsters.some(card=>card.id==="remote-modifier-target"),remoteModifierDiscarded:remoteModifier.players[1].zones.discard.some(card=>card.id==="remote-modifier-target")
