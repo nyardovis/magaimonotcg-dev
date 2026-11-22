@@ -274,6 +274,58 @@ const server=http.createServer((req,res)=>{
   assert.equal(passiveSources.reductionBefore,300,"Player damage reduction passive was not derived");
   assert.equal(passiveSources.reductionAfter,0,"Player damage reduction remained after its source left");
 
+  const conditionalAttackRestrictions=await page.evaluate(({monsterName})=>{
+   const api=window.__ANKR_TEST__;
+   api.reset();
+   api.addCard("ゾンビレックス",1,"monsters","counter-limit");
+   api.setCardState("counter-limit",1,"monsters",{counters:7});
+   const zombieAtSeven=api.snapshot().players[1].zones.monsters.find(c=>c.id==="counter-limit")?.cannotAttackByCounterCondition;
+   const zombieAttackAtSeven=api.declareAttackForTest("counter-limit");
+   api.setCardState("counter-limit",1,"monsters",{counters:8});
+   const zombieAtEight=api.snapshot().players[1].zones.monsters.find(c=>c.id==="counter-limit")?.cannotAttackByCounterCondition;
+   const zombieAttackAtEight=api.declareAttackForTest("counter-limit");
+
+   api.reset();
+   api.addCard("人工生命 448号",1,"monsters","counter-present");
+   api.setCardState("counter-present",1,"monsters",{counters:1});
+   const artificialAtOne=api.snapshot().players[1].zones.monsters.find(c=>c.id==="counter-present")?.cannotAttackByCounterCondition;
+   const artificialAttackAtOne=api.declareAttackForTest("counter-present");
+   api.setCardState("counter-present",1,"monsters",{counters:0});
+   const artificialAtZero=api.snapshot().players[1].zones.monsters.find(c=>c.id==="counter-present")?.cannotAttackByCounterCondition;
+   const artificialAttackAtZero=api.declareAttackForTest("counter-present");
+   api.setCardState("counter-present",1,"monsters",{counters:1,effectsDisabled:true});
+   const artificialDisabled=api.snapshot().players[1].zones.monsters.find(c=>c.id==="counter-present")?.cannotAttackByCounterCondition;
+   const artificialAttackWhenDisabled=api.declareAttackForTest("counter-present");
+
+   api.reset();
+   api.addCard("ランスズキの握り",2,"monsters","opponent-mana-lock");
+   api.addCard(monsterName,1,"monsters","mana-restricted-attacker");
+   api.setEnergyPool(1,2);
+   const manaLocked=api.snapshot().playerPassives[1].monstersCannotAttack;
+   const manaAttackAtTwo=api.declareAttackForTest("mana-restricted-attacker");
+   api.setEnergyPool(1,3);
+   const manaUnlocked=api.snapshot().playerPassives[1].monstersCannotAttack;
+   const manaAttackAtThree=api.declareAttackForTest("mana-restricted-attacker");
+   api.removeCard("opponent-mana-lock",2,"monsters");
+   const manaAfterSourceLeaves=api.snapshot().playerPassives[1].monstersCannotAttack;
+   return {zombieAtSeven,zombieAttackAtSeven,zombieAtEight,zombieAttackAtEight,artificialAtOne,artificialAttackAtOne,artificialAtZero,artificialAttackAtZero,artificialDisabled,artificialAttackWhenDisabled,manaLocked,manaAttackAtTwo,manaUnlocked,manaAttackAtThree,manaAfterSourceLeaves};
+  },{monsterName:fixtureCards.monster.name});
+  assert.equal(conditionalAttackRestrictions.zombieAtSeven,true,"Zombie Rex could attack with seven or fewer counters");
+  assert.equal(conditionalAttackRestrictions.zombieAttackAtSeven,false,"Zombie Rex attack declaration was not blocked at seven counters");
+  assert.equal(conditionalAttackRestrictions.zombieAtEight,false,"Zombie Rex remained blocked after reaching eight counters");
+  assert.equal(conditionalAttackRestrictions.zombieAttackAtEight,true,"Zombie Rex could not attack after reaching eight counters");
+  assert.equal(conditionalAttackRestrictions.artificialAtOne,true,"Artificial Life 448 did not gain its counter-based attack restriction");
+  assert.equal(conditionalAttackRestrictions.artificialAttackAtOne,false,"Artificial Life 448 could attack while it had a counter");
+  assert.equal(conditionalAttackRestrictions.artificialAtZero,false,"Artificial Life 448 remained blocked after its counters were removed");
+  assert.equal(conditionalAttackRestrictions.artificialAttackAtZero,true,"Artificial Life 448 could not attack after its counters were removed");
+  assert.equal(conditionalAttackRestrictions.artificialDisabled,false,"An effect-disabled Artificial Life 448 kept its counter-based restriction");
+  assert.equal(conditionalAttackRestrictions.artificialAttackWhenDisabled,true,"An effect-disabled Artificial Life 448 was still prevented from attacking");
+  assert.equal(conditionalAttackRestrictions.manaLocked,true,"Lance Suzuki's Grip did not restrict the opponent while their mana was two");
+  assert.equal(conditionalAttackRestrictions.manaAttackAtTwo,false,"An opponent monster could attack while the opponent had two mana");
+  assert.equal(conditionalAttackRestrictions.manaUnlocked,false,"Lance Suzuki's Grip kept the restriction after the opponent reached three mana");
+  assert.equal(conditionalAttackRestrictions.manaAttackAtThree,true,"An opponent monster could not attack after the opponent reached three mana");
+  assert.equal(conditionalAttackRestrictions.manaAfterSourceLeaves,false,"The mana-based attack restriction remained after its source left");
+
   const entryTriggers=await page.evaluate(({machineName,beastName})=>{
    const api=window.__ANKR_TEST__;
    api.reset();
