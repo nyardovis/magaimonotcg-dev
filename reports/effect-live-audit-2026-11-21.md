@@ -1,12 +1,13 @@
 # Ankr TCG 開発版・効果監査スナップショット
 
 - 監査対象: `nyardovis/magaimonotcg-dev` の `main`
-- main基準コミット: [`3877251`](https://github.com/nyardovis/magaimonotcg-dev/commit/3877251a6849461f06c9d2a91f8470d629e259f6)（2026-11-21）
-- 最新検証対象: [PR #36](https://github.com/nyardovis/magaimonotcg-dev/pull/36) のhead [`92b5e56`](https://github.com/nyardovis/magaimonotcg-dev/commit/92b5e56848dce561a4728763b0922f0a2f50554f)
-- PR #36 CI: [GitHub Actions #44909332523](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/44909332523) — success（`npm run test:all` 完了）
-- 直前のmain CI: [GitHub Actions #44904768118](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/44904768118) — success（PR #36 の追加修正前）
-- 監査JSON: [PR #36 CI artifact](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/44909332523/artifacts/14708359096)
-- 生成時刻: 2026-11-21 13:32 UTC
+- main基準コミット: [`2ec7481`](https://github.com/nyardovis/magaimonotcg-dev/commit/2ec748152d42b1c3642467eb186ab268c588ea66)（2026-11-22）
+- 最新検証対象: [PR #38](https://github.com/nyardovis/magaimonotcg-dev/pull/38) のhead [`4645ce2`](https://github.com/nyardovis/magaimonotcg-dev/commit/4645ce2830de5252682f2fa39fb922b3146f5b96)
+- PR #38 CI: [GitHub Actions #45021911188](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/45021911188) — success（修正後の `npm run test:all` 完了）
+- main CI: [GitHub Actions #45020195042](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/45020195042) — success（PR #37 マージ後）
+- Pages deploy: [GitHub Actions #45020194747](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/45020194747) — success
+- 監査JSON: [PR #38 CI artifact](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/45021911188/artifacts/14753963081)
+- 生成時刻: 2026-11-22 12:22 UTC
 
 ## テスト結果
 
@@ -236,7 +237,7 @@ VOID（card_0564）の第3句について、data/cards.json の出典として�
 
 ### 検証状況
 
-- PR CIで npm run test:all を実行予定。成功するまでは修正完了扱いにしない。
+- 初回CI [#45021079147](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/45021079147) は誤った `cannotAttack` 期待値を含むブラウザテストで失敗。専用の `cannotAttackPlayer` 状態と直接攻撃判定を追加して修正し、[再実行CI #45021911188](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/45021911188) で `npm run test:all` が成功。監査artifactも生成済み。
 - 2ブラウザ実対戦での効果無効化同期は別途未検証。
 - 本番リポジトリ nyardovis/magaimonotcg は変更しない。
 
