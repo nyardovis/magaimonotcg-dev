@@ -541,6 +541,107 @@ const server=http.createServer((req,res)=>{
   assert.equal(raijinCost.activeWater,4,"Raijin incorrectly changed the cost of a non-Thunder spell");
   assert.equal(raijinCost.disabledThunder,4,"An effect-disabled Raijin continued setting Thunder spell costs to 0");
 
+  const pickMonster=(required,excluded=[])=>cardsData.cards.find(card=>String(card.tags||"").includes("#モンスターカード")&&required.every(tag=>String(card.types||"").split(/[,、]/).map(value=>value.trim()).includes(tag))&&!excluded.includes(card.name));
+  const powerPatternFixtures={
+   beast:pickMonster(["獣"],["獣使い"]).name,
+   nonBeast:pickMonster(["地"],["獣使い","碑獣タッソ"]).name,
+   cheap:cardsData.cards.find(card=>String(card.tags||"").includes("#モンスターカード")&&Number(card.cost)<=1).name,
+   expensive:cardsData.cards.find(card=>String(card.tags||"").includes("#モンスターカード")&&Number(card.cost)>1).name,
+   water:pickMonster(["水"]).name,
+   light:pickMonster(["光"]).name,
+   human:pickMonster(["ヒト"]).name,
+   demon:pickMonster(["悪魔"]).name,
+   machineToy:pickMonster(["機械","玩具"]).name,
+   machineOnly:cardsData.cards.find(card=>String(card.tags||"").includes("#モンスターカード")&&String(card.types||"").split(/[,、]/).map(value=>value.trim()).includes("機械")&&!String(card.types||"").split(/[,、]/).map(value=>value.trim()).includes("玩具")).name,
+   fire:pickMonster(["火"]).name
+  };
+  const powerPatternGroups=await page.evaluate(({beastName,nonBeastName,cheapName,expensiveName,waterName,lightName})=>{
+   const api=window.__ANKR_TEST__;
+   api.reset();
+   api.addCard("獣使い",1,"monsters","beast-source");
+   api.addCard(beastName,1,"monsters","beast-target");
+   api.addCard(nonBeastName,1,"monsters","nonbeast-target");
+   api.trigger("beast-source",1,"enter");
+   const beast=api.snapshot();
+   api.reset();
+   api.addCard("弱者の結束",1,"hand","cost-source");
+   api.addCard(cheapName,1,"monsters","cheap-target");
+   api.addCard(expensiveName,1,"monsters","expensive-target");
+   api.runEffect("自分の1コスト以下のモンスター全てを+100。",1,"cost-source");
+   const cost=api.snapshot();
+   api.reset();
+   api.addCard("月宿る海",1,"field","dual-source");
+   api.addCard(waterName,1,"monsters","water-target");
+   api.addCard(lightName,1,"monsters","light-target");
+   api.addCard(nonBeastName,1,"monsters","dual-other-target");
+   api.trigger("dual-source",1,"enter");
+   const dual=api.snapshot();
+   return {
+    beastBuff:beast.players[1].zones.monsters.find(card=>card.id==="beast-target")?.modification,
+    nonBeastBuff:beast.players[1].zones.monsters.find(card=>card.id==="nonbeast-target")?.modification,
+    cheapBuff:cost.players[1].zones.monsters.find(card=>card.id==="cheap-target")?.modification,
+    expensiveBuff:cost.players[1].zones.monsters.find(card=>card.id==="expensive-target")?.modification,
+    waterBuff:dual.players[1].zones.monsters.find(card=>card.id==="water-target")?.modification,
+    lightBuff:dual.players[1].zones.monsters.find(card=>card.id==="light-target")?.modification,
+    otherBuff:dual.players[1].zones.monsters.find(card=>card.id==="dual-other-target")?.modification
+   };
+  },{beastName:powerPatternFixtures.beast,nonBeastName:powerPatternFixtures.nonBeast,cheapName:powerPatternFixtures.cheap,expensiveName:powerPatternFixtures.expensive,waterName:powerPatternFixtures.water,lightName:powerPatternFixtures.light});
+  assert.equal(powerPatternGroups.beastBuff,300,"Beast Tamer did not buff all own Beast monsters");
+  assert.equal(powerPatternGroups.nonBeastBuff,0,"Beast Tamer incorrectly buffed a non-Beast monster");
+  assert.equal(powerPatternGroups.cheapBuff,100,"Weak Unity did not buff own monsters costing 1 or less");
+  assert.equal(powerPatternGroups.expensiveBuff,0,"Weak Unity incorrectly buffed a monster over the cost limit");
+  assert.equal(powerPatternGroups.waterBuff,100,"Moonlit Sea did not buff own Water monsters");
+  assert.equal(powerPatternGroups.lightBuff,100,"Moonlit Sea did not buff own Light monsters");
+  assert.equal(powerPatternGroups.otherBuff,0,"Moonlit Sea incorrectly buffed a monster outside both types");
+
+  await page.evaluate(({humanName,demonName})=>{
+   const api=window.__ANKR_TEST__;
+   api.reset();
+   api.addCard("魂宿りの巨剣",1,"hand","or-buff-source");
+   api.addCard(humanName,1,"monsters","or-human-target");
+   api.addCard(demonName,1,"monsters","or-demon-target");
+   api.runEffect("自分の[ヒト]か[悪魔]1体を+1000。",1,"or-buff-source");
+  },{humanName:powerPatternFixtures.human,demonName:powerPatternFixtures.demon});
+  const orBuffPending=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(orBuffPending.pendingTarget?.kind,"taggedMonsterBuff","[A]か[B] buff did not request a board target");
+  assert.equal(orBuffPending.pendingTarget?.candidates?.length,2,"[A]か[B] buff did not include both eligible type groups");
+  await page.locator('.card[data-card-id="or-human-target"]').click();
+  const orBuffApplied=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(orBuffApplied.players[1].zones.monsters.find(card=>card.id==="or-human-target")?.modification,1000,"[A]か[B] buff did not apply to the clicked eligible monster");
+
+  await page.evaluate(({machineToyName,machineOnlyName})=>{
+   const api=window.__ANKR_TEST__;
+   api.reset();
+   api.addCard("インパクトガイド",1,"hand","and-buff-source");
+   api.addCard(machineToyName,1,"monsters","and-target");
+   api.addCard(machineOnlyName,1,"monsters","and-non-target");
+   api.runEffect("自分の[機械,玩具]1体を+300。",1,"and-buff-source");
+  },{machineToyName:powerPatternFixtures.machineToy,machineOnlyName:powerPatternFixtures.machineOnly});
+  const andBuffPending=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(andBuffPending.pendingTarget?.kind,"taggedMonsterBuff","comma-tag buff did not request a board target");
+  assert.equal(andBuffPending.pendingTarget?.candidates?.some(card=>card.id==="and-target"),true,"comma-tag buff omitted a monster with both required types");
+  assert.equal(andBuffPending.pendingTarget?.candidates?.some(card=>card.id==="and-non-target"),false,"comma-tag buff accepted a monster missing one required type");
+  await page.locator('.card[data-card-id="and-target"]').click();
+  const andBuffApplied=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(andBuffApplied.players[1].zones.monsters.find(card=>card.id==="and-target")?.modification,300,"comma-tag buff did not apply to the clicked monster");
+
+  const multiplierBefore=await page.evaluate(({fireName})=>{
+   const api=window.__ANKR_TEST__;
+   api.reset();
+   api.addCard("完全燃焼",1,"hand","multiplier-source");
+   api.addCard(fireName,1,"monsters","multiplier-target");
+   api.setCardState("multiplier-target",1,"monsters",{modification:100});
+   const before=api.snapshot().players[1].zones.monsters.find(card=>card.id==="multiplier-target").power;
+   api.runEffect("自分の[火]1体を×2。",1,"multiplier-source");
+   return before;
+  },{fireName:powerPatternFixtures.fire});
+  const multiplierPending=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  assert.equal(multiplierPending.pendingTarget?.kind,"taggedMonsterMultiply","Fire multiplier did not request a board target");
+  await page.locator('.card[data-card-id="multiplier-target"]').click();
+  const multiplierApplied=await page.evaluate(()=>window.__ANKR_TEST__.snapshot());
+  const multiplierPower=multiplierApplied.players[1].zones.monsters.find(card=>card.id==="multiplier-target")?.power;
+  assert.equal(multiplierPower,multiplierBefore*2,"Fire multiplier did not double the target's current power including its existing modifier");
+
   const onlineEntryTrigger=await page.evaluate(({machineName})=>{
    const api=window.__ANKR_TEST__;
    api.reset();
