@@ -951,6 +951,14 @@ function resolvePendingEffectTarget(cardId){
   if(owner!==pending.player&&onlinePlayerId)broadcastEffectDelta({target:"opponentMonsterModifier",cardId:target.id,delta:pending.amount});
   log("「"+target.name+"」のパワーを+"+pending.amount+"しました");
   state.selected={p:1,z:"monsters",id:pending.sourceCard.id};
+ }else if(pending.kind==="taggedMonsterMultiply"){
+  const base=Number(target.power)||Number(cardDefinition(target)?.power)||0,previous=Number(target.modification)||0,current=attackPower(target),multiplier=Math.max(0,Number(pending.multiplier)||0);
+  target.modification=Math.max(-base,current*multiplier-base);
+  const delta=target.modification-previous;
+  if(owner!==pending.player&&onlinePlayerId&&delta)broadcastEffectDelta({target:"opponentMonsterModifier",cardId:target.id,delta});
+  checkMonsterDestruction(owner,true);
+  log("「"+target.name+"」のパワーを"+multiplier+"倍にしました");
+  state.selected={p:1,z:"monsters",id:pending.sourceCard?.id};
  }else if(pending.kind==="counterMonster"){
   const amount=Math.max(0,Number(pending.amount)||0);
   target.counters=(Number(target.counters)||0)+amount;
@@ -1437,12 +1445,58 @@ function resolveEffectTextCore(text,p,sourceCard,eventCard=null){
   else log("パワーを変更できるモンスターがいません");
   handled=true;
  }
- const ownTaggedMonsterBuff=s.match(/自分の\[([^\]]+)\]\s*1体を\s*[＋+](\d+)/);
+ const ownMultiTaggedAllBuff=s.match(/自分の\[([^\]]+)\](?:と|か)\[([^\]]+)\]全てを\s*[＋+]\s*(\d+)/);
+ if(ownMultiTaggedAllBuff){
+  const tags=[ownMultiTaggedAllBuff[1],ownMultiTaggedAllBuff[2]],amount=Number(ownMultiTaggedAllBuff[3]);
+  const targets=own.monsters.filter(mon=>tags.some(tag=>String(cardDefinition(mon)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)));
+  targets.forEach(mon=>mon.modification=(Number(mon.modification)||0)+amount);
+  handled=true;log("自分の["+tags.join("]・[")+"]モンスター全てを+"+amount+"しました");
+ }
+ const ownTaggedAllBuff=s.match(/自分の\[([^\]]+)\]全てを\s*[＋+]\s*(\d+)/);
+ if(ownTaggedAllBuff){
+  const tag=ownTaggedAllBuff[1],amount=Number(ownTaggedAllBuff[2]);
+  const targets=own.monsters.filter(mon=>String(cardDefinition(mon)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag));
+  targets.forEach(mon=>mon.modification=(Number(mon.modification)||0)+amount);
+  handled=true;log("自分の["+tag+"]モンスター全てを+"+amount+"しました");
+ }
+ const ownCostLimitedAllBuff=s.match(/自分の(\d+)コスト以下のモンスター全てを\s*[＋+]\s*(\d+)/);
+ if(ownCostLimitedAllBuff){
+  const limit=Number(ownCostLimitedAllBuff[1]),amount=Number(ownCostLimitedAllBuff[2]);
+  const targets=own.monsters.filter(mon=>cardCost(mon)<=limit);
+  targets.forEach(mon=>mon.modification=(Number(mon.modification)||0)+amount);
+  handled=true;log("自分の"+limit+"コスト以下のモンスター全てを+"+amount+"しました");
+ }
+ const ownTaggedChoiceBuff=s.match(/自分の\[([^\]]+)\](?:か|または)\[([^\]]+)\]1体を\s*[＋+]\s*(\d+)/);
+ if(ownTaggedChoiceBuff){
+  const tags=[ownTaggedChoiceBuff[1],ownTaggedChoiceBuff[2]],amount=Number(ownTaggedChoiceBuff[3]);
+  const candidates=own.monsters.filter(mon=>tags.some(tag=>String(cardDefinition(mon)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag)));
+  if(candidates.length){pendingEffectTarget={kind:"taggedMonsterBuff",player:p,sourceCard,candidates:candidates.map(card=>({id:card.id})),amount};log("パワーを+"+amount+"する自分の["+tags.join("]または[")+"]モンスターを盤面からクリックしてください");render()}
+  else log("効果の対象となる["+tags.join("]または[")+"]モンスターがいません");
+  handled=true;
+ }
+ const ownCommaTaggedBuff=s.match(/自分の\[([^\]]+,[^\]]+)\]1体を\s*[＋+]\s*(\d+)/);
+ if(ownCommaTaggedBuff){
+  const tags=ownCommaTaggedBuff[1].split(/[,、]/).map(tag=>tag.trim()).filter(Boolean),amount=Number(ownCommaTaggedBuff[2]);
+  const candidates=own.monsters.filter(mon=>{const types=String(cardDefinition(mon)?.types||"").split(/[,、]/).map(v=>v.trim());return tags.every(tag=>types.includes(tag))});
+  if(candidates.length){pendingEffectTarget={kind:"taggedMonsterBuff",player:p,sourceCard,candidates:candidates.map(card=>({id:card.id})),amount};log("パワーを+"+amount+"する自分の["+tags.join(",")+"]モンスターを盤面からクリックしてください");render()}
+  else log("効果の対象となる["+tags.join(",")+"]モンスターがいません");
+  handled=true;
+ }
+ const ownTaggedMultiplier=s.match(/自分の\[([^\]]+)\]1体を\s*[×x]\s*(\d+)/);
+ if(ownTaggedMultiplier){
+  const tag=ownTaggedMultiplier[1],multiplier=Number(ownTaggedMultiplier[2]);
+  const candidates=own.monsters.filter(mon=>String(cardDefinition(mon)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag));
+  if(candidates.length){pendingEffectTarget={kind:"taggedMonsterMultiply",player:p,sourceCard,candidates:candidates.map(card=>({id:card.id})),multiplier};log("パワーを"+multiplier+"倍にする自分の["+tag+"]モンスターを盤面からクリックしてください");render()}
+  else log("効果の対象となる["+tag+"]モンスターがいません");
+  handled=true;
+ }
+ const ownTaggedMonsterBuff=s.match(/自分の\[([^\],]+)\]\s*1体を\s*[＋+](\d+)/);
  if(ownTaggedMonsterBuff){
   const tag=ownTaggedMonsterBuff[1],amount=Number(ownTaggedMonsterBuff[2]);
   const candidates=own.monsters.filter(mon=>String(cardDefinition(mon)?.types||"").split(/[,、]/).map(v=>v.trim()).includes(tag));
-  if(candidates.length){pendingEffectTarget={kind:"taggedMonsterBuff",player:p,sourceCard,candidates:candidates.map(card=>({id:card.id})),amount};log("パワーを+"+amount+"する自分の["+tag+"]モンスターを盤面からクリックしてください");handled=true;render()}
+  if(candidates.length){pendingEffectTarget={kind:"taggedMonsterBuff",player:p,sourceCard,candidates:candidates.map(card=>({id:card.id})),amount};log("パワーを+"+amount+"する自分の["+tag+"]モンスターを盤面からクリックしてください");render()}
   else log("効果の対象となる["+tag+"]モンスターがいないため、パワー上昇を行えませんでした");
+  handled=true;
  }
  /* Counter, formula, and tagged-monster effects. */
  const allMonsterCounter=s.match(/自分のモンスター全てにカウンター(\d+)個を乗せる/);
