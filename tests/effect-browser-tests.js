@@ -552,7 +552,7 @@ const server=http.createServer((req,res)=>{
    human:pickMonster(["ヒト"]).name,
    demon:pickMonster(["悪魔"]).name,
    machineToy:pickMonster(["機械","玩具"]).name,
-   machineOnly:pickMonster(["機械"]).name,
+   machineOnly:cardsData.cards.find(card=>String(card.tags||"").includes("#モンスターカード")&&String(card.types||"").split(/[,、]/).map(value=>value.trim()).includes("機械")&&!String(card.types||"").split(/[,、]/).map(value=>value.trim()).includes("玩具")).name,
    fire:pickMonster(["火"]).name
   };
   const powerPatternGroups=await page.evaluate(({beastName,nonBeastName,cheapName,expensiveName,waterName,lightName})=>{
