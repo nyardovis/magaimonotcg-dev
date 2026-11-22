@@ -327,7 +327,7 @@ const server=http.createServer((req,res)=>{
   assert.equal(conditionalAttackRestrictions.manaAfterSourceLeaves,false,"The mana-based attack restriction remained after its source left");
 
 
-  const unremovableEffects=await page.evaluate(()=>{
+  const unremovableEffects=await page.evaluate(({monsterName})=>{
    const api=window.__ANKR_TEST__;
    api.reset();
    api.addCard("ゾンビレックス",1,"monsters","unremovable-zombie-local");
@@ -340,8 +340,12 @@ const server=http.createServer((req,res)=>{
    api.addCard("蒸気機関の古代機",1,"monsters","unremovable-machine-local");
    const machineLocalDisable=api.disableEffectsForTest("unremovable-machine-local");
    const machineLocal=api.snapshot().players[1].zones.monsters.find(c=>c.id==="unremovable-machine-local");
+   const machineLocalAttack=api.attack("unremovable-machine-local");
    api.applyEffectDeltaForTest({playerId:"remote",target:"opponentDisable",cardId:"unremovable-machine-local"});
    const machineAfterRemote=api.snapshot().players[1].zones.monsters.find(c=>c.id==="unremovable-machine-local");
+   const machineRemoteAttack=api.attack("unremovable-machine-local");
+   api.addCard(monsterName,2,"monsters","machine-monster-target");
+   const machineMonsterAttack=api.attack("unremovable-machine-local","machine-monster-target");
 
    api.reset();
    api.addCard("ゾンビレックス",1,"monsters","unremovable-zombie-remote");
@@ -357,11 +361,11 @@ const server=http.createServer((req,res)=>{
    const ordinaryAfterDisable=api.snapshot().players[1].zones.monsters.find(c=>c.id==="removable-counter");
    return {
     zombieLocalDisable,zombieLocalEffectsDisabled:zombieLocal?.effectsDisabled,zombieLocalRestriction:zombieLocal?.cannotAttackByCounterCondition,zombieLocalAttack,
-    machineLocalDisable,machineLocalEffectsDisabled:machineLocal?.effectsDisabled,machineRemoteEffectsDisabled:machineAfterRemote?.effectsDisabled,machineRemoteCannotAttack:machineAfterRemote?.cannotAttack,
+    machineLocalDisable,machineLocalEffectsDisabled:machineLocal?.effectsDisabled,machineLocalCannotAttackPlayer:machineLocal?.cannotAttackPlayer,machineLocalAttackLife:machineLocalAttack.players[2].life,machineLocalAttackTapped:machineLocalAttack.players[1].zones.monsters.find(c=>c.id==="unremovable-machine-local")?.tapped,machineRemoteEffectsDisabled:machineAfterRemote?.effectsDisabled,machineRemoteCannotAttackPlayer:machineAfterRemote?.cannotAttackPlayer,machineRemoteAttackLife:machineRemoteAttack.players[2].life,machineMonsterAttackTapped:machineMonsterAttack.players[1].zones.monsters.find(c=>c.id==="unremovable-machine-local")?.tapped,
     zombieRemoteEffectsDisabled:zombieAfterRemote?.effectsDisabled,zombieRemoteRestriction:zombieAfterRemote?.cannotAttackByCounterCondition,zombieRemoteAttack,
     ordinaryDisable,ordinaryEffectsDisabled:ordinaryAfterDisable?.effectsDisabled,ordinaryCounterRestriction:ordinaryAfterDisable?.cannotAttackByCounterCondition
    };
-  });
+  },{monsterName:fixtureCards.monster.name});
   assert.equal(unremovableEffects.zombieLocalDisable,false,"Zombie Rex's 'これの効果は消えない' protection was not respected by local effect disabling");
   assert.equal(unremovableEffects.zombieLocalEffectsDisabled,false,"Zombie Rex was marked effectsDisabled despite its unerasable-effect text");
   assert.equal(unremovableEffects.zombieLocalRestriction,true,"Zombie Rex lost its counter-based attack restriction after a disable attempt");
@@ -369,7 +373,12 @@ const server=http.createServer((req,res)=>{
   assert.equal(unremovableEffects.machineLocalDisable,false,"Ancient Steam Machine's 'この効果は消えない' protection was not respected locally");
   assert.equal(unremovableEffects.machineLocalEffectsDisabled,false,"Ancient Steam Machine was disabled locally despite its unerasable-effect text");
   assert.equal(unremovableEffects.machineRemoteEffectsDisabled,false,"Online opponentDisable bypassed Ancient Steam Machine's unerasable-effect protection");
-  assert.equal(unremovableEffects.machineRemoteCannotAttack,true,"Online opponentDisable removed Ancient Steam Machine's attack restriction");
+  assert.equal(unremovableEffects.machineLocalCannotAttackPlayer,true,"Ancient Steam Machine's direct-player restriction was not active locally");
+   assert.equal(unremovableEffects.machineLocalAttackLife,4000,"Ancient Steam Machine attacked the player despite its restriction");
+   assert.equal(unremovableEffects.machineLocalAttackTapped,false,"A rejected direct attack incorrectly consumed the machine's attack");
+   assert.equal(unremovableEffects.machineRemoteCannotAttackPlayer,true,"Online opponentDisable removed Ancient Steam Machine's direct-player restriction");
+   assert.equal(unremovableEffects.machineRemoteAttackLife,4000,"A remotely disabled attempt let Ancient Steam Machine attack the player");
+   assert.equal(unremovableEffects.machineMonsterAttackTapped,true,"Ancient Steam Machine was incorrectly prevented from attacking a monster");
   assert.equal(unremovableEffects.zombieRemoteEffectsDisabled,false,"Online opponentDisable bypassed Zombie Rex's 'これの効果は消えない' protection");
   assert.equal(unremovableEffects.zombieRemoteRestriction,true,"Online opponentDisable removed Zombie Rex's counter-based restriction");
   assert.equal(unremovableEffects.zombieRemoteAttack,false,"Zombie Rex could attack with seven counters after a remote disable attempt");
