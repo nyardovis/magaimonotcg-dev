@@ -525,6 +525,22 @@ const server=http.createServer((req,res)=>{
   assert.equal(costReduction.withArena,Math.max(0,emptyBaseCost-1),"Arena of the Unpossessing did not reduce the cost of an effectless monster");
   assert.equal(costReduction.afterArenaDisabled,emptyBaseCost,"An effect-disabled Arena continued reducing costs");
 
+  const raijinCost=await page.evaluate(()=>{
+   const api=window.__ANKR_TEST__;
+   api.reset();
+   api.addCard("雷神",1,"monsters","raijin-source");
+   const thunderSpell=api.addCard("帯電の矢",1,"hand","raijin-thunder");
+   const waterSpell=api.addCard("氷の雨",1,"hand","raijin-water");
+   const activeThunder=api.effectiveCost(thunderSpell);
+   const activeWater=api.effectiveCost(waterSpell);
+   api.setCardState("raijin-source",1,"monsters",{effectsDisabled:true});
+   const disabledThunder=api.effectiveCost(thunderSpell);
+   return {activeThunder,activeWater,disabledThunder};
+  });
+  assert.equal(raijinCost.activeThunder,0,"Raijin did not set the cost of a Thunder spell in hand to 0");
+  assert.equal(raijinCost.activeWater,4,"Raijin incorrectly changed the cost of a non-Thunder spell");
+  assert.equal(raijinCost.disabledThunder,4,"An effect-disabled Raijin continued setting Thunder spell costs to 0");
+
   const onlineEntryTrigger=await page.evaluate(({machineName})=>{
    const api=window.__ANKR_TEST__;
    api.reset();
