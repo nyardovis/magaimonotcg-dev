@@ -715,7 +715,7 @@ function applyEffectDelta(message){
  if(message.target==="opponentMonsterDiscard"){const x=state.players[targetPlayer],index=x.monsters.findIndex(m=>m.id===message.cardId);if(index>=0){const card=x.monsters.splice(index,1)[0];moveToDiscard(targetPlayer,card,"効果による捨て札移動");render();return}}
  if(message.target==="opponentCardDestroy"){const x=state.players[targetPlayer];let card=null;for(const z of ["energy","field","facedown"]){const index=(x[z]||[]).findIndex(c=>c.id===message.cardId);if(index>=0){card=x[z].splice(index,1)[0];break}}if(card){moveToDiscard(targetPlayer,card,"効果による破壊");render();return}}
  if(message.target==="opponentDiscardToDeck"){const x=state.players[targetPlayer],returned=x.discard.splice(0);x.deck.push(...returned.map(card=>{resetGrantedCardInformation(card);return card}));render();return}
- if(message.target==="opponentDisable"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.effectsDisabled=true;render();return}}
+ if(message.target==="opponentDisable"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){if(!cardEffectCannotBeRemoved(c))c.effectsDisabled=true;render();return}}
  if(message.target==="opponentAttackDamageZero"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.nextAttackDamage=0;render();return}}
  if(message.target==="opponentMonsterTap"){const c=state.players[targetPlayer].monsters.find(m=>m.id===message.cardId);if(c){c.tapped=true;render();return}}
  if(message.target==="opponentMill"){const x=state.players[targetPlayer];for(let i=0;i<Math.max(0,Number(message.count)||0)&&x.deck.length;i++)x.discard.push(x.deck.shift());render();return}
@@ -768,7 +768,7 @@ function effectCannotChooseZone(player,zone){
  return false;
 }
 function resetGrantedCardInformation(c){if(!c)return;for(const key of ["effectsDisabled","cannotAttack","cannotAttackUntilTurnEnd","cannotAttackUntilPlayerTurnEnd","cannotBeAttacked","cannotBeAttackedWhileUntapped","mustBeAttacked","cannotBeChosenByOpponent","combatPowerUsesOpponent","combatPowerOverride","attacksPerTurn","damageReduction","passiveDamageReduction","damageImmunity","grantedEffects","temporaryEffects","cannotAttackUntilOwnerTurnEnd"])delete c[key];c.summonedThisTurn=false;c.canAttackOnSummon=false;c.attacksThisTurn=0}
-function cardEffectCannotBeRemoved(c){return /この効果は消えない/.test(String(cardDefinition(c)?.effect_text||""))}
+function cardEffectCannotBeRemoved(c){return /(?:これの|この)効果は消えない/.test(String(cardDefinition(c)?.effect_text||""))}
 function disableCardEffects(c){if(!c||cardEffectCannotBeRemoved(c))return false;c.effectsDisabled=true;return true}
 function moveToDiscard(p,c,reason=""){const x=state.players[p];resetGrantedCardInformation(c);c.tapped=false;c.faceUp=true;c.revealed=false;c.damage=0;c.modification=0;c.counters=0;x.discard.push(c);if(reason)log("「"+c.name+"」を捨て札に置きました（"+reason+"）")}
 function checkMonsterDestruction(p,triggerEffects=true){const x=state.players[p];for(const m of [...x.monsters]){const base=Number(m.power)||Number(cardDefinition(m)?.power)||0;if(base+(Number(m.modification)||0)-(Number(m.damage)||0)<=0){x.monsters=x.monsters.filter(v=>v.id!==m.id);moveToDiscard(p,m,"HPが0以下");if(triggerEffects){if(!onlinePlayerId||p===1){resolveCardTrigger(m,p,"destroy");resolveTrapTriggers(p,"ownDestroy")}if(!onlinePlayerId)resolveTrapTriggers(p===1?2:1,"opponentDestroy");else if(p===2)resolveTrapTriggers(1,"opponentDestroy")}log("「"+m.name+"」はHPが0以下になり破壊されました")}}}
@@ -2128,7 +2128,8 @@ function exposeAnkrEffectTestApi(){
   applyPublicStateForTest(playerId,publicState){applyPublicState(playerId,publicState);return this.snapshot()},
   activatedAbilities(name){return CardEffectEngine.activatedAbilities(cardDefinition(name)?.effect_text||"").map(a=>({raw:a.raw,body:a.body,costKind:a.costKind,costValue:a.costValue}))},
   chooseTarget(cardId){resolvePendingEffectTarget(cardId);return this.snapshot()},
-  applyEffectDeltaForTest(message){applyEffectDelta(message);return this.snapshot()},
+  disableEffectsForTest(id,owner=1,zone="monsters"){const c=(state.players[owner]?.[zone]||[]).find(m=>m.id===id);if(!c)throw new Error("test card not found: "+id);return disableCardEffects(c)},
+   applyEffectDeltaForTest(message){applyEffectDelta(message);return this.snapshot()},
   snapshot(){
    recalculatePlayerPassives();
    const players={};
