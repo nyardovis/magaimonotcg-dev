@@ -270,5 +270,7 @@ VOID（card_0564）の第3句について、data/cards.json の出典として�
 ### 検証状況
 
 - 開発版main基準: [c07783e](https://github.com/nyardovis/magaimonotcg-dev/commit/c07783ef67f4a39405e238bde142ab348a7be22d)。修正は専用ブランチで実施し、CI成功前はマージしない。
+- PR #39 CI: [GitHub Actions #45023350481](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/45023350481) — success（`npm run test:all` 完了）。
+- 監査artifact: [effect-audit-reports](https://github.com/nyardovis/magaimonotcg-dev/actions/runs/45023350481/artifacts/14754439090)。カード737件・保存情報不一致0件・効果句1441件・ライブ監査1390件、実行確認293件、未実装ログ594件、明確な未実装候補1件、ランタイム例外0件。
 - 2ブラウザ実対戦での絶対パワー変更同期は未検証。
 - 本番リポジトリ nyardovis/magaimonotcg は変更しない。
