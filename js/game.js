@@ -690,6 +690,8 @@ function effectiveCardCost(card,p=1){
   const normalOnly=text.match(/(?:自分の)?手札の効果(?:の無い|のない|を持たない)モンスターのコスト[-−](\d+)/);
   const cardEffect=String(data?.effect_text||"").trim();
   if(normalOnly&&cardKind(card)==="monster"&&(!cardEffect||cardEffect==="効果なし"||cardEffect.startsWith("※")))cost-=Number(normalOnly[1]);
+  const fixedSpellCost=text.match(/自分の手札の\[([^\]]+)\]の魔法のコスト\s*=\s*(\d+)/);
+  if(fixedSpellCost&&cardKind(card)==="spell"&&types.split(/[,、]/).map(value=>value.trim()).includes(fixedSpellCost[1]))cost=Number(fixedSpellCost[2]);
  }
  const ownFormula=String(data?.effect_text||"").match(/手札にある時、これのコスト-\s*[（(]自分のパワー-(\d+)の\[([^\]]+)\]の数[）)]/);
  if(ownFormula){const threshold=Number(ownFormula[1]),tag=ownFormula[2],count=player.monsters.filter(m=>String(cardDefinition(m)?.types||"").includes(tag)&&(Number(m.power)||Number(cardDefinition(m)?.power)||0)>=threshold).length;cost-=count}
